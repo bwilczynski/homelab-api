@@ -1,0 +1,9 @@
+package: backups
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output: internal/backups/api.gen.go
+output-options:
+  include-tags:
+    - backups

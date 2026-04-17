@@ -1,0 +1,9 @@
+package: system
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output: internal/system/api.gen.go
+output-options:
+  include-tags:
+    - system

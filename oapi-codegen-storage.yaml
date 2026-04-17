@@ -1,0 +1,9 @@
+package: storage
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output: internal/storage/api.gen.go
+output-options:
+  include-tags:
+    - storage

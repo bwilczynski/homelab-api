@@ -1,0 +1,30 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Bundle spec
+        run: make -C spec bundle
+
+      - name: Generate server stubs
+        run: make generate
+
+      - name: Build
+        run: make build
+
+      - name: Test
+        run: make test

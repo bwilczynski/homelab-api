@@ -1,0 +1,11 @@
+bin/
+*.env
+
+# Generated server stubs (regenerated via make generate)
+internal/*/api.gen.go
+
+# Spec bundle output
+spec/dist/
+
+# Claude Code local settings
+.claude/
