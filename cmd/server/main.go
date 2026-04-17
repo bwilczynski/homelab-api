@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/containers"
 	"github.com/bwilczynski/homelab-api/internal/storage"
@@ -22,7 +23,13 @@ func main() {
 	systemHandler := system.NewStrictHandler(system.NewHandler(systemSvc), nil)
 	system.HandlerFromMux(systemHandler, r)
 
-	containersSvc := containers.NewService()
+	synology := adapters.NewSynologyClient(
+		os.Getenv("DSM_HOST"),
+		os.Getenv("DSM_USER"),
+		os.Getenv("DSM_PASS"),
+	)
+
+	containersSvc := containers.NewService("nas-01", synology)
 	containersHandler := containers.NewStrictHandler(containers.NewHandler(containersSvc), nil)
 	containers.HandlerFromMux(containersHandler, r)
 

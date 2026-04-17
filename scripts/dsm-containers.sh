@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Explore Synology DSM Docker container APIs
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../.env"
+
+BASE="https://${DSM_HOST}/webapi/entry.cgi"
+
+# Login
+SID=$(curl -sk "${BASE}?api=SYNO.API.Auth&method=login&version=6&account=${DSM_USER}&passwd=${DSM_PASS}&format=sid" | jq -r '.data.sid')
+echo "=== Logged in, SID=${SID:0:8}..."
+
+echo ""
+echo "=== SYNO.Docker.Container list ==="
+curl -sk "${BASE}?api=SYNO.Docker.Container&method=list&version=1&limit=0&offset=0&_sid=${SID}" | jq .
+
+echo ""
+echo "=== SYNO.Docker.Container.Resource get ==="
+curl -sk "${BASE}?api=SYNO.Docker.Container.Resource&method=get&version=1&_sid=${SID}" | jq .
+
+# Get detail for first container
+FIRST_NAME=$(curl -sk "${BASE}?api=SYNO.Docker.Container&method=list&version=1&limit=1&offset=0&_sid=${SID}" | jq -r '.data.containers[0].name')
+if [ -n "$FIRST_NAME" ] && [ "$FIRST_NAME" != "null" ]; then
+  echo ""
+  echo "=== SYNO.Docker.Container get (name=${FIRST_NAME}) ==="
+  curl -sk "${BASE}?api=SYNO.Docker.Container&method=get&version=1&name=${FIRST_NAME}&_sid=${SID}" | jq .
+fi
+
+# Logout
+curl -sk "${BASE}?api=SYNO.API.Auth&method=logout&version=6&_sid=${SID}" > /dev/null
+echo ""
+echo "=== Logged out ==="

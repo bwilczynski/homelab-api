@@ -1,0 +1,22 @@
+{
+  "data": {
+    "details": {
+      "Config": {
+        "Image": "ghcr.io/immich-app/immich-server:v2.6.3"
+      },
+      "Name": "/immich_server",
+      "RestartCount": 0,
+      "State": {
+        "Dead": false,
+        "Paused": false,
+        "Restarting": false,
+        "Running": true,
+        "Status": "running"
+      }
+    },
+    "name": "immich_server",
+    "status": "running",
+    "up_time": 1775677594
+  },
+  "success": true
+}
