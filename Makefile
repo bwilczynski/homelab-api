@@ -11,8 +11,8 @@ help: ## Show available targets
 build: ## Build the server binary
 	go build -o $(BINARY) ./cmd/server
 
-run: ## Run the server locally
-	go run ./cmd/server
+run: ## Run the server locally (loads .env if present)
+	$(if $(wildcard .env),set -a && . ./.env && set +a &&) go run ./cmd/server
 
 generate: bundle ## Generate server stubs from the bundled spec
 	@mkdir -p internal/system internal/containers internal/storage internal/backups
