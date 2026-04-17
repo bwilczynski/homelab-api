@@ -8,4 +8,4 @@ internal/*/api.gen.go
 spec/dist/
 
 # Claude Code local settings
-.claude/
+.claude/settings.local.json
