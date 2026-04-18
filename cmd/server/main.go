@@ -19,15 +19,21 @@ func main() {
 
 	r := chi.NewRouter()
 
-	systemSvc := system.NewService()
-	systemHandler := system.NewStrictHandler(system.NewHandler(systemSvc), nil)
-	system.HandlerFromMux(systemHandler, r)
-
 	synology := adapters.NewSynologyClient(
 		os.Getenv("DSM_HOST"),
 		os.Getenv("DSM_USER"),
 		os.Getenv("DSM_PASS"),
 	)
+
+	unifi := adapters.NewUniFiClient(
+		os.Getenv("UNIFI_HOST"),
+		os.Getenv("UNIFI_USER"),
+		os.Getenv("UNIFI_PASS"),
+	)
+
+	systemSvc := system.NewService("nas-01", synology, unifi)
+	systemHandler := system.NewStrictHandler(system.NewHandler(systemSvc), nil)
+	system.HandlerFromMux(systemHandler, r)
 
 	containersSvc := containers.NewService("nas-01", synology)
 	containersHandler := containers.NewStrictHandler(containers.NewHandler(containersSvc), nil)

@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "rc": "ok"
+  },
+  "data": [
+    {
+      "subsystem": "wlan",
+      "num_user": 14,
+      "num_guest": 0,
+      "num_iot": 0,
+      "tx_bytes-r": 127248,
+      "rx_bytes-r": 2852,
+      "status": "ok",
+      "num_ap": 2,
+      "num_adopted": 2,
+      "num_disabled": 0,
+      "num_disconnected": 0,
+      "num_pending": 0
+    },
+    {
+      "subsystem": "wan",
+      "num_gw": 1,
+      "num_adopted": 1,
+      "num_disconnected": 0,
+      "num_pending": 0,
+      "status": "ok",
+      "wan_ip": "192.168.1.10",
+      "gateways": [
+        "192.168.1.1"
+      ],
+      "netmask": "255.255.255.0",
+      "nameservers": [
+        "127.0.0.1"
+      ],
+      "num_sta": 18,
+      "tx_bytes-r": 79022,
+      "rx_bytes-r": 9623,
+      "gw_mac": "aa:bb:cc:dd:ee:01",
+      "gw_name": null,
+      "gw_system-stats": {
+        "cpu": "15",
+        "mem": "41",
+        "uptime": "16000663"
+      },
+      "gw_version": "4.4.57.5578372"
+    },
+    {
+      "subsystem": "www",
+      "status": "ok",
+      "tx_bytes-r": 79022,
+      "rx_bytes-r": 9623,
+      "latency": 12,
+      "uptime": 238129,
+      "drops": 36,
+      "xput_up": 0.0,
+      "xput_down": 0.0,
+      "speedtest_status": "Idle",
+      "speedtest_lastrun": 0,
+      "speedtest_ping": 0,
+      "gw_mac": "aa:bb:cc:dd:ee:01"
+    },
+    {
+      "subsystem": "lan",
+      "lan_ip": "192.168.1.11",
+      "status": "ok",
+      "num_user": 4,
+      "num_guest": 0,
+      "num_iot": 0,
+      "tx_bytes-r": 0,
+      "rx_bytes-r": 0,
+      "num_sw": 3,
+      "num_adopted": 3,
+      "num_disconnected": 0,
+      "num_pending": 0
+    },
+    {
+      "subsystem": "vpn",
+      "status": "unknown"
+    }
+  ]
+}
