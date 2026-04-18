@@ -1,0 +1,62 @@
+{
+  "data": {
+    "disks": [
+      {
+        "id": "sda",
+        "model": "WD Red Plus 4TB",
+        "size_total": "4000787030016",
+        "status": "normal",
+        "temp": 35
+      },
+      {
+        "id": "sdb",
+        "model": "WD Red Plus 4TB",
+        "size_total": "4000787030016",
+        "status": "normal",
+        "temp": 41
+      },
+      {
+        "id": "sdc",
+        "model": "Seagate IronWolf 4TB",
+        "size_total": "4000787030016",
+        "status": "normal",
+        "temp": 41
+      },
+      {
+        "id": "sdd",
+        "model": "Seagate IronWolf 4TB",
+        "size_total": "4000787030016",
+        "status": "normal",
+        "temp": 36
+      }
+    ],
+    "storagePools": [
+      {
+        "id": "reuse_1",
+        "disks": [
+          "sda",
+          "sdb",
+          "sdc",
+          "sdd"
+        ],
+        "raidType": "single",
+        "status": "normal"
+      }
+    ],
+    "volumes": [
+      {
+        "id": "volume_1",
+        "vol_path": "/volume1",
+        "status": "normal",
+        "fs_type": "btrfs",
+        "raidType": "single",
+        "pool_path": "reuse_1",
+        "size": {
+          "total": "11508017246208",
+          "used": "8230590287872"
+        }
+      }
+    ]
+  },
+  "success": true
+}

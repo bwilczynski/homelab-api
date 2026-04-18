@@ -39,7 +39,7 @@ func main() {
 	containersHandler := containers.NewStrictHandler(containers.NewHandler(containersSvc), nil)
 	containers.HandlerFromMux(containersHandler, r)
 
-	storageSvc := storage.NewService()
+	storageSvc := storage.NewService("nas-01", synology)
 	storageHandler := storage.NewStrictHandler(storage.NewHandler(storageSvc), nil)
 	storage.HandlerFromMux(storageHandler, r)
 
