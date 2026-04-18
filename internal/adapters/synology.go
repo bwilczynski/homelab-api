@@ -144,10 +144,10 @@ type DSMContainerListResponse struct {
 
 // DSMContainer represents a container in the list response.
 type DSMContainer struct {
-	ID     string          `json:"id"`
-	Name   string          `json:"name"`
-	Image  string          `json:"image"`
-	Status string          `json:"status"`
+	ID     string            `json:"id"`
+	Name   string            `json:"name"`
+	Image  string            `json:"image"`
+	Status string            `json:"status"`
 	State  DSMContainerState `json:"State"`
 }
 
@@ -158,6 +158,10 @@ type DSMContainerState struct {
 	Restarting bool   `json:"Restarting"`
 	Running    bool   `json:"Running"`
 	Status     string `json:"Status"`
+	StartedAt  string `json:"StartedAt"`
+	FinishedAt string `json:"FinishedAt"`
+	ExitCode   int    `json:"ExitCode"`
+	OOMKilled  bool   `json:"OOMKilled"`
 }
 
 // DSMContainerDetailResponse is the data payload from SYNO.Docker.Container get.
@@ -168,18 +172,124 @@ type DSMContainerDetailResponse struct {
 
 // DSMContainerDetailProfile holds the container profile from the DSM get response.
 type DSMContainerDetailProfile struct {
-	Name  string `json:"name"`
-	Image string `json:"image"`
+	Name           string             `json:"name"`
+	Image          string             `json:"image"`
+	EnvVariables   []DSMEnvVariable   `json:"env_variables"`
+	Networks       []DSMNetwork       `json:"network"`
+	PortBindings   []DSMProfilePortBinding `json:"port_bindings"`
+	VolumeBindings []DSMVolumeBinding `json:"volume_bindings"`
+	Privileged     bool               `json:"privileged"`
+	MemoryLimit    int                `json:"memory_limit"`
+	Cmd            string             `json:"cmd"`
+	RestartPolicy  DSMRestartPolicy   `json:"enable_restart_policy"`
 }
+
+// DSMEnvVariable represents an environment variable.
+type DSMEnvVariable struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+// DSMNetwork represents a container network.
+type DSMNetwork struct {
+	Name   string `json:"name"`
+	Driver string `json:"driver"`
+}
+
+// DSMProfilePortBinding represents a port binding.
+type DSMProfilePortBinding struct {
+	ContainerPort int    `json:"container_port"`
+	HostPort      int    `json:"host_port"`
+	Type          string `json:"type"`
+}
+
+// DSMVolumeBinding represents a volume bind mount.
+// DSM uses "host_absolute_path" for direct host paths and "host_volume_file" for DSM-managed volumes.
+type DSMVolumeBinding struct {
+	HostAbsolutePath string `json:"host_absolute_path"`
+	HostVolumePath   string `json:"host_volume_file"`
+	MountPath        string `json:"mount_point"`
+	Type             string `json:"type"`
+}
+
+// HostPath returns the host-side path, preferring host_absolute_path over host_volume_file.
+func (v DSMVolumeBinding) HostPath() string {
+	if v.HostAbsolutePath != "" {
+		return v.HostAbsolutePath
+	}
+	return v.HostVolumePath
+}
+
+// DSMRestartPolicy represents restart policy.
+type DSMRestartPolicy bool
 
 // DSMContainerDetail contains detailed container information.
 type DSMContainerDetail struct {
-	Name         string        `json:"Name"`
-	RestartCount int           `json:"RestartCount"`
-	State        DSMContainerState `json:"State"`
-	Config       struct {
-		Image string `json:"Image"`
-	} `json:"Config"`
+	Name            string             `json:"Name"`
+	RestartCount    int                `json:"RestartCount"`
+	State           DSMContainerState  `json:"State"`
+	Config          DSMContainerConfig `json:"Config"`
+	HostConfig      DSMHostConfig      `json:"HostConfig"`
+	Created         string             `json:"Created"`
+	Mounts          []DSMMount         `json:"Mounts"`
+	NetworkSettings DSMNetworkSettings `json:"NetworkSettings"`
+}
+
+// DSMContainerConfig holds container configuration.
+type DSMContainerConfig struct {
+	Image      string                 `json:"Image"`
+	Env        []string               `json:"Env"`
+	Cmd        []string               `json:"Cmd"`
+	Entrypoint []string               `json:"Entrypoint"`
+	Labels     map[string]string      `json:"Labels"`
+	Volumes    map[string]interface{} `json:"Volumes"`
+	WorkingDir string                 `json:"WorkingDir"`
+	Hostname   string                 `json:"Hostname"`
+}
+
+// DSMHostConfig holds host configuration.
+type DSMHostConfig struct {
+	Memory        int                         `json:"Memory"`
+	Privileged    bool                        `json:"Privileged"`
+	PortBindings  map[string][]DSMPortBinding `json:"PortBindings"`
+	RestartPolicy DSMHostRestartPolicy        `json:"RestartPolicy"`
+	Binds         []string                    `json:"Binds"`
+}
+
+// DSMPortBinding represents a port binding from HostConfig.
+type DSMPortBinding struct {
+	HostIp   string `json:"HostIp"`
+	HostPort string `json:"HostPort"`
+}
+
+// DSMHostRestartPolicy represents restart policy from HostConfig.
+type DSMHostRestartPolicy struct {
+	Name              string `json:"Name"`
+	MaximumRetryCount int    `json:"MaximumRetryCount"`
+}
+
+// DSMMount represents a mount point.
+type DSMMount struct {
+	Source      string `json:"Source"`
+	Destination string `json:"Destination"`
+	Mode        string `json:"Mode"`
+	RW          bool   `json:"RW"`
+	Type        string `json:"Type"`
+}
+
+// DSMNetworkSettings holds network settings.
+type DSMNetworkSettings struct {
+	Networks map[string]DSMNetworkInfo   `json:"Networks"`
+	Ports    map[string][]DSMPortBinding `json:"Ports"`
+}
+
+// DSMNetworkInfo represents network info.
+type DSMNetworkInfo struct {
+	IPAddress  string   `json:"IPAddress"`
+	MacAddress string   `json:"MacAddress"`
+	Gateway    string   `json:"Gateway"`
+	NetworkID  string   `json:"NetworkID"`
+	Aliases    []string `json:"Aliases"`
 }
 
 // DSMContainerResourceResponse is the data payload from SYNO.Docker.Container.Resource get.
