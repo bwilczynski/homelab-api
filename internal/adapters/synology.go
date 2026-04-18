@@ -433,16 +433,19 @@ func (c *SynologyClient) GetSystemUtilization() (*DSMSystemUtilizationResponse, 
 
 // DSMStorageVolumeResponse is the data payload from SYNO.Storage.CGI.Storage load_info.
 type DSMStorageVolumeResponse struct {
-	Volumes []DSMStorageVolume `json:"volumes"`
+	Volumes      []DSMStorageVolume      `json:"volumes"`
+	Disks        []DSMStorageDisk        `json:"disks"`
+	StoragePools []DSMStoragePool        `json:"storagePools"`
 }
 
 // DSMStorageVolume represents a single storage volume reported by DSM.
 type DSMStorageVolume struct {
-	ID       string              `json:"id"`
-	VolPath  string              `json:"vol_path"`
-	Status   string              `json:"status"`
-	FsType   string              `json:"fs_type"`
-	RaidType string              `json:"raidType"`
+	ID       string               `json:"id"`
+	VolPath  string               `json:"vol_path"`
+	Status   string               `json:"status"`
+	FsType   string               `json:"fs_type"`
+	RaidType string               `json:"raidType"`
+	PoolPath string               `json:"pool_path"`
 	Size     DSMStorageVolumeSize `json:"size"`
 }
 
@@ -450,6 +453,23 @@ type DSMStorageVolume struct {
 type DSMStorageVolumeSize struct {
 	Total string `json:"total"`
 	Used  string `json:"used"`
+}
+
+// DSMStorageDisk represents a physical disk reported by DSM.
+type DSMStorageDisk struct {
+	ID        string `json:"id"`
+	Model     string `json:"model"`
+	SizeTotal string `json:"size_total"`
+	Status    string `json:"status"`
+	Temp      int    `json:"temp"`
+}
+
+// DSMStoragePool represents a storage pool (RAID group) reported by DSM.
+type DSMStoragePool struct {
+	ID       string   `json:"id"`
+	Disks    []string `json:"disks"`
+	RaidType string   `json:"raidType"`
+	Status   string   `json:"status"`
 }
 
 // GetStorageVolumes retrieves the list of storage volumes from the DSM.
