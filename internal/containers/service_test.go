@@ -31,8 +31,8 @@ func (m *mockBackend) GetContainerResources() (*adapters.DSMContainerResourceRes
 	return m.resourcesResp, nil
 }
 
-func (m *mockBackend) StartContainer(name string) error  { return m.startErr }
-func (m *mockBackend) StopContainer(name string) error   { return m.stopErr }
+func (m *mockBackend) StartContainer(name string) error   { return m.startErr }
+func (m *mockBackend) StopContainer(name string) error    { return m.stopErr }
 func (m *mockBackend) RestartContainer(name string) error { return m.restartErr }
 
 func loadFixture[T any](t *testing.T, path string) T {
@@ -155,6 +155,130 @@ func TestGetContainer(t *testing.T) {
 	}
 	if c.Resources.CpuPercent != 0.325 {
 		t.Errorf("expected cpu 0.325, got %f", c.Resources.CpuPercent)
+	}
+}
+
+func TestGetContainerDetailFields(t *testing.T) {
+	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
+	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+
+	svc := NewService("nas-01", &mockBackend{
+		detailResp:    &detailResp,
+		resourcesResp: &resourcesResp,
+	})
+
+	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(c.EnvVariables) != 5 {
+		t.Errorf("expected 5 env variables, got %d", len(c.EnvVariables))
+	}
+	if c.EnvVariables[0].Key != "PATH" {
+		t.Errorf("expected first env var key PATH, got %s", c.EnvVariables[0].Key)
+	}
+	if c.EnvVariables[3].Key != "DB_PASSWORD" {
+		t.Errorf("expected sensitive env var key DB_PASSWORD, got %s", c.EnvVariables[3].Key)
+	}
+	if c.EnvVariables[3].Value != "REDACTED" {
+		t.Errorf("expected REDACTED for DB_PASSWORD, got %s", c.EnvVariables[3].Value)
+	}
+
+	if len(c.Networks) != 2 {
+		t.Errorf("expected 2 networks, got %d", len(c.Networks))
+	}
+	if c.Networks[0].Name != "immich_default" {
+		t.Errorf("expected first network immich_default, got %s", c.Networks[0].Name)
+	}
+	if c.Networks[0].Driver != "bridge" {
+		t.Errorf("expected driver bridge, got %s", c.Networks[0].Driver)
+	}
+
+	if len(c.PortBindings) != 1 {
+		t.Errorf("expected 1 port binding, got %d", len(c.PortBindings))
+	}
+	if c.PortBindings[0].ContainerPort != 2283 {
+		t.Errorf("expected container port 2283, got %d", c.PortBindings[0].ContainerPort)
+	}
+	if c.PortBindings[0].HostPort != 12080 {
+		t.Errorf("expected host port 12080, got %d", c.PortBindings[0].HostPort)
+	}
+	if c.PortBindings[0].Protocol != Tcp {
+		t.Errorf("expected protocol tcp, got %s", c.PortBindings[0].Protocol)
+	}
+
+	if len(c.VolumeBindings) != 2 {
+		t.Errorf("expected 2 volume bindings, got %d", len(c.VolumeBindings))
+	}
+	if c.VolumeBindings[0].Source != "/docker/immich/upload" {
+		t.Errorf("expected source /docker/immich/upload, got %s", c.VolumeBindings[0].Source)
+	}
+	if c.VolumeBindings[0].Destination != "/data" {
+		t.Errorf("expected destination /data, got %s", c.VolumeBindings[0].Destination)
+	}
+	if c.VolumeBindings[0].Mode != Rw {
+		t.Errorf("expected mode rw, got %s", c.VolumeBindings[0].Mode)
+	}
+	if c.VolumeBindings[1].Mode != Ro {
+		t.Errorf("expected read-only mode ro, got %s", c.VolumeBindings[1].Mode)
+	}
+
+	if c.RestartPolicy != Always {
+		t.Errorf("expected restart policy always, got %s", c.RestartPolicy)
+	}
+
+	if c.Privileged != false {
+		t.Errorf("expected privileged false, got %v", c.Privileged)
+	}
+
+	if c.MemoryLimit != 0 {
+		t.Errorf("expected memory limit 0, got %d", c.MemoryLimit)
+	}
+
+	if len(c.Entrypoint) != 4 {
+		t.Errorf("expected 4 entrypoint args, got %d", len(c.Entrypoint))
+	}
+	if c.Entrypoint[0] != "tini" {
+		t.Errorf("expected entrypoint[0] tini, got %s", c.Entrypoint[0])
+	}
+
+	if len(c.Cmd) != 1 {
+		t.Errorf("expected 1 cmd arg, got %d", len(c.Cmd))
+	}
+	if c.Cmd[0] != "start.sh" {
+		t.Errorf("expected cmd start.sh, got %s", c.Cmd[0])
+	}
+
+	if c.Labels == nil || (*c.Labels)["com.docker.compose.project"] != "immich" {
+		t.Errorf("expected label com.docker.compose.project=immich")
+	}
+}
+
+func TestGetContainerStatusFields(t *testing.T) {
+	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
+	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+
+	svc := NewService("nas-01", &mockBackend{
+		detailResp:    &detailResp,
+		resourcesResp: &resourcesResp,
+	})
+
+	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if c.StartedAt.IsZero() {
+		t.Error("expected non-zero startedAt")
+	}
+
+	if c.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", c.ExitCode)
+	}
+
+	if c.OomKilled != false {
+		t.Errorf("expected oomKilled false, got %v", c.OomKilled)
 	}
 }
 

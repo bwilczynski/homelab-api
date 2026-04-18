@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
@@ -60,7 +61,7 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 }
 
 // GetContainer returns a single container by its composite ID (device:name).
-func (s *Service) GetContainer(ctx context.Context, containerID string) (*Container, error) {
+func (s *Service) GetContainer(ctx context.Context, containerID string) (*ContainerDetail, error) {
 	_, name, err := parseContainerID(containerID)
 	if err != nil {
 		return nil, err
@@ -84,7 +85,7 @@ func (s *Service) GetContainer(ctx context.Context, containerID string) (*Contai
 		}
 	}
 
-	c := mapContainerFromDetail(s.device, *detail, res)
+	c := mapContainerDetail(s.device, *detail, res)
 	return &c, nil
 }
 
@@ -158,9 +159,54 @@ func mapContainer(device string, c adapters.DSMContainer, res adapters.DSMContai
 	}
 }
 
-// mapContainerFromDetail converts a DSM container detail to the API Container model.
-func mapContainerFromDetail(device string, d adapters.DSMContainerDetailResponse, res adapters.DSMContainerResource) Container {
-	return Container{
+// mapContainerDetail converts a DSM container detail to the API ContainerDetail model.
+func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, res adapters.DSMContainerResource) ContainerDetail {
+	startedAt, _ := time.Parse(time.RFC3339, d.Details.State.StartedAt)
+	finishedAt, _ := time.Parse(time.RFC3339, d.Details.State.FinishedAt)
+
+	envVars := make([]EnvVariable, len(d.Profile.EnvVariables))
+	for i, e := range d.Profile.EnvVariables {
+		envVars[i] = EnvVariable{Key: e.Key, Value: e.Value}
+	}
+
+	networks := make([]ContainerNetwork, len(d.Profile.Networks))
+	for i, n := range d.Profile.Networks {
+		networks[i] = ContainerNetwork{Name: n.Name, Driver: n.Driver}
+	}
+
+	portBindings := make([]PortBinding, len(d.Profile.PortBindings))
+	for i, p := range d.Profile.PortBindings {
+		portBindings[i] = PortBinding{
+			ContainerPort: p.ContainerPort,
+			HostPort:      p.HostPort,
+			Protocol:      PortBindingProtocol(p.Type),
+		}
+	}
+
+	volumeBindings := make([]VolumeMount, len(d.Profile.VolumeBindings))
+	for i, v := range d.Profile.VolumeBindings {
+		mode := Rw
+		if v.Type == "ro" {
+			mode = Ro
+		}
+		volumeBindings[i] = VolumeMount{
+			Source:      v.HostPath,
+			Destination: v.MountPath,
+			Mode:        mode,
+		}
+	}
+
+	restartPolicy := Always
+	if !d.Profile.RestartPolicy {
+		restartPolicy = No
+	}
+
+	labels := d.Details.Config.Labels
+	if labels == nil {
+		labels = map[string]string{}
+	}
+
+	return ContainerDetail{
 		Id:           fmt.Sprintf("%s.%s", device, d.Profile.Name),
 		Device:       device,
 		Name:         d.Profile.Name,
@@ -172,5 +218,19 @@ func mapContainerFromDetail(device string, d adapters.DSMContainerDetailResponse
 			MemoryBytes:   res.Memory,
 			MemoryPercent: res.MemoryPercent,
 		},
+		StartedAt:      startedAt,
+		FinishedAt:     &finishedAt,
+		ExitCode:       d.Details.State.ExitCode,
+		OomKilled:      d.Details.State.OOMKilled,
+		RestartPolicy:  restartPolicy,
+		Privileged:     d.Profile.Privileged,
+		MemoryLimit:    Bytes(d.Profile.MemoryLimit),
+		PortBindings:   portBindings,
+		Networks:       networks,
+		VolumeBindings: volumeBindings,
+		EnvVariables:   envVars,
+		Entrypoint:     d.Details.Config.Entrypoint,
+		Cmd:            d.Details.Config.Cmd,
+		Labels:         &labels,
 	}
 }
