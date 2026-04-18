@@ -349,6 +349,122 @@ func (c *SynologyClient) GetContainerResources() (*DSMContainerResourceResponse,
 	return &result, nil
 }
 
+// --- System types ---
+
+// DSMSystemInfoResponse is the data payload from SYNO.Core.System info.
+type DSMSystemInfoResponse struct {
+	FirmwareVer string `json:"firmware_ver"`
+	Model       string `json:"model"`
+	RamSize     int    `json:"ram_size"`
+	UpTime      string `json:"up_time"`
+}
+
+// DSMSystemUtilizationResponse is the data payload from SYNO.Core.System.Utilization get.
+type DSMSystemUtilizationResponse struct {
+	CPU     DSMCPUUsage      `json:"cpu"`
+	Memory  DSMMemoryUsage   `json:"memory"`
+	Network []DSMNetworkStat `json:"network"`
+	Disk    DSMDiskStats     `json:"disk"`
+}
+
+// DSMCPUUsage holds CPU utilization from DSM.
+type DSMCPUUsage struct {
+	UserLoad   int `json:"user_load"`
+	SystemLoad int `json:"system_load"`
+	OtherLoad  int `json:"other_load"`
+}
+
+// DSMMemoryUsage holds memory utilization from DSM (all values in KB).
+type DSMMemoryUsage struct {
+	MemorySize int `json:"memory_size"`
+	TotalReal  int `json:"total_real"`
+	AvailReal  int `json:"avail_real"`
+	RealUsage  int `json:"real_usage"`
+	TotalSwap  int `json:"total_swap"`
+	AvailSwap  int `json:"avail_swap"`
+}
+
+// DSMNetworkStat holds network throughput for a single interface (bytes/sec).
+type DSMNetworkStat struct {
+	Device string `json:"device"`
+	Rx     int64  `json:"rx"`
+	Tx     int64  `json:"tx"`
+}
+
+// DSMDiskStats holds disk I/O stats.
+type DSMDiskStats struct {
+	Disk []DSMDiskStat `json:"disk"`
+}
+
+// DSMDiskStat holds I/O counters for a single disk (ops/sec).
+type DSMDiskStat struct {
+	Device      string `json:"device"`
+	ReadAccess  int    `json:"read_access"`
+	WriteAccess int    `json:"write_access"`
+}
+
+// GetSystemInfo retrieves static system information from the DSM.
+func (c *SynologyClient) GetSystemInfo() (*DSMSystemInfoResponse, error) {
+	data, err := c.Call("SYNO.Core.System", "info", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMSystemInfoResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse system info: %w", err)
+	}
+	return &result, nil
+}
+
+// GetSystemUtilization retrieves live utilization stats from the DSM.
+func (c *SynologyClient) GetSystemUtilization() (*DSMSystemUtilizationResponse, error) {
+	data, err := c.Call("SYNO.Core.System.Utilization", "get", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMSystemUtilizationResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse system utilization: %w", err)
+	}
+	return &result, nil
+}
+
+// --- Storage types ---
+
+// DSMStorageVolumeResponse is the data payload from SYNO.Storage.CGI.Storage load_info.
+type DSMStorageVolumeResponse struct {
+	Volumes []DSMStorageVolume `json:"volumes"`
+}
+
+// DSMStorageVolume represents a single storage volume reported by DSM.
+type DSMStorageVolume struct {
+	ID       string              `json:"id"`
+	VolPath  string              `json:"vol_path"`
+	Status   string              `json:"status"`
+	FsType   string              `json:"fs_type"`
+	RaidType string              `json:"raidType"`
+	Size     DSMStorageVolumeSize `json:"size"`
+}
+
+// DSMStorageVolumeSize holds the capacity info for a volume (values are strings in bytes).
+type DSMStorageVolumeSize struct {
+	Total string `json:"total"`
+	Used  string `json:"used"`
+}
+
+// GetStorageVolumes retrieves the list of storage volumes from the DSM.
+func (c *SynologyClient) GetStorageVolumes() (*DSMStorageVolumeResponse, error) {
+	data, err := c.Call("SYNO.Storage.CGI.Storage", "load_info", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMStorageVolumeResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse storage volumes: %w", err)
+	}
+	return &result, nil
+}
+
 // StartContainer starts a container by name.
 func (c *SynologyClient) StartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "start", "1", url.Values{
