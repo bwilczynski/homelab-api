@@ -55,17 +55,24 @@ Using the API details from `domains.md`, write scripts in `scripts/` within this
 - If you need to discover additional APIs beyond what `domains.md` covers, use the DSM discover endpoint (`SYNO.API.Info` query=all) or UniFi API exploration
 - Credentials are in env vars: `DSM_HOST`, `DSM_USER`, `DSM_PASS`, `UNIFI_HOST`, `UNIFI_USER`, `UNIFI_PASS` (source from `.env` — copy `env.sample` if it doesn't exist yet)
 
-Run the scripts to capture real API responses. These require network access to the homelab.
+Run the scripts and save their raw output to `scripts/responses/` for reference. This directory is gitignored — raw responses must never be committed as they contain real credentials and infrastructure details. These require network access to the homelab.
 
-## Step 6: Sanitize responses
+**CRITICAL: Never fabricate or guess API response structures.** All response structs and test fixtures must be derived from the actual captured responses. If a script fails or a backend is unreachable, stop and report the issue — do not proceed with assumed response shapes.
 
-Create sanitized versions of the captured responses for use as test fixtures. Replace:
+## Step 6: Build fixtures from captured responses
+
+Create test fixtures by sanitizing the **captured raw responses** from Step 5. Every fixture must preserve the exact JSON structure (keys, nesting, types) of the real response — only values are sanitized.
+
+Sanitization rules:
 - Hostnames → `host-01`, `host-02`
 - IPs → `192.168.1.10`, `192.168.1.11`, ...
 - MACs → `aa:bb:cc:dd:ee:01`, `aa:bb:cc:dd:ee:02`
+- Passwords/tokens/SIDs → `REDACTED`
 - Container names → keep as-is (service names, not sensitive)
 - Disk models → use real vendor names with different variants (e.g., "WD Red Plus 4TB", "Seagate IronWolf 8TB")
 - Software versions → keep as-is (public info)
+
+Before saving, verify each fixture against its raw response: `diff <(jq 'keys' raw.json) <(jq '.data | keys' fixture.json)` — the top-level key set must match.
 
 Save sanitized fixtures as `internal/${DOMAIN}/testdata/*.json`.
 
@@ -78,7 +85,7 @@ Create the adapter in `internal/adapters/`:
   - **UniFi:** Cookie-based auth — POST to `/api/login`, store cookie jar
 - Credentials from env vars: `DSM_HOST`, `DSM_USER`, `DSM_PASS`, `UNIFI_HOST`, `UNIFI_USER`, `UNIFI_PASS`
 - Use `net/http` client with JSON parsing
-- Define response structs that match the real API response shapes
+- Define response structs by reading the raw captured responses in `scripts/responses/` — struct fields and JSON tags must match the actual keys and nesting observed there
 - If an adapter file already exists (from another domain's implementation), extend it rather than duplicating
 
 ## Step 8: Define interface and implement service
