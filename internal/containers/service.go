@@ -125,6 +125,16 @@ func parseContainerID(id string) (device, name string, err error) {
 	return parts[0], parts[1], nil
 }
 
+// mapRestartPolicy converts a Docker restart policy name to the API enum.
+func mapRestartPolicy(name string) ContainerDetailRestartPolicy {
+	switch ContainerDetailRestartPolicy(name) {
+	case Always, No, OnFailure, UnlessStopped:
+		return ContainerDetailRestartPolicy(name)
+	default:
+		return No
+	}
+}
+
 // mapStatus converts a DSM container state to the API ContainerStatus enum.
 func mapStatus(state adapters.DSMContainerState) ContainerStatus {
 	if state.Dead {
@@ -161,8 +171,14 @@ func mapContainer(device string, c adapters.DSMContainer, res adapters.DSMContai
 
 // mapContainerDetail converts a DSM container detail to the API ContainerDetail model.
 func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, res adapters.DSMContainerResource) ContainerDetail {
-	startedAt, _ := time.Parse(time.RFC3339, d.Details.State.StartedAt)
-	finishedAt, _ := time.Parse(time.RFC3339, d.Details.State.FinishedAt)
+	startedAt, _ := time.Parse(time.RFC3339Nano, d.Details.State.StartedAt)
+
+	var finishedAt *time.Time
+	if !d.Details.State.Running {
+		if t, err := time.Parse(time.RFC3339Nano, d.Details.State.FinishedAt); err == nil && !t.IsZero() {
+			finishedAt = &t
+		}
+	}
 
 	envVars := make([]EnvVariable, len(d.Profile.EnvVariables))
 	for i, e := range d.Profile.EnvVariables {
@@ -190,16 +206,13 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 			mode = Ro
 		}
 		volumeBindings[i] = VolumeMount{
-			Source:      v.HostPath,
+			Source:      v.HostPath(),
 			Destination: v.MountPath,
 			Mode:        mode,
 		}
 	}
 
-	restartPolicy := Always
-	if !d.Profile.RestartPolicy {
-		restartPolicy = No
-	}
+	restartPolicy := mapRestartPolicy(d.Details.HostConfig.RestartPolicy.Name)
 
 	labels := d.Details.Config.Labels
 	if labels == nil {
@@ -219,7 +232,7 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 			MemoryPercent: res.MemoryPercent,
 		},
 		StartedAt:      startedAt,
-		FinishedAt:     &finishedAt,
+		FinishedAt:     finishedAt,
 		ExitCode:       d.Details.State.ExitCode,
 		OomKilled:      d.Details.State.OOMKilled,
 		RestartPolicy:  restartPolicy,

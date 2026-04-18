@@ -176,7 +176,7 @@ type DSMContainerDetailProfile struct {
 	Image          string             `json:"image"`
 	EnvVariables   []DSMEnvVariable   `json:"env_variables"`
 	Networks       []DSMNetwork       `json:"network"`
-	PortBindings   []DSONPortBinding  `json:"port_bindings"`
+	PortBindings   []DSMProfilePortBinding `json:"port_bindings"`
 	VolumeBindings []DSMVolumeBinding `json:"volume_bindings"`
 	Privileged     bool               `json:"privileged"`
 	MemoryLimit    int                `json:"memory_limit"`
@@ -196,18 +196,28 @@ type DSMNetwork struct {
 	Driver string `json:"driver"`
 }
 
-// DSONPortBinding represents a port binding.
-type DSONPortBinding struct {
+// DSMProfilePortBinding represents a port binding.
+type DSMProfilePortBinding struct {
 	ContainerPort int    `json:"container_port"`
 	HostPort      int    `json:"host_port"`
 	Type          string `json:"type"`
 }
 
 // DSMVolumeBinding represents a volume bind mount.
+// DSM uses "host_absolute_path" for direct host paths and "host_volume_file" for DSM-managed volumes.
 type DSMVolumeBinding struct {
-	HostPath  string `json:"host_volume_file"`
-	MountPath string `json:"mount_point"`
-	Type      string `json:"type"`
+	HostAbsolutePath string `json:"host_absolute_path"`
+	HostVolumePath   string `json:"host_volume_file"`
+	MountPath        string `json:"mount_point"`
+	Type             string `json:"type"`
+}
+
+// HostPath returns the host-side path, preferring host_absolute_path over host_volume_file.
+func (v DSMVolumeBinding) HostPath() string {
+	if v.HostAbsolutePath != "" {
+		return v.HostAbsolutePath
+	}
+	return v.HostVolumePath
 }
 
 // DSMRestartPolicy represents restart policy.

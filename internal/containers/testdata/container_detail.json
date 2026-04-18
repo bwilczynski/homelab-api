@@ -20,6 +20,15 @@
         "WorkingDir": "/usr/src/app",
         "Hostname": "09492d85a64c"
       },
+      "HostConfig": {
+        "Memory": 0,
+        "Privileged": false,
+        "RestartPolicy": {
+          "Name": "always",
+          "MaximumRetryCount": 0
+        },
+        "Binds": ["/etc/localtime:/etc/localtime:ro", "/docker/immich/upload:/data:rw"]
+      },
       "Name": "/immich_server",
       "RestartCount": 0,
       "State": {
@@ -52,8 +61,8 @@
         {"container_port": 2283, "host_port": 12080, "type": "tcp"}
       ],
       "volume_bindings": [
-        {"host_volume_file": "/docker/immich/upload", "mount_point": "/data", "type": "rw"},
-        {"host_absolute_path": "/etc/localtime", "mount_point": "/etc/localtime", "type": "ro"}
+        {"host_absolute_path": "/etc/localtime", "mount_point": "/etc/localtime", "type": "ro"},
+        {"host_volume_file": "/docker/immich/upload", "mount_point": "/data", "type": "rw"}
       ],
       "privileged": false,
       "memory_limit": 0,

@@ -211,17 +211,25 @@ func TestGetContainerDetailFields(t *testing.T) {
 	if len(c.VolumeBindings) != 2 {
 		t.Errorf("expected 2 volume bindings, got %d", len(c.VolumeBindings))
 	}
-	if c.VolumeBindings[0].Source != "/docker/immich/upload" {
-		t.Errorf("expected source /docker/immich/upload, got %s", c.VolumeBindings[0].Source)
+	// host_absolute_path binding (first entry)
+	if c.VolumeBindings[0].Source != "/etc/localtime" {
+		t.Errorf("expected source /etc/localtime, got %s", c.VolumeBindings[0].Source)
 	}
-	if c.VolumeBindings[0].Destination != "/data" {
-		t.Errorf("expected destination /data, got %s", c.VolumeBindings[0].Destination)
+	if c.VolumeBindings[0].Destination != "/etc/localtime" {
+		t.Errorf("expected destination /etc/localtime, got %s", c.VolumeBindings[0].Destination)
 	}
-	if c.VolumeBindings[0].Mode != Rw {
-		t.Errorf("expected mode rw, got %s", c.VolumeBindings[0].Mode)
+	if c.VolumeBindings[0].Mode != Ro {
+		t.Errorf("expected mode ro, got %s", c.VolumeBindings[0].Mode)
 	}
-	if c.VolumeBindings[1].Mode != Ro {
-		t.Errorf("expected read-only mode ro, got %s", c.VolumeBindings[1].Mode)
+	// host_volume_file binding (second entry)
+	if c.VolumeBindings[1].Source != "/docker/immich/upload" {
+		t.Errorf("expected source /docker/immich/upload, got %s", c.VolumeBindings[1].Source)
+	}
+	if c.VolumeBindings[1].Destination != "/data" {
+		t.Errorf("expected destination /data, got %s", c.VolumeBindings[1].Destination)
+	}
+	if c.VolumeBindings[1].Mode != Rw {
+		t.Errorf("expected mode rw, got %s", c.VolumeBindings[1].Mode)
 	}
 
 	if c.RestartPolicy != Always {
@@ -271,6 +279,11 @@ func TestGetContainerStatusFields(t *testing.T) {
 
 	if c.StartedAt.IsZero() {
 		t.Error("expected non-zero startedAt")
+	}
+
+	// Running container: FinishedAt must be nil (spec: omitted if running)
+	if c.FinishedAt != nil {
+		t.Errorf("expected nil finishedAt for running container, got %v", c.FinishedAt)
 	}
 
 	if c.ExitCode != 0 {
