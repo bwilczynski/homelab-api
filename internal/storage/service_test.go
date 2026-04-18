@@ -147,6 +147,37 @@ func TestGetStorageVolume(t *testing.T) {
 	if v.Id != "nas-01.volume_1" {
 		t.Errorf("expected id nas-01.volume_1, got %s", v.Id)
 	}
+	if v.MountPath != "/volume1" {
+		t.Errorf("expected mountPath /volume1, got %s", v.MountPath)
+	}
+	if v.PoolStatus != VolumeStatusNormal {
+		t.Errorf("expected poolStatus normal, got %s", v.PoolStatus)
+	}
+}
+
+func TestGetStorageVolumePoolStatus(t *testing.T) {
+	resp := adapters.DSMStorageVolumeResponse{
+		Volumes: []adapters.DSMStorageVolume{
+			{ID: "volume_1", VolPath: "/volume1", Status: "normal", FsType: "btrfs", RaidType: "SHR", PoolPath: "reuse_1", Size: adapters.DSMStorageVolumeSize{Total: "1000", Used: "500"}},
+		},
+		Disks: []adapters.DSMStorageDisk{},
+		StoragePools: []adapters.DSMStoragePool{
+			{ID: "reuse_1", Disks: []string{}, RaidType: "SHR", Status: "degraded"},
+		},
+	}
+
+	svc := NewService("nas-01", &mockBackend{resp: &resp})
+
+	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v == nil {
+		t.Fatal("expected volume, got nil")
+	}
+	if v.PoolStatus != VolumeStatusDegraded {
+		t.Errorf("expected poolStatus degraded, got %s", v.PoolStatus)
+	}
 }
 
 func TestGetStorageVolumeNotFound(t *testing.T) {

@@ -40,8 +40,8 @@ func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (Volum
 	return VolumeList{Items: volumes}, nil
 }
 
-// GetStorageVolume returns a single volume by its composite ID (device.name).
-func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volume, error) {
+// GetStorageVolume returns a single volume with extended detail by its composite ID (device.name).
+func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*VolumeDetail, error) {
 	_, name, err := parseVolumeID(volumeID)
 	if err != nil {
 		return nil, err
@@ -52,11 +52,35 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		return nil, fmt.Errorf("get storage volume: %w", err)
 	}
 
-	volumes := mapVolumes(s.device, resp)
-	for i := range volumes {
-		if volumes[i].Name == name {
-			return &volumes[i], nil
+	poolByID := make(map[string]adapters.DSMStoragePool, len(resp.StoragePools))
+	for _, p := range resp.StoragePools {
+		poolByID[p.ID] = p
+	}
+
+	rawByName := make(map[string]adapters.DSMStorageVolume, len(resp.Volumes))
+	for _, v := range resp.Volumes {
+		rawByName[v.ID] = v
+	}
+
+	for _, vol := range mapVolumes(s.device, resp) {
+		if vol.Name != name {
+			continue
 		}
+		raw := rawByName[vol.Name]
+		pool := poolByID[raw.PoolPath]
+		return &VolumeDetail{
+			Device:     vol.Device,
+			Disks:      vol.Disks,
+			FileSystem: vol.FileSystem,
+			Id:         vol.Id,
+			Name:       vol.Name,
+			RaidType:   vol.RaidType,
+			Status:     vol.Status,
+			TotalBytes: vol.TotalBytes,
+			UsedBytes:  vol.UsedBytes,
+			MountPath:  raw.VolPath,
+			PoolStatus: mapVolumeStatus(pool.Status),
+		}, nil
 	}
 	return nil, nil
 }
