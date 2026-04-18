@@ -71,7 +71,7 @@ func TestListContainers(t *testing.T) {
 
 	// Check first container mapping
 	c := result.Items[0]
-	if c.Id != "nas-01:immich_server" {
+	if c.Id != "nas-01.immich_server" {
 		t.Errorf("expected id nas-01:immich_server, got %s", c.Id)
 	}
 	if c.Device != "nas-01" {
@@ -139,12 +139,12 @@ func TestGetContainer(t *testing.T) {
 		resourcesResp: &resourcesResp,
 	})
 
-	c, err := svc.GetContainer(context.Background(), "nas-01:immich_server")
+	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if c.Id != "nas-01:immich_server" {
+	if c.Id != "nas-01.immich_server" {
 		t.Errorf("expected id nas-01:immich_server, got %s", c.Id)
 	}
 	if c.RestartCount != 0 {
@@ -174,8 +174,8 @@ func TestParseContainerID(t *testing.T) {
 		wantName   string
 		wantErr    bool
 	}{
-		{"nas-01:immich_server", "nas-01", "immich_server", false},
-		{"device:name:with:colons", "device", "name:with:colons", false},
+		{"nas-01.immich_server", "nas-01", "immich_server", false},
+		{"device.name.with.dots", "device", "name.with.dots", false},
 		{"invalid", "", "", true},
 		{":name", "", "", true},
 		{"device:", "", "", true},

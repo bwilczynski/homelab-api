@@ -115,11 +115,11 @@ func (s *Service) RestartContainer(ctx context.Context, containerID string) erro
 	return s.backend.RestartContainer(name)
 }
 
-// parseContainerID splits a composite ID "device:name" into its parts.
+// parseContainerID splits a composite ID "device.name" into its parts.
 func parseContainerID(id string) (device, name string, err error) {
-	parts := strings.SplitN(id, ":", 2)
+	parts := strings.SplitN(id, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid container ID %q: expected format device:name", id)
+		return "", "", fmt.Errorf("invalid container ID %q: expected format device.name", id)
 	}
 	return parts[0], parts[1], nil
 }
@@ -144,7 +144,7 @@ func mapStatus(state adapters.DSMContainerState) ContainerStatus {
 // mapContainer converts a DSM container list entry to the API Container model.
 func mapContainer(device string, c adapters.DSMContainer, res adapters.DSMContainerResource, restartCount int) Container {
 	return Container{
-		Id:           fmt.Sprintf("%s:%s", device, c.Name),
+		Id:           fmt.Sprintf("%s.%s", device, c.Name),
 		Device:       device,
 		Name:         c.Name,
 		Image:        c.Image,
@@ -161,10 +161,10 @@ func mapContainer(device string, c adapters.DSMContainer, res adapters.DSMContai
 // mapContainerFromDetail converts a DSM container detail to the API Container model.
 func mapContainerFromDetail(device string, d adapters.DSMContainerDetailResponse, res adapters.DSMContainerResource) Container {
 	return Container{
-		Id:           fmt.Sprintf("%s:%s", device, d.Name),
+		Id:           fmt.Sprintf("%s.%s", device, d.Profile.Name),
 		Device:       device,
-		Name:         d.Name,
-		Image:        d.Details.Config.Image,
+		Name:         d.Profile.Name,
+		Image:        d.Profile.Image,
 		Status:       mapStatus(d.Details.State),
 		RestartCount: d.Details.RestartCount,
 		Resources: ContainerResources{

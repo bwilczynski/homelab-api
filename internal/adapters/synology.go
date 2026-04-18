@@ -162,10 +162,14 @@ type DSMContainerState struct {
 
 // DSMContainerDetailResponse is the data payload from SYNO.Docker.Container get.
 type DSMContainerDetailResponse struct {
-	Details DSMContainerDetail `json:"details"`
-	Name    string             `json:"name"`
-	Status  string             `json:"status"`
-	UpTime  int64              `json:"up_time"`
+	Details DSMContainerDetail        `json:"details"`
+	Profile DSMContainerDetailProfile `json:"profile"`
+}
+
+// DSMContainerDetailProfile holds the container profile from the DSM get response.
+type DSMContainerDetailProfile struct {
+	Name  string `json:"name"`
+	Image string `json:"image"`
 }
 
 // DSMContainerDetail contains detailed container information.

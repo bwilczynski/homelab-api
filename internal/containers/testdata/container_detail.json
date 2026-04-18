@@ -14,9 +14,10 @@
         "Status": "running"
       }
     },
-    "name": "immich_server",
-    "status": "running",
-    "up_time": 1775677594
+    "profile": {
+      "image": "ghcr.io/immich-app/immich-server:v2.6.3",
+      "name": "immich_server"
+    }
   },
   "success": true
 }
