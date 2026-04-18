@@ -14,6 +14,8 @@ import (
 type DSMBackend interface {
 	GetSystemInfo() (*adapters.DSMSystemInfoResponse, error)
 	GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error)
+	GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error)
+	ListContainers() (*adapters.DSMContainerListResponse, error)
 }
 
 // UniFiBackend defines the adapter interface for UniFi system operations.
@@ -33,27 +35,52 @@ func NewService(device string, dsm DSMBackend, unifi UniFiBackend) *Service {
 	return &Service{device: device, dsm: dsm, unifi: unifi}
 }
 
-// GetSystemHealth queries UniFi subsystem health and maps it to the Health model.
+// GetSystemHealth queries all backends for health and assembles an aggregate Health model.
+// The top-level status is the worst status across all components.
 func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
-	subsystems, err := s.unifi.GetHealth()
-	if err != nil {
-		return Health{}, fmt.Errorf("get health: %w", err)
-	}
-
-	components := make([]ComponentHealth, 0, len(subsystems))
+	var components []ComponentHealth
 	overall := Healthy
 
+	// UniFi subsystems (gateway, wan, lan, wlan, www, vpn, …).
+	subsystems, err := s.unifi.GetHealth()
+	if err != nil {
+		return Health{}, fmt.Errorf("get unifi health: %w", err)
+	}
 	for _, sub := range subsystems {
 		status := mapUniFiStatus(sub.Status)
-		if status == Unhealthy && overall != Unhealthy {
-			overall = Unhealthy
-		} else if status == Degraded && overall == Healthy {
-			overall = Degraded
-		}
 		components = append(components, ComponentHealth{
 			Name:   sub.Subsystem,
 			Status: status,
 		})
+		overall = worstStatus(overall, status)
+	}
+
+	// DSM storage volumes → single "storage" component.
+	storageStatus, storageMsg, err := s.storageHealth()
+	if err != nil {
+		return Health{}, fmt.Errorf("get storage health: %w", err)
+	}
+	storageComponent := ComponentHealth{Name: "storage", Status: storageStatus}
+	if storageMsg != "" {
+		storageComponent.Message = &storageMsg
+	}
+	components = append(components, storageComponent)
+	overall = worstStatus(overall, storageStatus)
+
+	// DSM containers → single "containers" component.
+	containersStatus, containersMsg, err := s.containersHealth()
+	if err != nil {
+		return Health{}, fmt.Errorf("get containers health: %w", err)
+	}
+	containersComponent := ComponentHealth{Name: "containers", Status: containersStatus}
+	if containersMsg != "" {
+		containersComponent.Message = &containersMsg
+	}
+	components = append(components, containersComponent)
+	overall = worstStatus(overall, containersStatus)
+
+	if components == nil {
+		components = []ComponentHealth{}
 	}
 
 	return Health{
@@ -61,6 +88,51 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 		CheckedAt:  time.Now().UTC(),
 		Components: components,
 	}, nil
+}
+
+// storageHealth derives a single HealthStatus from DSM volume statuses.
+func (s *Service) storageHealth() (HealthStatus, string, error) {
+	resp, err := s.dsm.GetStorageVolumes()
+	if err != nil {
+		return Unhealthy, err.Error(), nil //nolint:nilerr
+	}
+	worst := Healthy
+	var degraded, crashed []string
+	for _, v := range resp.Volumes {
+		st := mapVolumeStatus(v.Status)
+		worst = worstStatus(worst, st)
+		switch st {
+		case Unhealthy:
+			crashed = append(crashed, v.ID)
+		case Degraded:
+			degraded = append(degraded, v.ID)
+		}
+	}
+	var msg string
+	if len(crashed) > 0 {
+		msg = fmt.Sprintf("crashed: %s", strings.Join(crashed, ", "))
+	} else if len(degraded) > 0 {
+		msg = fmt.Sprintf("degraded: %s", strings.Join(degraded, ", "))
+	}
+	return worst, msg, nil
+}
+
+// containersHealth derives a single HealthStatus from DSM container states.
+func (s *Service) containersHealth() (HealthStatus, string, error) {
+	resp, err := s.dsm.ListContainers()
+	if err != nil {
+		return Unhealthy, err.Error(), nil //nolint:nilerr
+	}
+	notRunning := 0
+	for _, c := range resp.Containers {
+		if !c.State.Running {
+			notRunning++
+		}
+	}
+	if notRunning == 0 {
+		return Healthy, "", nil
+	}
+	return Degraded, fmt.Sprintf("%d container(s) not running", notRunning), nil
 }
 
 // ListSystemInfo queries DSM for static system information.
@@ -160,12 +232,35 @@ func (s *Service) ListSystemUtilization(ctx context.Context, device *string) (Sy
 	}, nil
 }
 
+// worstStatus returns the more severe of two HealthStatus values.
+func worstStatus(a, b HealthStatus) HealthStatus {
+	if a == Unhealthy || b == Unhealthy {
+		return Unhealthy
+	}
+	if a == Degraded || b == Degraded {
+		return Degraded
+	}
+	return Healthy
+}
+
 // mapUniFiStatus converts a UniFi subsystem status string to HealthStatus.
 func mapUniFiStatus(status string) HealthStatus {
 	switch status {
 	case "ok":
 		return Healthy
 	case "unknown":
+		return Degraded
+	default:
+		return Unhealthy
+	}
+}
+
+// mapVolumeStatus converts a DSM volume status string to HealthStatus.
+func mapVolumeStatus(status string) HealthStatus {
+	switch status {
+	case "normal":
+		return Healthy
+	case "degraded", "repairing":
 		return Degraded
 	default:
 		return Unhealthy

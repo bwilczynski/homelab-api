@@ -429,6 +429,42 @@ func (c *SynologyClient) GetSystemUtilization() (*DSMSystemUtilizationResponse, 
 	return &result, nil
 }
 
+// --- Storage types ---
+
+// DSMStorageVolumeResponse is the data payload from SYNO.Storage.CGI.Storage load_info.
+type DSMStorageVolumeResponse struct {
+	Volumes []DSMStorageVolume `json:"volumes"`
+}
+
+// DSMStorageVolume represents a single storage volume reported by DSM.
+type DSMStorageVolume struct {
+	ID       string              `json:"id"`
+	VolPath  string              `json:"vol_path"`
+	Status   string              `json:"status"`
+	FsType   string              `json:"fs_type"`
+	RaidType string              `json:"raidType"`
+	Size     DSMStorageVolumeSize `json:"size"`
+}
+
+// DSMStorageVolumeSize holds the capacity info for a volume (values are strings in bytes).
+type DSMStorageVolumeSize struct {
+	Total string `json:"total"`
+	Used  string `json:"used"`
+}
+
+// GetStorageVolumes retrieves the list of storage volumes from the DSM.
+func (c *SynologyClient) GetStorageVolumes() (*DSMStorageVolumeResponse, error) {
+	data, err := c.Call("SYNO.Storage.CGI.Storage", "load_info", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMStorageVolumeResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse storage volumes: %w", err)
+	}
+	return &result, nil
+}
+
 // StartContainer starts a container by name.
 func (c *SynologyClient) StartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "start", "1", url.Values{

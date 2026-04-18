@@ -12,9 +12,11 @@ import (
 // --- Mock backends ---
 
 type mockDSMBackend struct {
-	info  *adapters.DSMSystemInfoResponse
-	util  *adapters.DSMSystemUtilizationResponse
-	err   error
+	info     *adapters.DSMSystemInfoResponse
+	util     *adapters.DSMSystemUtilizationResponse
+	volumes  *adapters.DSMStorageVolumeResponse
+	conts    *adapters.DSMContainerListResponse
+	err      error
 }
 
 func (m *mockDSMBackend) GetSystemInfo() (*adapters.DSMSystemInfoResponse, error) {
@@ -23,6 +25,20 @@ func (m *mockDSMBackend) GetSystemInfo() (*adapters.DSMSystemInfoResponse, error
 
 func (m *mockDSMBackend) GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error) {
 	return m.util, m.err
+}
+
+func (m *mockDSMBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+	if m.volumes != nil {
+		return m.volumes, nil
+	}
+	return &adapters.DSMStorageVolumeResponse{}, m.err
+}
+
+func (m *mockDSMBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
+	if m.conts != nil {
+		return m.conts, nil
+	}
+	return &adapters.DSMContainerListResponse{}, m.err
 }
 
 type mockUniFiBackend struct {
@@ -81,10 +97,25 @@ func loadUniFiHealth(t *testing.T) []adapters.UniFiSubsystemHealth {
 	return envelope.Data
 }
 
+func loadDSMStorageVolumes(t *testing.T) *adapters.DSMStorageVolumeResponse {
+	t.Helper()
+	raw, err := os.ReadFile("testdata/dsm-storage-volumes.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var envelope struct {
+		Data adapters.DSMStorageVolumeResponse `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	return &envelope.Data
+}
+
 // --- Tests: GetSystemHealth ---
 
 func TestGetSystemHealth_Healthy(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{}, &mockUniFiBackend{
+	svc := NewService("nas-01", &mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
 		subsystems: loadUniFiHealth(t),
 	})
 
@@ -165,6 +196,116 @@ func TestGetSystemHealth_EmptyComponents(t *testing.T) {
 	}
 	if health.Components == nil {
 		t.Error("components must not be nil")
+	}
+}
+
+func TestGetSystemHealth_StorageDegraded(t *testing.T) {
+	svc := NewService("nas-01", &mockDSMBackend{
+		volumes: &adapters.DSMStorageVolumeResponse{
+			Volumes: []adapters.DSMStorageVolume{
+				{ID: "volume_1", Status: "normal"},
+				{ID: "volume_2", Status: "degraded"},
+			},
+		},
+	}, &mockUniFiBackend{})
+
+	health, err := svc.GetSystemHealth(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if health.Status != Degraded {
+		t.Errorf("expected degraded due to storage, got %s", health.Status)
+	}
+
+	var storageComp *ComponentHealth
+	for i := range health.Components {
+		if health.Components[i].Name == "storage" {
+			storageComp = &health.Components[i]
+			break
+		}
+	}
+	if storageComp == nil {
+		t.Fatal("expected storage component")
+	}
+	if storageComp.Status != Degraded {
+		t.Errorf("expected storage status degraded, got %s", storageComp.Status)
+	}
+	if storageComp.Message == nil || *storageComp.Message == "" {
+		t.Error("expected non-empty message for degraded storage")
+	}
+}
+
+func TestGetSystemHealth_StorageCrashed(t *testing.T) {
+	svc := NewService("nas-01", &mockDSMBackend{
+		volumes: &adapters.DSMStorageVolumeResponse{
+			Volumes: []adapters.DSMStorageVolume{
+				{ID: "volume_1", Status: "crashed"},
+			},
+		},
+	}, &mockUniFiBackend{})
+
+	health, err := svc.GetSystemHealth(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if health.Status != Unhealthy {
+		t.Errorf("expected unhealthy due to crashed volume, got %s", health.Status)
+	}
+}
+
+func TestGetSystemHealth_ContainersNotRunning(t *testing.T) {
+	svc := NewService("nas-01", &mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "app1", State: adapters.DSMContainerState{Running: true}},
+				{Name: "app2", State: adapters.DSMContainerState{Running: false}},
+			},
+		},
+	}, &mockUniFiBackend{})
+
+	health, err := svc.GetSystemHealth(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var containersComp *ComponentHealth
+	for i := range health.Components {
+		if health.Components[i].Name == "containers" {
+			containersComp = &health.Components[i]
+			break
+		}
+	}
+	if containersComp == nil {
+		t.Fatal("expected containers component")
+	}
+	if containersComp.Status != Degraded {
+		t.Errorf("expected containers status degraded, got %s", containersComp.Status)
+	}
+	if containersComp.Message == nil || *containersComp.Message == "" {
+		t.Error("expected non-empty message for stopped containers")
+	}
+}
+
+func TestGetSystemHealth_AllComponentsPresent(t *testing.T) {
+	svc := NewService("nas-01", &mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
+		subsystems: loadUniFiHealth(t),
+	})
+
+	health, err := svc.GetSystemHealth(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	names := make(map[string]bool)
+	for _, c := range health.Components {
+		names[c.Name] = true
+	}
+	for _, required := range []string{"storage", "containers"} {
+		if !names[required] {
+			t.Errorf("expected component %q in health response", required)
+		}
 	}
 }
 
