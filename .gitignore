@@ -7,5 +7,8 @@ internal/*/api.gen.go
 # Spec bundle output
 spec/dist/
 
+# Raw API responses (contain real data, used only to derive fixtures)
+scripts/responses/
+
 # Claude Code local settings
 .claude/settings.local.json
