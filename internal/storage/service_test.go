@@ -76,17 +76,19 @@ func TestListStorageVolumes(t *testing.T) {
 	}
 }
 
-func TestListStorageVolumesDiskMapping(t *testing.T) {
+func TestGetStorageVolumeDiskMapping(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
 	svc := NewService("nas-01", &mockBackend{resp: &resp})
 
-	result, err := svc.ListStorageVolumes(context.Background(), nil)
+	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if v == nil {
+		t.Fatal("expected volume detail, got nil")
+	}
 
-	v := result.Items[0]
 	if len(v.Disks) != 4 {
 		t.Fatalf("expected 4 disks, got %d", len(v.Disks))
 	}
@@ -103,6 +105,9 @@ func TestListStorageVolumesDiskMapping(t *testing.T) {
 	}
 	if d.TemperatureCelsius != 35 {
 		t.Errorf("expected temperature 35, got %d", d.TemperatureCelsius)
+	}
+	if d.TotalBytes != 4000787030016 {
+		t.Errorf("expected totalBytes 4000787030016, got %d", d.TotalBytes)
 	}
 }
 
