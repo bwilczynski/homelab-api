@@ -115,14 +115,17 @@ func (c *UniFiClient) GetDevices() ([]UniFiDevice, error) {
 
 // UniFiSta represents an active client device from the UniFi Controller.
 type UniFiSta struct {
-	MAC      string  `json:"mac"`
-	Hostname *string `json:"hostname"`
-	Name     *string `json:"name"`
-	IP       string  `json:"ip"`
-	IsWired  bool    `json:"is_wired"`
-	ESSID    *string `json:"essid"`
-	Signal   *int    `json:"signal"`
-	Uptime   int     `json:"uptime"`
+	MAC            string  `json:"mac"`
+	Hostname       *string `json:"hostname"`
+	Name           *string `json:"name"`
+	IP             string  `json:"ip"`
+	IsWired        bool    `json:"is_wired"`
+	ESSID          *string `json:"essid"`
+	Signal         *int    `json:"signal"`
+	Uptime         int     `json:"uptime"`
+	SwMAC          string  `json:"sw_mac"`           // MAC of the switch this client is connected to (wired)
+	SwPort         int     `json:"sw_port"`           // Switch port number (wired)
+	LastUplinkName string  `json:"last_uplink_name"` // Switch display name (wired)
 }
 
 // GetClients retrieves currently active client devices from the UniFi Controller.
