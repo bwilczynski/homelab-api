@@ -82,6 +82,64 @@ func (c *UniFiClient) get(path string, out interface{}) error {
 	return nil
 }
 
+// --- Device types ---
+
+// UniFiDevice represents a managed network device from the UniFi Controller.
+type UniFiDevice struct {
+	ID         string `json:"_id"`
+	MAC        string `json:"mac"`
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	Type       string `json:"type"` // uap, usw, ugw, udm, udm-pro
+	State      int    `json:"state"`
+	IP         string `json:"ip"`
+	Version    string `json:"version"`
+	Uptime     int    `json:"uptime"`
+	UserNumSta int    `json:"user-num_sta"` // connected user clients
+	GuestNumSta int   `json:"guest-num_sta"` // connected guest clients
+}
+
+// GetDevices retrieves all managed network devices from the UniFi Controller.
+func (c *UniFiClient) GetDevices() ([]UniFiDevice, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	var result unifiResponse[[]UniFiDevice]
+	if err := c.get("/api/s/default/stat/device", &result); err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// --- Client types ---
+
+// UniFiSta represents an active client device from the UniFi Controller.
+type UniFiSta struct {
+	MAC            string  `json:"mac"`
+	Hostname       *string `json:"hostname"`
+	Name           *string `json:"name"`
+	IP             string  `json:"ip"`
+	IsWired        bool    `json:"is_wired"`
+	ESSID          *string `json:"essid"`
+	Signal         *int    `json:"signal"`
+	Uptime         int     `json:"uptime"`
+	SwMAC          string  `json:"sw_mac"`           // MAC of the switch this client is connected to (wired)
+	SwPort         int     `json:"sw_port"`           // Switch port number (wired)
+	LastUplinkName string  `json:"last_uplink_name"` // Switch display name (wired)
+}
+
+// GetClients retrieves currently active client devices from the UniFi Controller.
+func (c *UniFiClient) GetClients() ([]UniFiSta, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	var result unifiResponse[[]UniFiSta]
+	if err := c.get("/api/s/default/stat/sta", &result); err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
 // --- Health types ---
 
 // UniFiSubsystemHealth represents health data for a single UniFi subsystem.

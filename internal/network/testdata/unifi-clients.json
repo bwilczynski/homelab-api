@@ -1,0 +1,80 @@
+{
+  "meta": { "rc": "ok" },
+  "data": [
+    {
+      "_id": "000000000000000000000011",
+      "mac": "3c:22:fb:09:aa:b1",
+      "hostname": "macbook",
+      "name": "MacBook Pro",
+      "ip": "192.168.10.67",
+      "is_wired": false,
+      "essid": "homelab",
+      "signal": -69,
+      "rssi": 27,
+      "uptime": 27075,
+      "sw_mac": "",
+      "sw_port": 0,
+      "last_uplink_name": ""
+    },
+    {
+      "_id": "000000000000000000000012",
+      "mac": "68:d7:9a:12:bb:c2",
+      "hostname": "nas-1",
+      "name": null,
+      "ip": "192.168.100.5",
+      "is_wired": true,
+      "essid": null,
+      "signal": null,
+      "rssi": null,
+      "uptime": 1024199,
+      "sw_mac": "aa:bb:cc:dd:00:02",
+      "sw_port": 3,
+      "last_uplink_name": "Switch Living Room"
+    },
+    {
+      "_id": "000000000000000000000013",
+      "mac": "11:22:33:44:55:03",
+      "hostname": null,
+      "name": "Nintendo Switch",
+      "ip": "192.168.20.7",
+      "is_wired": false,
+      "essid": "homelab-iot",
+      "signal": -49,
+      "rssi": 47,
+      "uptime": 83007,
+      "sw_mac": "",
+      "sw_port": 0,
+      "last_uplink_name": ""
+    },
+    {
+      "_id": "000000000000000000000014",
+      "mac": "a4:83:e7:5f:cc:d3",
+      "hostname": "iPhone",
+      "name": null,
+      "ip": "192.168.10.45",
+      "is_wired": false,
+      "essid": "homelab",
+      "signal": -66,
+      "rssi": 30,
+      "uptime": 6130,
+      "sw_mac": "",
+      "sw_port": 0,
+      "last_uplink_name": ""
+    },
+    {
+      "_id": "000000000000000000000015",
+      "mac": "ec:b5:fa:22:d1:dc",
+      "hostname": null,
+      "name": null,
+      "ip": "192.168.10.13",
+      "is_wired": true,
+      "essid": null,
+      "signal": null,
+      "rssi": null,
+      "uptime": 988376,
+      "sw_mac": "aa:bb:cc:dd:00:04",
+      "sw_port": 6,
+      "last_uplink_name": "Switch Office"
+    }
+  ]
+}

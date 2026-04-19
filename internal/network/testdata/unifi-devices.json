@@ -1,0 +1,75 @@
+{
+  "meta": { "rc": "ok" },
+  "data": [
+    {
+      "_id": "000000000000000000000001",
+      "mac": "aa:bb:cc:dd:00:01",
+      "name": "USG 3P",
+      "model": "UGW3",
+      "type": "ugw",
+      "state": 1,
+      "ip": "192.168.0.1",
+      "version": "4.4.57.5578372",
+      "uptime": 16066061,
+      "user-num_sta": 9,
+      "guest-num_sta": 0,
+      "num_sta": 9
+    },
+    {
+      "_id": "000000000000000000000002",
+      "mac": "aa:bb:cc:dd:00:02",
+      "name": "US 8 60W",
+      "model": "US8P60",
+      "type": "usw",
+      "state": 1,
+      "ip": "192.168.1.40",
+      "version": "7.4.1.16850",
+      "uptime": 987970,
+      "user-num_sta": 1,
+      "guest-num_sta": 0,
+      "num_sta": 1
+    },
+    {
+      "_id": "000000000000000000000003",
+      "mac": "aa:bb:cc:dd:00:03",
+      "name": "Switch Flex Mini",
+      "model": "USMINI",
+      "type": "usw",
+      "state": 1,
+      "ip": "192.168.1.41",
+      "version": "2.1.6.762",
+      "uptime": 16065407,
+      "user-num_sta": 4,
+      "guest-num_sta": 0,
+      "num_sta": 4
+    },
+    {
+      "_id": "000000000000000000000004",
+      "mac": "aa:bb:cc:dd:00:04",
+      "name": "UAP-01",
+      "model": "U7LT",
+      "type": "uap",
+      "state": 1,
+      "ip": "192.168.1.26",
+      "version": "6.8.2.15592",
+      "uptime": 89636,
+      "user-num_sta": 7,
+      "guest-num_sta": 0,
+      "num_sta": 7
+    },
+    {
+      "_id": "000000000000000000000005",
+      "mac": "aa:bb:cc:dd:00:05",
+      "name": "UAP-02",
+      "model": "U7LT",
+      "type": "uap",
+      "state": 0,
+      "ip": "192.168.1.6",
+      "version": "6.8.2.15592",
+      "uptime": 0,
+      "user-num_sta": 0,
+      "guest-num_sta": 0,
+      "num_sta": 0
+    }
+  ]
+}
