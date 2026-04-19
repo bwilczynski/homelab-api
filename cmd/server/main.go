@@ -10,6 +10,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/containers"
+	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
 )
@@ -46,6 +47,10 @@ func main() {
 	backupsSvc := backups.NewService()
 	backupsHandler := backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil)
 	backups.HandlerFromMux(backupsHandler, r)
+
+	networkSvc := network.NewService("unifi", unifi)
+	networkHandler := network.NewStrictHandler(network.NewHandler(networkSvc), nil)
+	network.HandlerFromMux(networkHandler, r)
 
 	addr := ":8080"
 	logger.Info("starting server", "addr", addr)

@@ -82,6 +82,60 @@ func (c *UniFiClient) get(path string, out interface{}) error {
 	return nil
 }
 
+// --- Device types ---
+
+// UniFiDevice represents a managed network device from the UniFi Controller.
+type UniFiDevice struct {
+	ID              string `json:"_id"`
+	MAC             string `json:"mac"`
+	Name            string `json:"name"`
+	Model           string `json:"model"`
+	Type            string `json:"type"` // uap, usw, ugw, udm, udm-pro
+	State           int    `json:"state"`
+	IP              string `json:"ip"`
+	Version         string `json:"version"`
+	Uptime          int    `json:"uptime"`
+	NumSta          int    `json:"num_sta"` // connected wireless clients (APs only)
+}
+
+// GetDevices retrieves all managed network devices from the UniFi Controller.
+func (c *UniFiClient) GetDevices() ([]UniFiDevice, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	var result unifiResponse[[]UniFiDevice]
+	if err := c.get("/api/s/default/stat/device", &result); err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// --- Client types ---
+
+// UniFiClient represents an active client device from the UniFi Controller.
+type UniFiSta struct {
+	MAC      string `json:"mac"`
+	Hostname string `json:"hostname"`
+	Name     string `json:"name"`
+	IP       string `json:"ip"`
+	IsWired  bool   `json:"is_wired"`
+	ESSID    string `json:"essid"`
+	Signal   int    `json:"signal"`
+	Uptime   int    `json:"uptime"`
+}
+
+// GetClients retrieves currently active client devices from the UniFi Controller.
+func (c *UniFiClient) GetClients() ([]UniFiSta, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	var result unifiResponse[[]UniFiSta]
+	if err := c.get("/api/s/default/stat/sta", &result); err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
 // --- Health types ---
 
 // UniFiSubsystemHealth represents health data for a single UniFi subsystem.
