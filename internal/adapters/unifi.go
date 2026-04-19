@@ -86,16 +86,17 @@ func (c *UniFiClient) get(path string, out interface{}) error {
 
 // UniFiDevice represents a managed network device from the UniFi Controller.
 type UniFiDevice struct {
-	ID              string `json:"_id"`
-	MAC             string `json:"mac"`
-	Name            string `json:"name"`
-	Model           string `json:"model"`
-	Type            string `json:"type"` // uap, usw, ugw, udm, udm-pro
-	State           int    `json:"state"`
-	IP              string `json:"ip"`
-	Version         string `json:"version"`
-	Uptime          int    `json:"uptime"`
-	NumSta          int    `json:"num_sta"` // connected wireless clients (APs only)
+	ID         string `json:"_id"`
+	MAC        string `json:"mac"`
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	Type       string `json:"type"` // uap, usw, ugw, udm, udm-pro
+	State      int    `json:"state"`
+	IP         string `json:"ip"`
+	Version    string `json:"version"`
+	Uptime     int    `json:"uptime"`
+	UserNumSta int    `json:"user-num_sta"` // connected user clients
+	GuestNumSta int   `json:"guest-num_sta"` // connected guest clients
 }
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
@@ -112,16 +113,16 @@ func (c *UniFiClient) GetDevices() ([]UniFiDevice, error) {
 
 // --- Client types ---
 
-// UniFiClient represents an active client device from the UniFi Controller.
+// UniFiSta represents an active client device from the UniFi Controller.
 type UniFiSta struct {
-	MAC      string `json:"mac"`
-	Hostname string `json:"hostname"`
-	Name     string `json:"name"`
-	IP       string `json:"ip"`
-	IsWired  bool   `json:"is_wired"`
-	ESSID    string `json:"essid"`
-	Signal   int    `json:"signal"`
-	Uptime   int    `json:"uptime"`
+	MAC      string  `json:"mac"`
+	Hostname *string `json:"hostname"`
+	Name     *string `json:"name"`
+	IP       string  `json:"ip"`
+	IsWired  bool    `json:"is_wired"`
+	ESSID    *string `json:"essid"`
+	Signal   *int    `json:"signal"`
+	Uptime   int     `json:"uptime"`
 }
 
 // GetClients retrieves currently active client devices from the UniFi Controller.

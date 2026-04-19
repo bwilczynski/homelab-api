@@ -1,0 +1,65 @@
+{
+  "meta": { "rc": "ok" },
+  "data": [
+    {
+      "_id": "000000000000000000000011",
+      "mac": "11:22:33:44:55:01",
+      "hostname": "mac-host",
+      "name": null,
+      "ip": "192.168.10.67",
+      "is_wired": false,
+      "essid": "homelab",
+      "signal": -69,
+      "rssi": 27,
+      "uptime": 27075
+    },
+    {
+      "_id": "000000000000000000000012",
+      "mac": "11:22:33:44:55:02",
+      "hostname": "wired-host",
+      "name": null,
+      "ip": "192.168.10.54",
+      "is_wired": true,
+      "essid": null,
+      "signal": null,
+      "rssi": null,
+      "uptime": 1024199
+    },
+    {
+      "_id": "000000000000000000000013",
+      "mac": "11:22:33:44:55:03",
+      "hostname": null,
+      "name": "Nintendo Switch",
+      "ip": "192.168.20.7",
+      "is_wired": false,
+      "essid": "homelab-iot",
+      "signal": -49,
+      "rssi": 47,
+      "uptime": 83007
+    },
+    {
+      "_id": "000000000000000000000014",
+      "mac": "11:22:33:44:55:04",
+      "hostname": "nas-1",
+      "name": "Synology DS918+",
+      "ip": "192.168.100.5",
+      "is_wired": true,
+      "essid": null,
+      "signal": null,
+      "rssi": null,
+      "uptime": 6807843
+    },
+    {
+      "_id": "000000000000000000000015",
+      "mac": "11:22:33:44:55:05",
+      "hostname": null,
+      "name": null,
+      "ip": "192.168.10.70",
+      "is_wired": false,
+      "essid": "homelab",
+      "signal": -74,
+      "rssi": 22,
+      "uptime": 234035
+    }
+  ]
+}

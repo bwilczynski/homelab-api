@@ -46,9 +46,9 @@ func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 			Status:          mapDeviceStatus(d.State),
 			Uptime:          d.Uptime,
 		}
-		if d.Type == "uap" && d.NumSta > 0 {
-			n := d.NumSta
-			dev.NumClients = &n
+		total := d.UserNumSta + d.GuestNumSta
+		if total > 0 {
+			dev.NumClients = &total
 		}
 		items = append(items, dev)
 	}
@@ -77,11 +77,9 @@ func (s *Service) ListClients(ctx context.Context) (NetworkClientList, error) {
 			ip := sta.IP
 			client.Ip = &ip
 		}
-		if !sta.IsWired && sta.ESSID != "" {
-			ssid := sta.ESSID
-			client.Ssid = &ssid
-			sig := sta.Signal
-			client.SignalStrength = &sig
+		if !sta.IsWired && sta.ESSID != nil {
+			client.Ssid = sta.ESSID
+			client.SignalStrength = sta.Signal
 		}
 		items = append(items, client)
 	}
@@ -117,16 +115,16 @@ func mapConnectionType(isWired bool) NetworkClientConnectionType {
 }
 
 func clientName(sta adapters.UniFiSta) string {
-	if sta.Name != "" {
-		return sta.Name
+	if sta.Name != nil && *sta.Name != "" {
+		return *sta.Name
 	}
-	if sta.Hostname != "" {
-		return sta.Hostname
+	if sta.Hostname != nil && *sta.Hostname != "" {
+		return *sta.Hostname
 	}
 	return sta.MAC
 }
 
-// normalizeMac ensures the MAC address is lowercase with colon separators.
+// normalizeMac ensures the MAC address is lowercase.
 func normalizeMac(mac string) string {
 	return strings.ToLower(mac)
 }
