@@ -62,6 +62,11 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		rawByName[v.ID] = v
 	}
 
+	disksByID := make(map[string]adapters.DSMStorageDisk, len(resp.Disks))
+	for _, d := range resp.Disks {
+		disksByID[d.ID] = d
+	}
+
 	for _, vol := range mapVolumes(s.device, resp) {
 		if vol.Name != name {
 			continue
@@ -70,7 +75,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		pool := poolByID[raw.PoolPath]
 		return &VolumeDetail{
 			Device:     vol.Device,
-			Disks:      vol.Disks,
+			Disks:      mapDisks(pool, disksByID),
 			FileSystem: vol.FileSystem,
 			Id:         vol.Id,
 			Name:       vol.Name,
@@ -96,41 +101,10 @@ func parseVolumeID(id string) (device, name string, err error) {
 
 // mapVolumes converts a DSM storage response to API Volume models.
 func mapVolumes(device string, resp *adapters.DSMStorageVolumeResponse) []Volume {
-	// Build disk lookup by ID.
-	disksByID := make(map[string]adapters.DSMStorageDisk, len(resp.Disks))
-	for _, d := range resp.Disks {
-		disksByID[d.ID] = d
-	}
-
-	// Build pool lookup by ID to get disk lists.
-	poolByID := make(map[string]adapters.DSMStoragePool, len(resp.StoragePools))
-	for _, p := range resp.StoragePools {
-		poolByID[p.ID] = p
-	}
-
 	volumes := make([]Volume, 0, len(resp.Volumes))
 	for _, v := range resp.Volumes {
 		totalBytes, _ := strconv.ParseInt(v.Size.Total, 10, 64)
 		usedBytes, _ := strconv.ParseInt(v.Size.Used, 10, 64)
-
-		// Find the pool for this volume by pool_path.
-		var disks []VolumeDisk
-		if pool, ok := poolByID[v.PoolPath]; ok {
-			disks = make([]VolumeDisk, 0, len(pool.Disks))
-			for _, diskID := range pool.Disks {
-				if d, ok := disksByID[diskID]; ok {
-					disks = append(disks, VolumeDisk{
-						Id:                 d.ID,
-						Model:              d.Model,
-						Status:             mapDiskStatus(d.Status),
-						TemperatureCelsius: d.Temp,
-					})
-				}
-			}
-		}
-		if disks == nil {
-			disks = []VolumeDisk{}
-		}
 
 		volumes = append(volumes, Volume{
 			Id:         fmt.Sprintf("%s.%s", device, v.ID),
@@ -141,10 +115,27 @@ func mapVolumes(device string, resp *adapters.DSMStorageVolumeResponse) []Volume
 			Status:     mapVolumeStatus(v.Status),
 			TotalBytes: totalBytes,
 			UsedBytes:  usedBytes,
-			Disks:      disks,
 		})
 	}
 	return volumes
+}
+
+// mapDisks converts the DSM pool's disk list to API VolumeDisk models.
+func mapDisks(pool adapters.DSMStoragePool, disksByID map[string]adapters.DSMStorageDisk) []VolumeDisk {
+	disks := make([]VolumeDisk, 0, len(pool.Disks))
+	for _, diskID := range pool.Disks {
+		if d, ok := disksByID[diskID]; ok {
+			totalBytes, _ := strconv.ParseInt(d.SizeTotal, 10, 64)
+			disks = append(disks, VolumeDisk{
+				Id:                 d.ID,
+				Model:              d.Model,
+				Status:             mapDiskStatus(d.Status),
+				TemperatureCelsius: d.Temp,
+				TotalBytes:         totalBytes,
+			})
+		}
+	}
+	return disks
 }
 
 // mapVolumeStatus converts a DSM volume status string to VolumeStatus.
