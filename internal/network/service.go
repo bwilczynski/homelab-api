@@ -110,8 +110,8 @@ func (s *Service) deviceToList(d adapters.UniFiDevice) NetworkDevice {
 		Type:   mapDeviceType(d.Type),
 		Status: mapDeviceStatus(d.State),
 	}
-	total := d.UserNumSta + d.GuestNumSta
-	if total > 0 {
+	if d.Type == "uap" {
+		total := d.UserNumSta + d.GuestNumSta
 		dev.NumClients = &total
 	}
 	return dev
@@ -130,8 +130,8 @@ func (s *Service) deviceToDetail(d adapters.UniFiDevice) NetworkDeviceDetail {
 		FirmwareVersion: d.Version,
 		Uptime:          d.Uptime,
 	}
-	total := d.UserNumSta + d.GuestNumSta
-	if total > 0 {
+	if d.Type == "uap" {
+		total := d.UserNumSta + d.GuestNumSta
 		det.NumClients = &total
 	}
 	return det

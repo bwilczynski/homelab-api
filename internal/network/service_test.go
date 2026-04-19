@@ -64,9 +64,9 @@ func TestListDevices(t *testing.T) {
 	if gw.Status != Connected {
 		t.Errorf("expected status connected, got %s", gw.Status)
 	}
-	// List shape: no Model/FirmwareVersion/Uptime
-	if gw.NumClients == nil || *gw.NumClients != 9 {
-		t.Errorf("expected numClients=9, got %v", gw.NumClients)
+	// Gateways have no directly-connected clients — numClients must be nil
+	if gw.NumClients != nil {
+		t.Errorf("expected nil numClients for gateway, got %v", gw.NumClients)
 	}
 
 	// Switch
@@ -90,13 +90,13 @@ func TestListDevices(t *testing.T) {
 		t.Errorf("expected numClients=7 for AP, got %v", ap.NumClients)
 	}
 
-	// Offline AP: numClients nil (zero total)
+	// Offline AP: numClients=0 (AP type, just disconnected)
 	offline := result.Items[4]
 	if offline.Status != Disconnected {
 		t.Errorf("expected status disconnected, got %s", offline.Status)
 	}
-	if offline.NumClients != nil {
-		t.Errorf("expected nil numClients for zero-count device, got %v", offline.NumClients)
+	if offline.NumClients == nil || *offline.NumClients != 0 {
+		t.Errorf("expected numClients=0 for offline AP, got %v", offline.NumClients)
 	}
 }
 
@@ -136,6 +136,9 @@ func TestGetDevice(t *testing.T) {
 	}
 	if detail.Uptime != 16066061 {
 		t.Errorf("expected uptime 16066061, got %d", detail.Uptime)
+	}
+	if detail.NumClients != nil {
+		t.Errorf("expected nil numClients for gateway detail, got %v", detail.NumClients)
 	}
 }
 
