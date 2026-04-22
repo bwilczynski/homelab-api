@@ -65,6 +65,23 @@ Each API tag has its own oapi-codegen config (`oapi-codegen-{tag}.yaml`) that ge
 
 The `spec/` submodule and all `api.gen.go` files are read-only in this repo. Never modify them here. If the spec seems wrong or incomplete, changes must go through the [homelab-api-spec](https://github.com/bwilczynski/homelab-api-spec) repo. This repo only implements the contract.
 
+## Backend adapter rules
+
+These rules apply any time you write or extend adapter code, regardless of how the task was initiated.
+
+**Never fabricate API response structures.** Adapter structs and test fixtures must be derived from actual responses captured from the real backends. If a backend is unreachable, stop and report — do not proceed with assumed or invented response shapes.
+
+**Capturing real responses:** Write minimal bash scripts in `scripts/` that authenticate and call the relevant endpoint (auth patterns: DSM session-based `_sid`, UniFi cookie-based). Save raw output to `scripts/responses/` — this directory is gitignored and must never be committed (raw responses contain real credentials and infrastructure details).
+
+**Building fixtures from captured responses:** Create test fixtures by sanitizing raw responses. Preserve the exact JSON structure — keys, nesting, and types must match the real response. Only values are sanitized:
+- Hostnames → `host-01`, `host-02`, …
+- IPs → `192.168.1.10`, `192.168.1.11`, …
+- MACs → `aa:bb:cc:dd:ee:01`, `aa:bb:cc:dd:ee:02`, …
+- Passwords / tokens / session IDs → `REDACTED`
+- Container names, software versions, disk models — keep as-is (not sensitive)
+
+Before saving a fixture, verify its top-level key set matches the raw response: `diff <(jq 'keys' raw.json) <(jq '.data | keys' fixture.json)`.
+
 ## CI
 
 GitHub Actions workflow (`.github/workflows/validate.yaml`) runs on push to main and PRs:
