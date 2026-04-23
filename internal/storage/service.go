@@ -23,16 +23,23 @@ type deviceBackend struct {
 // Service implements storage business logic.
 type Service struct {
 	backends []deviceBackend
+	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
 }
 
 // NewService creates a new storage service with one or more backends.
-func NewService(backends map[string]StorageBackend) *Service {
+// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
+// backends that are currently unreachable.
+func NewService(backends map[string]StorageBackend, monitor ...adapters.AvailabilityChecker) *Service {
 	dbs := make([]deviceBackend, 0, len(backends))
 	for device, backend := range backends {
 		dbs = append(dbs, deviceBackend{device: device, backend: backend})
 	}
 	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
-	return &Service{backends: dbs}
+	svc := &Service{backends: dbs}
+	if len(monitor) > 0 {
+		svc.monitor = monitor[0]
+	}
+	return svc
 }
 
 func (s *Service) findBackend(device string) (StorageBackend, error) {
@@ -49,6 +56,9 @@ func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (Volum
 	var volumes []Volume
 	for _, db := range s.backends {
 		if device != nil && *device != db.device {
+			continue
+		}
+		if s.monitor != nil && !s.monitor.Available(db.device) {
 			continue
 		}
 

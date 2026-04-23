@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
@@ -89,6 +90,23 @@ func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
 	}
 	c.authInfo = &dsmAPIInfo{path: info.Path, maxVer: info.MaxVersion}
 	return c.authInfo, nil
+}
+
+// Ping reports whether the DSM is reachable by making a short-timeout unauthenticated
+// request to the API info endpoint. It satisfies the adapters.HealthChecker interface.
+func (c *SynologyClient) Ping() error {
+	cl := &http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
+	resp, err := cl.Get(fmt.Sprintf("https://%s/webapi/query.cgi", c.host))
+	if err != nil {
+		return fmt.Errorf("synology unreachable: %w", err)
+	}
+	resp.Body.Close()
+	return nil
 }
 
 // Login authenticates with the DSM and stores the session ID.

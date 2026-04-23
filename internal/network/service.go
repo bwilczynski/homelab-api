@@ -24,16 +24,23 @@ type controllerBackend struct {
 // Service implements network domain business logic.
 type Service struct {
 	backends []controllerBackend
+	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
 }
 
 // NewService creates a new network service with one or more UniFi backends.
-func NewService(backends map[string]UniFiBackend) *Service {
+// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
+// backends that are currently unreachable.
+func NewService(backends map[string]UniFiBackend, monitor ...adapters.AvailabilityChecker) *Service {
 	cbs := make([]controllerBackend, 0, len(backends))
 	for controller, unifi := range backends {
 		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi})
 	}
 	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
-	return &Service{backends: cbs}
+	svc := &Service{backends: cbs}
+	if len(monitor) > 0 {
+		svc.monitor = monitor[0]
+	}
+	return svc
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {
@@ -49,6 +56,9 @@ func (s *Service) findBackend(controller string) (UniFiBackend, error) {
 func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 	var items []NetworkDevice
 	for _, cb := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+			continue
+		}
 		raw, err := cb.unifi.GetDevices()
 		if err != nil {
 			return NetworkDeviceList{}, fmt.Errorf("get unifi devices from %s: %w", cb.controller, err)
@@ -92,6 +102,9 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 func (s *Service) ListClients(ctx context.Context) (NetworkClientList, error) {
 	var items []NetworkClient
 	for _, cb := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+			continue
+		}
 		raw, err := cb.unifi.GetClients()
 		if err != nil {
 			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", cb.controller, err)
