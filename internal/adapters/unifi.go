@@ -2,7 +2,6 @@ package adapters
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,24 +12,25 @@ import (
 
 // UniFiClient handles authentication and API calls to the UniFi Controller.
 type UniFiClient struct {
-	host   string
-	user   string
-	pass   string
-	client *http.Client
+	host        string
+	user        string
+	pass        string
+	insecureTLS bool
+	client      *http.Client
 }
 
 // NewUniFiClient creates a new UniFi Controller API client.
-func NewUniFiClient(host, user, pass string) *UniFiClient {
+// Set insecureTLS to true to skip TLS certificate verification (opt-in).
+func NewUniFiClient(host, user, pass string, insecureTLS bool) *UniFiClient {
 	jar, _ := cookiejar.New(nil)
 	return &UniFiClient{
-		host: host,
-		user: user,
-		pass: pass,
+		host:        host,
+		user:        user,
+		pass:        pass,
+		insecureTLS: insecureTLS,
 		client: &http.Client{
-			Jar: jar,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
+			Jar:       jar,
+			Transport: tlsTransport(insecureTLS),
 		},
 	}
 }
@@ -50,9 +50,7 @@ func (c *UniFiClient) Ping() error {
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-		},
+		Transport: tlsTransport(c.insecureTLS),
 	}
 	resp, err := cl.Get(fmt.Sprintf("https://%s/", c.host))
 	if err != nil {

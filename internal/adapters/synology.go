@@ -1,7 +1,6 @@
 package adapters
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,6 +21,7 @@ type SynologyClient struct {
 	user        string
 	pass        string
 	authVersion string // SYNO.API.Auth version to use for login (default "6")
+	insecureTLS bool
 	authInfo    *dsmAPIInfo
 	sid         string
 	client      *http.Client
@@ -29,7 +29,8 @@ type SynologyClient struct {
 
 // NewSynologyClient creates a new Synology DSM API client.
 // authVersion is the SYNO.API.Auth version to use for login (default "6"; use "3" for older DSM).
-func NewSynologyClient(host, user, pass, authVersion string) *SynologyClient {
+// Set insecureTLS to true to skip TLS certificate verification (opt-in).
+func NewSynologyClient(host, user, pass, authVersion string, insecureTLS bool) *SynologyClient {
 	if authVersion == "" {
 		authVersion = "6"
 	}
@@ -38,10 +39,9 @@ func NewSynologyClient(host, user, pass, authVersion string) *SynologyClient {
 		user:        user,
 		pass:        pass,
 		authVersion: authVersion,
+		insecureTLS: insecureTLS,
 		client: &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
+			Transport: tlsTransport(insecureTLS),
 		},
 	}
 }
@@ -96,10 +96,8 @@ func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
 // request to the API info endpoint. It satisfies the adapters.HealthChecker interface.
 func (c *SynologyClient) Ping() error {
 	cl := &http.Client{
-		Timeout: 3 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-		},
+		Timeout:   3 * time.Second,
+		Transport: tlsTransport(c.insecureTLS),
 	}
 	resp, err := cl.Get(fmt.Sprintf("https://%s/webapi/query.cgi", c.host))
 	if err != nil {
