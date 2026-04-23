@@ -17,11 +17,23 @@ const (
 
 // Backend describes a single backend target.
 type Backend struct {
-	Name     string      `yaml:"name"`
-	Type     BackendType `yaml:"type"`
-	Host     string      `yaml:"host"`
-	Username string      `yaml:"username"`
-	Password string      `yaml:"password"`
+	Name        string      `yaml:"name"`
+	Type        BackendType `yaml:"type"`
+	Host        string      `yaml:"host"`
+	Username    string      `yaml:"username"`
+	Password    string      `yaml:"password"`
+	AuthVersion string      `yaml:"auth_version"` // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
+	Disable     []string    `yaml:"disable"`       // optional list of capabilities to disable, e.g. ["docker"]
+}
+
+// Disabled reports whether the named capability is disabled for this backend.
+func (b Backend) Disabled(capability string) bool {
+	for _, d := range b.Disable {
+		if d == capability {
+			return true
+		}
+	}
+	return false
 }
 
 // Config is the top-level configuration.

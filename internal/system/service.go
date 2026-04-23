@@ -24,9 +24,16 @@ type UniFiBackend interface {
 	GetHealth() ([]adapters.UniFiSubsystemHealth, error)
 }
 
+// DSMBackendConfig wraps a DSMBackend with feature flags.
+type DSMBackendConfig struct {
+	Backend       DSMBackend
+	DockerEnabled bool
+}
+
 type dsmEntry struct {
-	device string
-	dsm    DSMBackend
+	device        string
+	dsm           DSMBackend
+	dockerEnabled bool
 }
 
 type unifiEntry struct {
@@ -41,10 +48,10 @@ type Service struct {
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
-func NewService(dsmBackends map[string]DSMBackend, unifiBackends map[string]UniFiBackend) *Service {
+func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend) *Service {
 	dsms := make([]dsmEntry, 0, len(dsmBackends))
-	for device, dsm := range dsmBackends {
-		dsms = append(dsms, dsmEntry{device: device, dsm: dsm})
+	for device, cfg := range dsmBackends {
+		dsms = append(dsms, dsmEntry{device: device, dsm: cfg.Backend, dockerEnabled: cfg.DockerEnabled})
 	}
 	sort.Slice(dsms, func(i, j int) bool { return dsms[i].device < dsms[j].device })
 
@@ -101,16 +108,18 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 		components = append(components, storageComponent)
 		overall = worstStatus(overall, storageStatus)
 
-		containersStatus, containersMsg, err := containersHealth(de.dsm)
-		if err != nil {
-			return Health{}, fmt.Errorf("get containers health from %s: %w", de.device, err)
+		if de.dockerEnabled {
+			containersStatus, containersMsg, err := containersHealth(de.dsm)
+			if err != nil {
+				return Health{}, fmt.Errorf("get containers health from %s: %w", de.device, err)
+			}
+			containersComponent := ComponentHealth{Name: prefix + "containers", Status: containersStatus}
+			if containersMsg != "" {
+				containersComponent.Message = &containersMsg
+			}
+			components = append(components, containersComponent)
+			overall = worstStatus(overall, containersStatus)
 		}
-		containersComponent := ComponentHealth{Name: prefix + "containers", Status: containersStatus}
-		if containersMsg != "" {
-			containersComponent.Message = &containersMsg
-		}
-		components = append(components, containersComponent)
-		overall = worstStatus(overall, containersStatus)
 	}
 
 	if components == nil {

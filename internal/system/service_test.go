@@ -115,7 +115,7 @@ func loadDSMStorageVolumes(t *testing.T) *adapters.DSMStorageVolumeResponse {
 // newTestService creates a service with a single DSM backend "nas-01" and a single UniFi backend "unifi".
 func newTestService(dsm DSMBackend, unifi UniFiBackend) *Service {
 	return NewService(
-		map[string]DSMBackend{"nas-01": dsm},
+		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]UniFiBackend{"unifi": unifi},
 	)
 }
