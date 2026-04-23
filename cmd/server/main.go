@@ -37,7 +37,7 @@ func main() {
 	for _, b := range cfg.Backends {
 		switch b.Type {
 		case config.BackendTypeSynology:
-			synologyClients[b.Name] = adapters.NewSynologyClient(b.Host, b.Username, b.Password)
+			synologyClients[b.Name] = adapters.NewSynologyClient(b.Host, b.Username, b.Password, b.AuthVersion)
 		case config.BackendTypeUniFi:
 			unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password)
 		}
@@ -46,9 +46,13 @@ func main() {
 	r := chi.NewRouter()
 
 	// System: all DSM + all UniFi backends.
-	dsmBackends := make(map[string]system.DSMBackend, len(synologyClients))
-	for name, client := range synologyClients {
-		dsmBackends[name] = client
+	synologyBackends := cfg.ByType(config.BackendTypeSynology)
+	dsmBackends := make(map[string]system.DSMBackendConfig, len(synologyBackends))
+	for _, b := range synologyBackends {
+		dsmBackends[b.Name] = system.DSMBackendConfig{
+			Backend:       synologyClients[b.Name],
+			DockerEnabled: !b.Disabled("docker"),
+		}
 	}
 	unifiBackends := make(map[string]system.UniFiBackend, len(unifiClients))
 	for name, client := range unifiClients {
@@ -58,10 +62,12 @@ func main() {
 	systemHandler := system.NewStrictHandler(system.NewHandler(systemSvc), nil)
 	system.HandlerFromMux(systemHandler, r)
 
-	// Containers: all Synology backends.
-	containerBackends := make(map[string]containers.ContainerBackend, len(synologyClients))
-	for name, client := range synologyClients {
-		containerBackends[name] = client
+	// Containers: Synology backends with Docker enabled.
+	containerBackends := make(map[string]containers.ContainerBackend)
+	for _, b := range synologyBackends {
+		if !b.Disabled("docker") {
+			containerBackends[b.Name] = synologyClients[b.Name]
+		}
 	}
 	containersSvc := containers.NewService(containerBackends)
 	containersHandler := containers.NewStrictHandler(containers.NewHandler(containersSvc), nil)
