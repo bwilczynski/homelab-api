@@ -41,9 +41,9 @@ func main() {
 	for _, b := range cfg.Backends {
 		switch b.Type {
 		case config.BackendTypeSynology:
-			synologyClients[b.Name] = adapters.NewSynologyClient(b.Host, b.Username, b.Password, b.AuthVersion)
+			synologyClients[b.Name] = adapters.NewSynologyClient(b.Host, b.Username, b.Password, b.AuthVersion, b.InsecureTLS)
 		case config.BackendTypeUniFi:
-			unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password)
+			unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password, b.InsecureTLS)
 		}
 	}
 

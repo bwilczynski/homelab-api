@@ -23,7 +23,8 @@ type Backend struct {
 	Username    string      `yaml:"username"`
 	Password    string      `yaml:"password"`
 	AuthVersion string      `yaml:"auth_version"` // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
-	Disable     []string    `yaml:"disable"`       // optional list of capabilities to disable, e.g. ["docker"]
+	InsecureTLS bool        `yaml:"insecure_tls"` // optional; skip TLS certificate verification (defaults to false)
+	Disable     []string    `yaml:"disable"`      // optional list of capabilities to disable, e.g. ["docker"]
 }
 
 // Disabled reports whether the named capability is disabled for this backend.
