@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
+	"github.com/bwilczynski/homelab-api/internal/health"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
@@ -18,6 +21,7 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 
 	configPath := os.Getenv("CONFIG_FILE")
 	if configPath == "" {
@@ -43,6 +47,27 @@ func main() {
 		}
 	}
 
+	logger.Info("backends configured",
+		"synology", len(synologyClients),
+		"unifi", len(unifiClients),
+	)
+	for _, b := range cfg.Backends {
+		logger.Info("backend registered", "name", b.Name, "type", string(b.Type), "host", b.Host)
+	}
+
+	// Build the health monitor covering all backends.
+	healthCheckers := make(map[string]adapters.HealthChecker, len(synologyClients)+len(unifiClients))
+	for name, c := range synologyClients {
+		healthCheckers[name] = c
+	}
+	for name, c := range unifiClients {
+		healthCheckers[name] = c
+	}
+	monitor := health.NewMonitor(healthCheckers, 30*time.Second, logger)
+
+	// Start the health monitor in the background.
+	go monitor.Start(context.Background())
+
 	r := chi.NewRouter()
 
 	// System: all DSM + all UniFi backends.
@@ -58,7 +83,7 @@ func main() {
 	for name, client := range unifiClients {
 		unifiBackends[name] = client
 	}
-	systemSvc := system.NewService(dsmBackends, unifiBackends)
+	systemSvc := system.NewService(dsmBackends, unifiBackends, monitor)
 	systemHandler := system.NewStrictHandler(system.NewHandler(systemSvc), nil)
 	system.HandlerFromMux(systemHandler, r)
 
@@ -69,7 +94,7 @@ func main() {
 			containerBackends[b.Name] = synologyClients[b.Name]
 		}
 	}
-	containersSvc := containers.NewService(containerBackends)
+	containersSvc := containers.NewService(containerBackends, monitor)
 	containersHandler := containers.NewStrictHandler(containers.NewHandler(containersSvc), nil)
 	containers.HandlerFromMux(containersHandler, r)
 
@@ -78,7 +103,7 @@ func main() {
 	for name, client := range synologyClients {
 		storageBackends[name] = client
 	}
-	storageSvc := storage.NewService(storageBackends)
+	storageSvc := storage.NewService(storageBackends, monitor)
 	storageHandler := storage.NewStrictHandler(storage.NewHandler(storageSvc), nil)
 	storage.HandlerFromMux(storageHandler, r)
 
@@ -92,7 +117,7 @@ func main() {
 	for name, client := range unifiClients {
 		networkBackends[name] = client
 	}
-	networkSvc := network.NewService(networkBackends)
+	networkSvc := network.NewService(networkBackends, monitor)
 	networkHandler := network.NewStrictHandler(network.NewHandler(networkSvc), nil)
 	network.HandlerFromMux(networkHandler, r)
 

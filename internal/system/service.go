@@ -45,10 +45,13 @@ type unifiEntry struct {
 type Service struct {
 	dsmBackends   []dsmEntry
 	unifiBackends []unifiEntry
+	monitor       adapters.AvailabilityChecker // optional; nil means all backends available
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
-func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend) *Service {
+// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
+// backends that are currently unreachable.
+func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, monitor ...adapters.AvailabilityChecker) *Service {
 	dsms := make([]dsmEntry, 0, len(dsmBackends))
 	for device, cfg := range dsmBackends {
 		dsms = append(dsms, dsmEntry{device: device, dsm: cfg.Backend, dockerEnabled: cfg.DockerEnabled})
@@ -61,7 +64,11 @@ func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[strin
 	}
 	sort.Slice(unifis, func(i, j int) bool { return unifis[i].controller < unifis[j].controller })
 
-	return &Service{dsmBackends: dsms, unifiBackends: unifis}
+	svc := &Service{dsmBackends: dsms, unifiBackends: unifis}
+	if len(monitor) > 0 {
+		svc.monitor = monitor[0]
+	}
+	return svc
 }
 
 // GetSystemHealth queries all backends for health and assembles an aggregate Health model.
@@ -72,6 +79,17 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 
 	// UniFi subsystems (gateway, wan, lan, wlan, www, vpn, …).
 	for _, ue := range s.unifiBackends {
+		if s.monitor != nil && !s.monitor.Available(ue.controller) {
+			name := "network"
+			if len(s.unifiBackends) > 1 {
+				name = ue.controller + ":network"
+			}
+			msg := "offline"
+			components = append(components, ComponentHealth{Name: name, Status: Unhealthy, Message: &msg})
+			overall = Unhealthy
+			continue
+		}
+
 		subsystems, err := ue.unifi.GetHealth()
 		if err != nil {
 			return Health{}, fmt.Errorf("get unifi health from %s: %w", ue.controller, err)
@@ -95,6 +113,16 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 		prefix := ""
 		if len(s.dsmBackends) > 1 {
 			prefix = de.device + ":"
+		}
+
+		if s.monitor != nil && !s.monitor.Available(de.device) {
+			msg := "offline"
+			components = append(components, ComponentHealth{Name: prefix + "storage", Status: Unhealthy, Message: &msg})
+			if de.dockerEnabled {
+				components = append(components, ComponentHealth{Name: prefix + "containers", Status: Unhealthy, Message: &msg})
+			}
+			overall = Unhealthy
+			continue
 		}
 
 		storageStatus, storageMsg, err := storageHealth(de.dsm)
@@ -185,6 +213,9 @@ func (s *Service) ListSystemInfo(ctx context.Context, device *string) (SystemInf
 		if device != nil && *device != de.device {
 			continue
 		}
+		if s.monitor != nil && !s.monitor.Available(de.device) {
+			continue
+		}
 
 		info, err := de.dsm.GetSystemInfo()
 		if err != nil {
@@ -215,6 +246,9 @@ func (s *Service) ListSystemUtilization(ctx context.Context, device *string) (Sy
 	var items []SystemUtilization
 	for _, de := range s.dsmBackends {
 		if device != nil && *device != de.device {
+			continue
+		}
+		if s.monitor != nil && !s.monitor.Available(de.device) {
 			continue
 		}
 

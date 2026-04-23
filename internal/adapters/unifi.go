@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"time"
 )
 
 // UniFiClient handles authentication and API calls to the UniFi Controller.
@@ -40,6 +41,25 @@ type unifiResponse[T any] struct {
 		RC string `json:"rc"`
 	} `json:"meta"`
 	Data T `json:"data"`
+}
+
+// Ping reports whether the UniFi controller is reachable. It satisfies the adapters.HealthChecker interface.
+func (c *UniFiClient) Ping() error {
+	cl := &http.Client{
+		Timeout: 3 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
+	resp, err := cl.Get(fmt.Sprintf("https://%s/", c.host))
+	if err != nil {
+		return fmt.Errorf("unifi unreachable: %w", err)
+	}
+	resp.Body.Close()
+	return nil
 }
 
 // login authenticates with the UniFi Controller and stores the session cookie.
