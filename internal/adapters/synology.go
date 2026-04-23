@@ -9,21 +9,34 @@ import (
 	"net/url"
 )
 
+// dsmAPIInfo holds the discovered path and max version for a DSM API.
+type dsmAPIInfo struct {
+	path    string
+	maxVer  int
+}
+
 // SynologyClient handles authentication and API calls to the Synology DSM.
 type SynologyClient struct {
-	host   string
-	user   string
-	pass   string
-	sid    string
-	client *http.Client
+	host        string
+	user        string
+	pass        string
+	authVersion string // SYNO.API.Auth version to use for login (default "6")
+	authInfo    *dsmAPIInfo
+	sid         string
+	client      *http.Client
 }
 
 // NewSynologyClient creates a new Synology DSM API client.
-func NewSynologyClient(host, user, pass string) *SynologyClient {
+// authVersion is the SYNO.API.Auth version to use for login (default "6"; use "3" for older DSM).
+func NewSynologyClient(host, user, pass, authVersion string) *SynologyClient {
+	if authVersion == "" {
+		authVersion = "6"
+	}
 	return &SynologyClient{
-		host: host,
-		user: user,
-		pass: pass,
+		host:        host,
+		user:        user,
+		pass:        pass,
+		authVersion: authVersion,
 		client: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -44,19 +57,66 @@ type SynologyError struct {
 	Code int `json:"code"`
 }
 
+// discoverAuth queries the DSM's API info endpoint to find the correct path and
+// maximum supported version for SYNO.API.Auth. The result is cached on the client.
+func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
+	if c.authInfo != nil {
+		return c.authInfo, nil
+	}
+	params := url.Values{
+		"api":     {"SYNO.API.Info"},
+		"version": {"1"},
+		"method":  {"query"},
+		"query":   {"SYNO.API.Auth"},
+	}
+	resp, err := c.rawGet("query.cgi", params)
+	if err != nil {
+		return nil, fmt.Errorf("discover auth API: %w", err)
+	}
+	if !resp.Success {
+		return nil, fmt.Errorf("discover auth API: request failed")
+	}
+	var apis map[string]struct {
+		Path       string `json:"path"`
+		MaxVersion int    `json:"maxVersion"`
+	}
+	if err := json.Unmarshal(resp.Data, &apis); err != nil {
+		return nil, fmt.Errorf("discover auth API: parse response: %w", err)
+	}
+	info, ok := apis["SYNO.API.Auth"]
+	if !ok {
+		return nil, fmt.Errorf("discover auth API: SYNO.API.Auth not found in response")
+	}
+	c.authInfo = &dsmAPIInfo{path: info.Path, maxVer: info.MaxVersion}
+	return c.authInfo, nil
+}
+
 // Login authenticates with the DSM and stores the session ID.
+// It first discovers the correct auth endpoint and version from the DSM itself.
 func (c *SynologyClient) Login() error {
+	info, err := c.discoverAuth()
+	if err != nil {
+		return fmt.Errorf("synology login: %w", err)
+	}
+
 	params := url.Values{
 		"api":     {"SYNO.API.Auth"},
 		"method":  {"login"},
-		"version": {"6"},
+		"version": {c.authVersion},
 		"account": {c.user},
 		"passwd":  {c.pass},
 		"format":  {"sid"},
 	}
-	resp, err := c.rawGet(params)
+	resp, err := c.rawGet(info.path, params)
 	if err != nil {
 		return fmt.Errorf("synology login: %w", err)
+	}
+	if !resp.Success {
+		code := 0
+		if resp.Error != nil {
+			code = resp.Error.Code
+		}
+		return fmt.Errorf("synology login failed: error code %d", code)
 	}
 
 	var loginData struct {
@@ -77,7 +137,7 @@ func (c *SynologyClient) Logout() error {
 		"version": {"6"},
 		"_sid":    {c.sid},
 	}
-	_, err := c.rawGet(params)
+	_, err := c.rawGet("entry.cgi", params)
 	c.sid = ""
 	return err
 }
@@ -100,7 +160,7 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 		params[k] = v
 	}
 
-	resp, err := c.rawGet(params)
+	resp, err := c.rawGet("entry.cgi", params)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +174,8 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 	return resp.Data, nil
 }
 
-func (c *SynologyClient) rawGet(params url.Values) (*SynologyResponse, error) {
-	u := fmt.Sprintf("https://%s/webapi/entry.cgi?%s", c.host, params.Encode())
+func (c *SynologyClient) rawGet(endpoint string, params url.Values) (*SynologyResponse, error) {
+	u := fmt.Sprintf("https://%s/webapi/%s?%s", c.host, endpoint, params.Encode())
 	resp, err := c.client.Get(u)
 	if err != nil {
 		return nil, fmt.Errorf("synology request: %w", err)

@@ -43,7 +43,7 @@ func loadFixture[T any](t *testing.T, path string) T {
 
 func TestListDevices(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService("unifi", &mockUniFi{devices: devices})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
 
 	result, err := svc.ListDevices(context.Background())
 	if err != nil {
@@ -101,7 +101,7 @@ func TestListDevices(t *testing.T) {
 }
 
 func TestListDevicesEmpty(t *testing.T) {
-	svc := NewService("unifi", &mockUniFi{devices: []adapters.UniFiDevice{}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: []adapters.UniFiDevice{}}})
 	result, err := svc.ListDevices(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,7 +115,7 @@ func TestListDevicesEmpty(t *testing.T) {
 
 func TestGetDevice(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService("unifi", &mockUniFi{devices: devices})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
 
 	detail, found, err := svc.GetDevice(context.Background(), "unifi.usg-3p")
 	if err != nil {
@@ -144,7 +144,7 @@ func TestGetDevice(t *testing.T) {
 
 func TestGetDeviceNotFound(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService("unifi", &mockUniFi{devices: devices})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
 
 	_, found, err := svc.GetDevice(context.Background(), "unifi.nonexistent")
 	if err != nil {
@@ -157,7 +157,7 @@ func TestGetDeviceNotFound(t *testing.T) {
 
 func TestGetDeviceWrongController(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService("unifi", &mockUniFi{devices: devices})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
 
 	_, found, err := svc.GetDevice(context.Background(), "other.usg-3p")
 	if err != nil {
@@ -172,7 +172,7 @@ func TestGetDeviceWrongController(t *testing.T) {
 
 func TestListClients(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService("unifi", &mockUniFi{clients: clients})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
 
 	result, err := svc.ListClients(context.Background())
 	if err != nil {
@@ -221,7 +221,7 @@ func TestListClients(t *testing.T) {
 }
 
 func TestListClientsEmpty(t *testing.T) {
-	svc := NewService("unifi", &mockUniFi{clients: []adapters.UniFiSta{}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: []adapters.UniFiSta{}}})
 	result, err := svc.ListClients(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -235,7 +235,7 @@ func TestListClientsEmpty(t *testing.T) {
 
 func TestGetClientWireless(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService("unifi", &mockUniFi{clients: clients})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.macbook-pro-3c")
 	if err != nil {
@@ -262,7 +262,7 @@ func TestGetClientWireless(t *testing.T) {
 
 func TestGetClientWired(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService("unifi", &mockUniFi{clients: clients})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.nas-1-68")
 	if err != nil {
@@ -289,7 +289,7 @@ func TestGetClientWired(t *testing.T) {
 
 func TestGetClientNotFound(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService("unifi", &mockUniFi{clients: clients})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
 
 	_, found, err := svc.GetClient(context.Background(), "unifi.nobody-00")
 	if err != nil {

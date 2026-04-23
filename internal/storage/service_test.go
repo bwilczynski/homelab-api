@@ -38,7 +38,7 @@ func loadFixture[T any](t *testing.T, path string) T {
 func TestListStorageVolumes(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService("nas-01", &mockBackend{resp: &resp})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
 
 	result, err := svc.ListStorageVolumes(context.Background(), nil)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestListStorageVolumes(t *testing.T) {
 func TestGetStorageVolumeDiskMapping(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService("nas-01", &mockBackend{resp: &resp})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
@@ -114,7 +114,7 @@ func TestGetStorageVolumeDiskMapping(t *testing.T) {
 func TestListStorageVolumesWithDeviceFilter(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService("nas-01", &mockBackend{resp: &resp})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
 
 	// Matching device
 	device := "nas-01"
@@ -140,7 +140,7 @@ func TestListStorageVolumesWithDeviceFilter(t *testing.T) {
 func TestGetStorageVolume(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService("nas-01", &mockBackend{resp: &resp})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
@@ -171,7 +171,7 @@ func TestGetStorageVolumePoolStatus(t *testing.T) {
 		},
 	}
 
-	svc := NewService("nas-01", &mockBackend{resp: &resp})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
@@ -188,7 +188,7 @@ func TestGetStorageVolumePoolStatus(t *testing.T) {
 func TestGetStorageVolumeNotFound(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService("nas-01", &mockBackend{resp: &resp})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.nonexistent")
 	if err != nil {
@@ -200,7 +200,7 @@ func TestGetStorageVolumeNotFound(t *testing.T) {
 }
 
 func TestGetStorageVolumeInvalidID(t *testing.T) {
-	svc := NewService("nas-01", &mockBackend{})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{}})
 
 	_, err := svc.GetStorageVolume(context.Background(), "invalid-id")
 	if err == nil {
@@ -209,13 +209,13 @@ func TestGetStorageVolumeInvalidID(t *testing.T) {
 }
 
 func TestListStorageVolumesEmpty(t *testing.T) {
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{
 		resp: &adapters.DSMStorageVolumeResponse{
 			Volumes:      []adapters.DSMStorageVolume{},
 			Disks:        []adapters.DSMStorageDisk{},
 			StoragePools: []adapters.DSMStoragePool{},
 		},
-	})
+	}})
 
 	result, err := svc.ListStorageVolumes(context.Background(), nil)
 	if err != nil {

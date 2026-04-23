@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
@@ -15,27 +16,49 @@ type UniFiBackend interface {
 	GetClients() ([]adapters.UniFiSta, error)
 }
 
-// Service implements network domain business logic.
-type Service struct {
+type controllerBackend struct {
 	controller string
 	unifi      UniFiBackend
 }
 
-// NewService creates a new network service.
-func NewService(controller string, unifi UniFiBackend) *Service {
-	return &Service{controller: controller, unifi: unifi}
+// Service implements network domain business logic.
+type Service struct {
+	backends []controllerBackend
 }
 
-// ListDevices retrieves all managed network devices (list shape: no model/firmware/uptime).
-func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
-	raw, err := s.unifi.GetDevices()
-	if err != nil {
-		return NetworkDeviceList{}, fmt.Errorf("get unifi devices: %w", err)
+// NewService creates a new network service with one or more UniFi backends.
+func NewService(backends map[string]UniFiBackend) *Service {
+	cbs := make([]controllerBackend, 0, len(backends))
+	for controller, unifi := range backends {
+		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi})
 	}
+	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
+	return &Service{backends: cbs}
+}
 
-	items := make([]NetworkDevice, 0, len(raw))
-	for _, d := range raw {
-		items = append(items, s.deviceToList(d))
+func (s *Service) findBackend(controller string) (UniFiBackend, error) {
+	for _, cb := range s.backends {
+		if cb.controller == controller {
+			return cb.unifi, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown controller %q", controller)
+}
+
+// ListDevices retrieves all managed network devices from all backends.
+func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
+	var items []NetworkDevice
+	for _, cb := range s.backends {
+		raw, err := cb.unifi.GetDevices()
+		if err != nil {
+			return NetworkDeviceList{}, fmt.Errorf("get unifi devices from %s: %w", cb.controller, err)
+		}
+		for _, d := range raw {
+			items = append(items, deviceToList(cb.controller, d))
+		}
+	}
+	if items == nil {
+		items = []NetworkDevice{}
 	}
 	return NetworkDeviceList{Items: items}, nil
 }
@@ -43,33 +66,42 @@ func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 // GetDevice looks up a single device by composite ID and returns its detail.
 func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail, bool, error) {
 	controller, suffix, ok := parseID(id)
-	if !ok || controller != s.controller {
+	if !ok {
 		return NetworkDeviceDetail{}, false, nil
 	}
 
-	raw, err := s.unifi.GetDevices()
+	backend, err := s.findBackend(controller)
+	if err != nil {
+		return NetworkDeviceDetail{}, false, nil
+	}
+
+	raw, err := backend.GetDevices()
 	if err != nil {
 		return NetworkDeviceDetail{}, false, fmt.Errorf("get unifi devices: %w", err)
 	}
 
 	for _, d := range raw {
 		if toKebab(d.Name) == suffix {
-			return s.deviceToDetail(d), true, nil
+			return deviceToDetail(controller, d), true, nil
 		}
 	}
 	return NetworkDeviceDetail{}, false, nil
 }
 
-// ListClients retrieves all connected clients (list shape: no ssid/signal/uptime).
+// ListClients retrieves all connected clients from all backends.
 func (s *Service) ListClients(ctx context.Context) (NetworkClientList, error) {
-	raw, err := s.unifi.GetClients()
-	if err != nil {
-		return NetworkClientList{}, fmt.Errorf("get unifi clients: %w", err)
+	var items []NetworkClient
+	for _, cb := range s.backends {
+		raw, err := cb.unifi.GetClients()
+		if err != nil {
+			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", cb.controller, err)
+		}
+		for _, sta := range raw {
+			items = append(items, clientToList(cb.controller, sta))
+		}
 	}
-
-	items := make([]NetworkClient, 0, len(raw))
-	for _, sta := range raw {
-		items = append(items, s.clientToList(sta))
+	if items == nil {
+		items = []NetworkClient{}
 	}
 	return NetworkClientList{Items: items}, nil
 }
@@ -77,18 +109,23 @@ func (s *Service) ListClients(ctx context.Context) (NetworkClientList, error) {
 // GetClient looks up a single client by composite ID and returns its typed detail.
 func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail, bool, error) {
 	controller, suffix, ok := parseID(id)
-	if !ok || controller != s.controller {
+	if !ok {
 		return NetworkClientDetail{}, false, nil
 	}
 
-	raw, err := s.unifi.GetClients()
+	backend, err := s.findBackend(controller)
+	if err != nil {
+		return NetworkClientDetail{}, false, nil
+	}
+
+	raw, err := backend.GetClients()
 	if err != nil {
 		return NetworkClientDetail{}, false, fmt.Errorf("get unifi clients: %w", err)
 	}
 
 	for _, sta := range raw {
 		if clientSuffix(sta) == suffix {
-			detail, err := s.clientToDetail(sta)
+			detail, err := clientToDetail(controller, sta)
 			if err != nil {
 				return NetworkClientDetail{}, false, err
 			}
@@ -100,10 +137,10 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 
 // --- mapping helpers ---
 
-func (s *Service) deviceToList(d adapters.UniFiDevice) NetworkDevice {
+func deviceToList(controller string, d adapters.UniFiDevice) NetworkDevice {
 	mac := normalizeMac(d.MAC)
 	dev := NetworkDevice{
-		Id:     fmt.Sprintf("%s.%s", s.controller, toKebab(d.Name)),
+		Id:     fmt.Sprintf("%s.%s", controller, toKebab(d.Name)),
 		Name:   d.Name,
 		Mac:    mac,
 		Ip:     d.IP,
@@ -117,10 +154,10 @@ func (s *Service) deviceToList(d adapters.UniFiDevice) NetworkDevice {
 	return dev
 }
 
-func (s *Service) deviceToDetail(d adapters.UniFiDevice) NetworkDeviceDetail {
+func deviceToDetail(controller string, d adapters.UniFiDevice) NetworkDeviceDetail {
 	mac := normalizeMac(d.MAC)
 	det := NetworkDeviceDetail{
-		Id:              fmt.Sprintf("%s.%s", s.controller, toKebab(d.Name)),
+		Id:              fmt.Sprintf("%s.%s", controller, toKebab(d.Name)),
 		Name:            d.Name,
 		Mac:             mac,
 		Ip:              d.IP,
@@ -137,10 +174,10 @@ func (s *Service) deviceToDetail(d adapters.UniFiDevice) NetworkDeviceDetail {
 	return det
 }
 
-func (s *Service) clientToList(sta adapters.UniFiSta) NetworkClient {
+func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
 	mac := normalizeMac(sta.MAC)
 	client := NetworkClient{
-		Id:             fmt.Sprintf("%s.%s", s.controller, clientSuffix(sta)),
+		Id:             fmt.Sprintf("%s.%s", controller, clientSuffix(sta)),
 		Name:           clientName(sta),
 		Mac:            mac,
 		ConnectionType: mapConnectionType(sta.IsWired),
@@ -152,9 +189,9 @@ func (s *Service) clientToList(sta adapters.UniFiSta) NetworkClient {
 	return client
 }
 
-func (s *Service) clientToDetail(sta adapters.UniFiSta) (NetworkClientDetail, error) {
+func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDetail, error) {
 	mac := normalizeMac(sta.MAC)
-	id := fmt.Sprintf("%s.%s", s.controller, clientSuffix(sta))
+	id := fmt.Sprintf("%s.%s", controller, clientSuffix(sta))
 	name := clientName(sta)
 	var ip *string
 	if sta.IP != "" {
