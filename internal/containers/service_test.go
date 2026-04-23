@@ -55,10 +55,10 @@ func TestListContainers(t *testing.T) {
 	listResp := loadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
 		resourcesResp: &resourcesResp,
-	})
+	}})
 
 	result, err := svc.ListContainers(context.Background(), nil)
 	if err != nil {
@@ -104,10 +104,10 @@ func TestListContainersWithDeviceFilter(t *testing.T) {
 	listResp := loadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
 		resourcesResp: &resourcesResp,
-	})
+	}})
 
 	// Filter for matching device
 	device := "nas-01"
@@ -134,10 +134,10 @@ func TestGetContainer(t *testing.T) {
 	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
-	})
+	}})
 
 	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
@@ -162,10 +162,10 @@ func TestGetContainerDetailFields(t *testing.T) {
 	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
-	})
+	}})
 
 	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
@@ -267,10 +267,10 @@ func TestGetContainerStatusFields(t *testing.T) {
 	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
-	})
+	}})
 
 	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
@@ -296,7 +296,7 @@ func TestGetContainerStatusFields(t *testing.T) {
 }
 
 func TestGetContainerInvalidID(t *testing.T) {
-	svc := NewService("nas-01", &mockBackend{})
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{}})
 
 	_, err := svc.GetContainer(context.Background(), "invalid-id")
 	if err == nil {
@@ -355,14 +355,14 @@ func TestMapStatus(t *testing.T) {
 }
 
 func TestListContainersEmptyList(t *testing.T) {
-	svc := NewService("nas-01", &mockBackend{
+	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
 		listResp: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{},
 		},
 		resourcesResp: &adapters.DSMContainerResourceResponse{
 			Resources: []adapters.DSMContainerResource{},
 		},
-	})
+	}})
 
 	result, err := svc.ListContainers(context.Background(), nil)
 	if err != nil {

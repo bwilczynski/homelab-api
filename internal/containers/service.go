@@ -3,6 +3,7 @@ package containers
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,60 +20,86 @@ type ContainerBackend interface {
 	RestartContainer(name string) error
 }
 
-// Service implements container business logic.
-type Service struct {
+type deviceBackend struct {
 	device  string
 	backend ContainerBackend
 }
 
-// NewService creates a new container service.
-func NewService(device string, backend ContainerBackend) *Service {
-	return &Service{device: device, backend: backend}
+// Service implements container business logic.
+type Service struct {
+	backends []deviceBackend
 }
 
-// ListContainers returns all containers with their resource usage.
+// NewService creates a new container service with one or more backends.
+func NewService(backends map[string]ContainerBackend) *Service {
+	dbs := make([]deviceBackend, 0, len(backends))
+	for device, backend := range backends {
+		dbs = append(dbs, deviceBackend{device: device, backend: backend})
+	}
+	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
+	return &Service{backends: dbs}
+}
+
+func (s *Service) findBackend(device string) (ContainerBackend, error) {
+	for _, db := range s.backends {
+		if db.device == device {
+			return db.backend, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown device %q", device)
+}
+
+// ListContainers returns all containers with their resource usage from all backends.
 func (s *Service) ListContainers(ctx context.Context, device *string) (ContainerList, error) {
-	if device != nil && *device != s.device {
-		return ContainerList{Items: []Container{}}, nil
-	}
+	var items []Container
+	for _, db := range s.backends {
+		if device != nil && *device != db.device {
+			continue
+		}
 
-	containers, err := s.backend.ListContainers()
-	if err != nil {
-		return ContainerList{}, fmt.Errorf("list containers: %w", err)
-	}
+		containers, err := db.backend.ListContainers()
+		if err != nil {
+			return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
+		}
 
-	resources, err := s.backend.GetContainerResources()
-	if err != nil {
-		return ContainerList{}, fmt.Errorf("get container resources: %w", err)
-	}
+		resources, err := db.backend.GetContainerResources()
+		if err != nil {
+			return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+		}
 
-	resourceMap := make(map[string]adapters.DSMContainerResource, len(resources.Resources))
-	for _, r := range resources.Resources {
-		resourceMap[r.Name] = r
-	}
+		resourceMap := make(map[string]adapters.DSMContainerResource, len(resources.Resources))
+		for _, r := range resources.Resources {
+			resourceMap[r.Name] = r
+		}
 
-	items := make([]Container, 0, len(containers.Containers))
-	for _, c := range containers.Containers {
-		res := resourceMap[c.Name]
-		items = append(items, mapContainer(s.device, c, res, 0))
+		for _, c := range containers.Containers {
+			items = append(items, mapContainer(db.device, c, resourceMap[c.Name], 0))
+		}
 	}
-
+	if items == nil {
+		items = []Container{}
+	}
 	return ContainerList{Items: items}, nil
 }
 
-// GetContainer returns a single container by its composite ID (device:name).
+// GetContainer returns a single container by its composite ID (device.name).
 func (s *Service) GetContainer(ctx context.Context, containerID string) (*ContainerDetail, error) {
-	_, name, err := parseContainerID(containerID)
+	device, name, err := parseContainerID(containerID)
 	if err != nil {
 		return nil, err
 	}
 
-	detail, err := s.backend.GetContainer(name)
+	backend, err := s.findBackend(device)
+	if err != nil {
+		return nil, err
+	}
+
+	detail, err := backend.GetContainer(name)
 	if err != nil {
 		return nil, fmt.Errorf("get container: %w", err)
 	}
 
-	resources, err := s.backend.GetContainerResources()
+	resources, err := backend.GetContainerResources()
 	if err != nil {
 		return nil, fmt.Errorf("get container resources: %w", err)
 	}
@@ -85,35 +112,47 @@ func (s *Service) GetContainer(ctx context.Context, containerID string) (*Contai
 		}
 	}
 
-	c := mapContainerDetail(s.device, *detail, res)
+	c := mapContainerDetail(device, *detail, res)
 	return &c, nil
 }
 
 // StartContainer starts a container by its composite ID.
 func (s *Service) StartContainer(ctx context.Context, containerID string) error {
-	_, name, err := parseContainerID(containerID)
+	device, name, err := parseContainerID(containerID)
 	if err != nil {
 		return err
 	}
-	return s.backend.StartContainer(name)
+	backend, err := s.findBackend(device)
+	if err != nil {
+		return err
+	}
+	return backend.StartContainer(name)
 }
 
 // StopContainer stops a container by its composite ID.
 func (s *Service) StopContainer(ctx context.Context, containerID string) error {
-	_, name, err := parseContainerID(containerID)
+	device, name, err := parseContainerID(containerID)
 	if err != nil {
 		return err
 	}
-	return s.backend.StopContainer(name)
+	backend, err := s.findBackend(device)
+	if err != nil {
+		return err
+	}
+	return backend.StopContainer(name)
 }
 
 // RestartContainer restarts a container by its composite ID.
 func (s *Service) RestartContainer(ctx context.Context, containerID string) error {
-	_, name, err := parseContainerID(containerID)
+	device, name, err := parseContainerID(containerID)
 	if err != nil {
 		return err
 	}
-	return s.backend.RestartContainer(name)
+	backend, err := s.findBackend(device)
+	if err != nil {
+		return err
+	}
+	return backend.RestartContainer(name)
 }
 
 // parseContainerID splits a composite ID "device.name" into its parts.

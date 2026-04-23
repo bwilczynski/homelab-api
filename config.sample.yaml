@@ -1,0 +1,23 @@
+# Homelab API backend configuration.
+# Copy this file to config.yaml and fill in your values.
+# Values can reference environment variables: ${VAR_NAME}
+
+backends:
+  - name: nas-01
+    type: synology
+    host: 192.168.1.10:5001
+    username: admin
+    password: ${NAS01_PASS}
+
+  # Uncomment to add a second NAS:
+  # - name: nas-02
+  #   type: synology
+  #   host: 192.168.1.11:5001
+  #   username: admin
+  #   password: ${NAS02_PASS}
+
+  - name: unifi
+    type: unifi
+    host: 192.168.1.1
+    username: admin
+    password: ${UNIFI_PASS}

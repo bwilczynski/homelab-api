@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -14,40 +15,69 @@ type StorageBackend interface {
 	GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error)
 }
 
-// Service implements storage business logic.
-type Service struct {
+type deviceBackend struct {
 	device  string
 	backend StorageBackend
 }
 
-// NewService creates a new storage service.
-func NewService(device string, backend StorageBackend) *Service {
-	return &Service{device: device, backend: backend}
+// Service implements storage business logic.
+type Service struct {
+	backends []deviceBackend
 }
 
-// ListStorageVolumes returns all volumes with their associated disks.
+// NewService creates a new storage service with one or more backends.
+func NewService(backends map[string]StorageBackend) *Service {
+	dbs := make([]deviceBackend, 0, len(backends))
+	for device, backend := range backends {
+		dbs = append(dbs, deviceBackend{device: device, backend: backend})
+	}
+	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
+	return &Service{backends: dbs}
+}
+
+func (s *Service) findBackend(device string) (StorageBackend, error) {
+	for _, db := range s.backends {
+		if db.device == device {
+			return db.backend, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown device %q", device)
+}
+
+// ListStorageVolumes returns all volumes with their associated disks from all backends.
 func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (VolumeList, error) {
-	if device != nil && *device != s.device {
-		return VolumeList{Items: []Volume{}}, nil
-	}
+	var volumes []Volume
+	for _, db := range s.backends {
+		if device != nil && *device != db.device {
+			continue
+		}
 
-	resp, err := s.backend.GetStorageVolumes()
-	if err != nil {
-		return VolumeList{}, fmt.Errorf("list storage volumes: %w", err)
-	}
+		resp, err := db.backend.GetStorageVolumes()
+		if err != nil {
+			return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", db.device, err)
+		}
 
-	volumes := mapVolumes(s.device, resp)
+		volumes = append(volumes, mapVolumes(db.device, resp)...)
+	}
+	if volumes == nil {
+		volumes = []Volume{}
+	}
 	return VolumeList{Items: volumes}, nil
 }
 
 // GetStorageVolume returns a single volume with extended detail by its composite ID (device.name).
 func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*VolumeDetail, error) {
-	_, name, err := parseVolumeID(volumeID)
+	device, name, err := parseVolumeID(volumeID)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := s.backend.GetStorageVolumes()
+	backend, err := s.findBackend(device)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := backend.GetStorageVolumes()
 	if err != nil {
 		return nil, fmt.Errorf("get storage volume: %w", err)
 	}
@@ -67,7 +97,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		disksByID[d.ID] = d
 	}
 
-	for _, vol := range mapVolumes(s.device, resp) {
+	for _, vol := range mapVolumes(device, resp) {
 		if vol.Name != name {
 			continue
 		}

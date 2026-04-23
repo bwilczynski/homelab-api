@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,16 +24,37 @@ type UniFiBackend interface {
 	GetHealth() ([]adapters.UniFiSubsystemHealth, error)
 }
 
-// Service implements system domain business logic.
-type Service struct {
+type dsmEntry struct {
 	device string
 	dsm    DSMBackend
-	unifi  UniFiBackend
 }
 
-// NewService creates a new system service.
-func NewService(device string, dsm DSMBackend, unifi UniFiBackend) *Service {
-	return &Service{device: device, dsm: dsm, unifi: unifi}
+type unifiEntry struct {
+	controller string
+	unifi      UniFiBackend
+}
+
+// Service implements system domain business logic.
+type Service struct {
+	dsmBackends   []dsmEntry
+	unifiBackends []unifiEntry
+}
+
+// NewService creates a new system service with one or more DSM and UniFi backends.
+func NewService(dsmBackends map[string]DSMBackend, unifiBackends map[string]UniFiBackend) *Service {
+	dsms := make([]dsmEntry, 0, len(dsmBackends))
+	for device, dsm := range dsmBackends {
+		dsms = append(dsms, dsmEntry{device: device, dsm: dsm})
+	}
+	sort.Slice(dsms, func(i, j int) bool { return dsms[i].device < dsms[j].device })
+
+	unifis := make([]unifiEntry, 0, len(unifiBackends))
+	for controller, unifi := range unifiBackends {
+		unifis = append(unifis, unifiEntry{controller: controller, unifi: unifi})
+	}
+	sort.Slice(unifis, func(i, j int) bool { return unifis[i].controller < unifis[j].controller })
+
+	return &Service{dsmBackends: dsms, unifiBackends: unifis}
 }
 
 // GetSystemHealth queries all backends for health and assembles an aggregate Health model.
@@ -42,42 +64,54 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 	overall := Healthy
 
 	// UniFi subsystems (gateway, wan, lan, wlan, www, vpn, …).
-	subsystems, err := s.unifi.GetHealth()
-	if err != nil {
-		return Health{}, fmt.Errorf("get unifi health: %w", err)
-	}
-	for _, sub := range subsystems {
-		status := mapUniFiStatus(sub.Status)
-		components = append(components, ComponentHealth{
-			Name:   sub.Subsystem,
-			Status: status,
-		})
-		overall = worstStatus(overall, status)
+	for _, ue := range s.unifiBackends {
+		subsystems, err := ue.unifi.GetHealth()
+		if err != nil {
+			return Health{}, fmt.Errorf("get unifi health from %s: %w", ue.controller, err)
+		}
+		for _, sub := range subsystems {
+			status := mapUniFiStatus(sub.Status)
+			name := sub.Subsystem
+			if len(s.unifiBackends) > 1 {
+				name = ue.controller + ":" + name
+			}
+			components = append(components, ComponentHealth{
+				Name:   name,
+				Status: status,
+			})
+			overall = worstStatus(overall, status)
+		}
 	}
 
-	// DSM storage volumes → single "storage" component.
-	storageStatus, storageMsg, err := s.storageHealth()
-	if err != nil {
-		return Health{}, fmt.Errorf("get storage health: %w", err)
-	}
-	storageComponent := ComponentHealth{Name: "storage", Status: storageStatus}
-	if storageMsg != "" {
-		storageComponent.Message = &storageMsg
-	}
-	components = append(components, storageComponent)
-	overall = worstStatus(overall, storageStatus)
+	// DSM storage volumes and containers per device.
+	for _, de := range s.dsmBackends {
+		prefix := ""
+		if len(s.dsmBackends) > 1 {
+			prefix = de.device + ":"
+		}
 
-	// DSM containers → single "containers" component.
-	containersStatus, containersMsg, err := s.containersHealth()
-	if err != nil {
-		return Health{}, fmt.Errorf("get containers health: %w", err)
+		storageStatus, storageMsg, err := storageHealth(de.dsm)
+		if err != nil {
+			return Health{}, fmt.Errorf("get storage health from %s: %w", de.device, err)
+		}
+		storageComponent := ComponentHealth{Name: prefix + "storage", Status: storageStatus}
+		if storageMsg != "" {
+			storageComponent.Message = &storageMsg
+		}
+		components = append(components, storageComponent)
+		overall = worstStatus(overall, storageStatus)
+
+		containersStatus, containersMsg, err := containersHealth(de.dsm)
+		if err != nil {
+			return Health{}, fmt.Errorf("get containers health from %s: %w", de.device, err)
+		}
+		containersComponent := ComponentHealth{Name: prefix + "containers", Status: containersStatus}
+		if containersMsg != "" {
+			containersComponent.Message = &containersMsg
+		}
+		components = append(components, containersComponent)
+		overall = worstStatus(overall, containersStatus)
 	}
-	containersComponent := ComponentHealth{Name: "containers", Status: containersStatus}
-	if containersMsg != "" {
-		containersComponent.Message = &containersMsg
-	}
-	components = append(components, containersComponent)
-	overall = worstStatus(overall, containersStatus)
 
 	if components == nil {
 		components = []ComponentHealth{}
@@ -91,8 +125,8 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 }
 
 // storageHealth derives a single HealthStatus from DSM volume statuses.
-func (s *Service) storageHealth() (HealthStatus, string, error) {
-	resp, err := s.dsm.GetStorageVolumes()
+func storageHealth(dsm DSMBackend) (HealthStatus, string, error) {
+	resp, err := dsm.GetStorageVolumes()
 	if err != nil {
 		return Unhealthy, err.Error(), nil //nolint:nilerr
 	}
@@ -118,8 +152,8 @@ func (s *Service) storageHealth() (HealthStatus, string, error) {
 }
 
 // containersHealth derives a single HealthStatus from DSM container states.
-func (s *Service) containersHealth() (HealthStatus, string, error) {
-	resp, err := s.dsm.ListContainers()
+func containersHealth(dsm DSMBackend) (HealthStatus, string, error) {
+	resp, err := dsm.ListContainers()
 	if err != nil {
 		return Unhealthy, err.Error(), nil //nolint:nilerr
 	}
@@ -135,101 +169,107 @@ func (s *Service) containersHealth() (HealthStatus, string, error) {
 	return Degraded, fmt.Sprintf("%d container(s) not running", notRunning), nil
 }
 
-// ListSystemInfo queries DSM for static system information.
+// ListSystemInfo queries all DSM backends for static system information.
 func (s *Service) ListSystemInfo(ctx context.Context, device *string) (SystemInfoList, error) {
-	if device != nil && *device != s.device {
-		return SystemInfoList{Items: []SystemInfo{}}, nil
-	}
-
-	info, err := s.dsm.GetSystemInfo()
-	if err != nil {
-		return SystemInfoList{}, fmt.Errorf("get system info: %w", err)
-	}
-
-	uptimeSecs, err := parseUptime(info.UpTime)
-	if err != nil {
-		uptimeSecs = 0
-	}
-
-	return SystemInfoList{
-		Items: []SystemInfo{
-			{
-				Device:        s.device,
-				Model:         info.Model,
-				Firmware:      info.FirmwareVer,
-				RamMb:         info.RamSize,
-				UptimeSeconds: uptimeSecs,
-			},
-		},
-	}, nil
-}
-
-// ListSystemUtilization queries DSM for live utilization data.
-func (s *Service) ListSystemUtilization(ctx context.Context, device *string) (SystemUtilizationList, error) {
-	if device != nil && *device != s.device {
-		return SystemUtilizationList{Items: []SystemUtilization{}}, nil
-	}
-
-	util, err := s.dsm.GetSystemUtilization()
-	if err != nil {
-		return SystemUtilizationList{}, fmt.Errorf("get system utilization: %w", err)
-	}
-
-	// Memory: DSM reports in KB, API uses bytes.
-	const kbToBytes = 1024
-	totalBytes := int64(util.Memory.TotalReal) * kbToBytes
-	availBytes := int64(util.Memory.AvailReal) * kbToBytes
-	totalSwap := int64(util.Memory.TotalSwap) * kbToBytes
-	usedSwap := (int64(util.Memory.TotalSwap) - int64(util.Memory.AvailSwap)) * kbToBytes
-
-	// CPU: sum user + system for total.
-	cpuTotal := util.CPU.UserLoad + util.CPU.SystemLoad + util.CPU.OtherLoad
-
-	// Network: skip "total" aggregate device.
-	network := make([]NetworkInterfaceUsage, 0, len(util.Network))
-	for _, n := range util.Network {
-		if n.Device == "total" {
+	var items []SystemInfo
+	for _, de := range s.dsmBackends {
+		if device != nil && *device != de.device {
 			continue
 		}
-		network = append(network, NetworkInterfaceUsage{
-			Name:          n.Device,
-			RxBytesPerSec: n.Rx,
-			TxBytesPerSec: n.Tx,
+
+		info, err := de.dsm.GetSystemInfo()
+		if err != nil {
+			return SystemInfoList{}, fmt.Errorf("get system info from %s: %w", de.device, err)
+		}
+
+		uptimeSecs, err := parseUptime(info.UpTime)
+		if err != nil {
+			uptimeSecs = 0
+		}
+
+		items = append(items, SystemInfo{
+			Device:        de.device,
+			Model:         info.Model,
+			Firmware:      info.FirmwareVer,
+			RamMb:         info.RamSize,
+			UptimeSeconds: uptimeSecs,
 		})
 	}
-
-	// Disks: map each individual disk.
-	disks := make([]DiskIo, 0, len(util.Disk.Disk))
-	for _, d := range util.Disk.Disk {
-		disks = append(disks, DiskIo{
-			Name:           d.Device,
-			ReadOpsPerSec:  d.ReadAccess,
-			WriteOpsPerSec: d.WriteAccess,
-		})
+	if items == nil {
+		items = []SystemInfo{}
 	}
+	return SystemInfoList{Items: items}, nil
+}
 
-	return SystemUtilizationList{
-		Items: []SystemUtilization{
-			{
-				Device:    s.device,
-				SampledAt: time.Now().UTC(),
-				Cpu: CpuUsage{
-					UserPercent:   util.CPU.UserLoad,
-					SystemPercent: util.CPU.SystemLoad,
-					TotalPercent:  cpuTotal,
-				},
-				Memory: MemoryUsage{
-					TotalBytes:     totalBytes,
-					AvailableBytes: availBytes,
-					UsedPercent:    util.Memory.RealUsage,
-					SwapTotalBytes: totalSwap,
-					SwapUsedBytes:  usedSwap,
-				},
-				Network: network,
-				Disks:   disks,
+// ListSystemUtilization queries all DSM backends for live utilization data.
+func (s *Service) ListSystemUtilization(ctx context.Context, device *string) (SystemUtilizationList, error) {
+	var items []SystemUtilization
+	for _, de := range s.dsmBackends {
+		if device != nil && *device != de.device {
+			continue
+		}
+
+		util, err := de.dsm.GetSystemUtilization()
+		if err != nil {
+			return SystemUtilizationList{}, fmt.Errorf("get system utilization from %s: %w", de.device, err)
+		}
+
+		// Memory: DSM reports in KB, API uses bytes.
+		const kbToBytes = 1024
+		totalBytes := int64(util.Memory.TotalReal) * kbToBytes
+		availBytes := int64(util.Memory.AvailReal) * kbToBytes
+		totalSwap := int64(util.Memory.TotalSwap) * kbToBytes
+		usedSwap := (int64(util.Memory.TotalSwap) - int64(util.Memory.AvailSwap)) * kbToBytes
+
+		// CPU: sum user + system for total.
+		cpuTotal := util.CPU.UserLoad + util.CPU.SystemLoad + util.CPU.OtherLoad
+
+		// Network: skip "total" aggregate device.
+		network := make([]NetworkInterfaceUsage, 0, len(util.Network))
+		for _, n := range util.Network {
+			if n.Device == "total" {
+				continue
+			}
+			network = append(network, NetworkInterfaceUsage{
+				Name:          n.Device,
+				RxBytesPerSec: n.Rx,
+				TxBytesPerSec: n.Tx,
+			})
+		}
+
+		// Disks: map each individual disk.
+		disks := make([]DiskIo, 0, len(util.Disk.Disk))
+		for _, d := range util.Disk.Disk {
+			disks = append(disks, DiskIo{
+				Name:           d.Device,
+				ReadOpsPerSec:  d.ReadAccess,
+				WriteOpsPerSec: d.WriteAccess,
+			})
+		}
+
+		items = append(items, SystemUtilization{
+			Device:    de.device,
+			SampledAt: time.Now().UTC(),
+			Cpu: CpuUsage{
+				UserPercent:   util.CPU.UserLoad,
+				SystemPercent: util.CPU.SystemLoad,
+				TotalPercent:  cpuTotal,
 			},
-		},
-	}, nil
+			Memory: MemoryUsage{
+				TotalBytes:     totalBytes,
+				AvailableBytes: availBytes,
+				UsedPercent:    util.Memory.RealUsage,
+				SwapTotalBytes: totalSwap,
+				SwapUsedBytes:  usedSwap,
+			},
+			Network: network,
+			Disks:   disks,
+		})
+	}
+	if items == nil {
+		items = []SystemUtilization{}
+	}
+	return SystemUtilizationList{Items: items}, nil
 }
 
 // worstStatus returns the more severe of two HealthStatus values.

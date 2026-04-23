@@ -112,10 +112,18 @@ func loadDSMStorageVolumes(t *testing.T) *adapters.DSMStorageVolumeResponse {
 	return &envelope.Data
 }
 
+// newTestService creates a service with a single DSM backend "nas-01" and a single UniFi backend "unifi".
+func newTestService(dsm DSMBackend, unifi UniFiBackend) *Service {
+	return NewService(
+		map[string]DSMBackend{"nas-01": dsm},
+		map[string]UniFiBackend{"unifi": unifi},
+	)
+}
+
 // --- Tests: GetSystemHealth ---
 
 func TestGetSystemHealth_Healthy(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
+	svc := newTestService(&mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
 		subsystems: loadUniFiHealth(t),
 	})
 
@@ -147,7 +155,7 @@ func TestGetSystemHealth_Healthy(t *testing.T) {
 }
 
 func TestGetSystemHealth_Degraded_WhenUnknownSubsystem(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{}, &mockUniFiBackend{
+	svc := newTestService(&mockDSMBackend{}, &mockUniFiBackend{
 		subsystems: []adapters.UniFiSubsystemHealth{
 			{Subsystem: "wan", Status: "ok"},
 			{Subsystem: "vpn", Status: "unknown"},
@@ -165,7 +173,7 @@ func TestGetSystemHealth_Degraded_WhenUnknownSubsystem(t *testing.T) {
 }
 
 func TestGetSystemHealth_Unhealthy(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{}, &mockUniFiBackend{
+	svc := newTestService(&mockDSMBackend{}, &mockUniFiBackend{
 		subsystems: []adapters.UniFiSubsystemHealth{
 			{Subsystem: "wan", Status: "error"},
 		},
@@ -182,7 +190,7 @@ func TestGetSystemHealth_Unhealthy(t *testing.T) {
 }
 
 func TestGetSystemHealth_EmptyComponents(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{}, &mockUniFiBackend{
+	svc := newTestService(&mockDSMBackend{}, &mockUniFiBackend{
 		subsystems: []adapters.UniFiSubsystemHealth{},
 	})
 
@@ -200,7 +208,7 @@ func TestGetSystemHealth_EmptyComponents(t *testing.T) {
 }
 
 func TestGetSystemHealth_StorageDegraded(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{
+	svc := newTestService(&mockDSMBackend{
 		volumes: &adapters.DSMStorageVolumeResponse{
 			Volumes: []adapters.DSMStorageVolume{
 				{ID: "volume_1", Status: "normal"},
@@ -237,7 +245,7 @@ func TestGetSystemHealth_StorageDegraded(t *testing.T) {
 }
 
 func TestGetSystemHealth_StorageCrashed(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{
+	svc := newTestService(&mockDSMBackend{
 		volumes: &adapters.DSMStorageVolumeResponse{
 			Volumes: []adapters.DSMStorageVolume{
 				{ID: "volume_1", Status: "crashed"},
@@ -256,7 +264,7 @@ func TestGetSystemHealth_StorageCrashed(t *testing.T) {
 }
 
 func TestGetSystemHealth_ContainersNotRunning(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{
+	svc := newTestService(&mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{
 				{Name: "app1", State: adapters.DSMContainerState{Running: true}},
@@ -289,7 +297,7 @@ func TestGetSystemHealth_ContainersNotRunning(t *testing.T) {
 }
 
 func TestGetSystemHealth_AllComponentsPresent(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
+	svc := newTestService(&mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
 		subsystems: loadUniFiHealth(t),
 	})
 
@@ -312,7 +320,7 @@ func TestGetSystemHealth_AllComponentsPresent(t *testing.T) {
 // --- Tests: ListSystemInfo ---
 
 func TestListSystemInfo(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{info: loadDSMSystemInfo(t)}, &mockUniFiBackend{})
+	svc := newTestService(&mockDSMBackend{info: loadDSMSystemInfo(t)}, &mockUniFiBackend{})
 
 	result, err := svc.ListSystemInfo(context.Background(), nil)
 	if err != nil {
@@ -344,7 +352,7 @@ func TestListSystemInfo(t *testing.T) {
 
 func TestListSystemInfo_DeviceFilter_Match(t *testing.T) {
 	device := "nas-01"
-	svc := NewService("nas-01", &mockDSMBackend{info: loadDSMSystemInfo(t)}, &mockUniFiBackend{})
+	svc := newTestService(&mockDSMBackend{info: loadDSMSystemInfo(t)}, &mockUniFiBackend{})
 
 	result, err := svc.ListSystemInfo(context.Background(), &device)
 	if err != nil {
@@ -358,7 +366,7 @@ func TestListSystemInfo_DeviceFilter_Match(t *testing.T) {
 
 func TestListSystemInfo_DeviceFilter_NoMatch(t *testing.T) {
 	device := "other-device"
-	svc := NewService("nas-01", &mockDSMBackend{info: loadDSMSystemInfo(t)}, &mockUniFiBackend{})
+	svc := newTestService(&mockDSMBackend{info: loadDSMSystemInfo(t)}, &mockUniFiBackend{})
 
 	result, err := svc.ListSystemInfo(context.Background(), &device)
 	if err != nil {
@@ -373,7 +381,7 @@ func TestListSystemInfo_DeviceFilter_NoMatch(t *testing.T) {
 // --- Tests: ListSystemUtilization ---
 
 func TestListSystemUtilization(t *testing.T) {
-	svc := NewService("nas-01", &mockDSMBackend{util: loadDSMSystemUtilization(t)}, &mockUniFiBackend{})
+	svc := newTestService(&mockDSMBackend{util: loadDSMSystemUtilization(t)}, &mockUniFiBackend{})
 
 	result, err := svc.ListSystemUtilization(context.Background(), nil)
 	if err != nil {
@@ -431,7 +439,7 @@ func TestListSystemUtilization(t *testing.T) {
 
 func TestListSystemUtilization_DeviceFilter_NoMatch(t *testing.T) {
 	device := "other-device"
-	svc := NewService("nas-01", &mockDSMBackend{util: loadDSMSystemUtilization(t)}, &mockUniFiBackend{})
+	svc := newTestService(&mockDSMBackend{util: loadDSMSystemUtilization(t)}, &mockUniFiBackend{})
 
 	result, err := svc.ListSystemUtilization(context.Background(), &device)
 	if err != nil {
