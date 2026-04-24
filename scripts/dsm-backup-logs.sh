@@ -13,8 +13,14 @@ if [[ -z "$DSM_HOST" || -z "$DSM_PASS" ]]; then
   exit 1
 fi
 
+# Discover auth endpoint and max version
+AUTH_INFO=$(curl -sk "https://${DSM_HOST}/webapi/query.cgi?api=SYNO.API.Info&version=1&method=query&query=SYNO.API.Auth")
+AUTH_PATH=$(echo "$AUTH_INFO" | jq -r '.data["SYNO.API.Auth"].path')
+AUTH_VER=$(echo "$AUTH_INFO" | jq -r '.data["SYNO.API.Auth"].maxVersion')
+echo "Auth path: $AUTH_PATH, max version: $AUTH_VER" >&2
+
 # Login
-SID=$(curl -sk "https://${DSM_HOST}/webapi/entry.cgi?api=SYNO.API.Auth&method=login&version=6&account=${DSM_USER}&passwd=${DSM_PASS}&format=sid" \
+SID=$(curl -sk "https://${DSM_HOST}/webapi/${AUTH_PATH}?api=SYNO.API.Auth&method=login&version=${AUTH_VER}&account=${DSM_USER}&passwd=${DSM_PASS}&format=sid" \
   | jq -r '.data.sid')
 
 echo "SID: $SID" >&2

@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// DSM API names used for capability checks via SupportsAPI.
+const (
+	APISynoDockerContainer = "SYNO.Docker.Container"
+	APISynoBackupTask      = "SYNO.Backup.Task"
+)
+
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
 type dsmAPIInfo struct {
 	path    string
@@ -17,14 +23,15 @@ type dsmAPIInfo struct {
 
 // SynologyClient handles authentication and API calls to the Synology DSM.
 type SynologyClient struct {
-	host        string
-	user        string
-	pass        string
-	authVersion string // SYNO.API.Auth version to use for login (default "6")
-	insecureTLS bool
-	authInfo    *dsmAPIInfo
-	sid         string
-	client      *http.Client
+	host          string
+	user          string
+	pass          string
+	authVersion   string // SYNO.API.Auth version to use for login (default "6")
+	insecureTLS   bool
+	authInfo      *dsmAPIInfo
+	sid           string
+	client        *http.Client
+	supportedAPIs map[string]bool // nil means DiscoverAPIs not yet called (fail-open)
 }
 
 // NewSynologyClient creates a new Synology DSM API client.
@@ -105,6 +112,42 @@ func (c *SynologyClient) Ping() error {
 	}
 	resp.Body.Close()
 	return nil
+}
+
+// DiscoverAPIs queries the DSM for its full API catalogue and caches which APIs are
+// available. Call this once at startup; subsequent SupportsAPI calls are local.
+func (c *SynologyClient) DiscoverAPIs() error {
+	params := url.Values{
+		"api":     {"SYNO.API.Info"},
+		"version": {"1"},
+		"method":  {"query"},
+		"query":   {"all"},
+	}
+	resp, err := c.rawGet("query.cgi", params)
+	if err != nil {
+		return fmt.Errorf("discover APIs: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("discover APIs: request failed")
+	}
+	var apis map[string]json.RawMessage
+	if err := json.Unmarshal(resp.Data, &apis); err != nil {
+		return fmt.Errorf("discover APIs: parse response: %w", err)
+	}
+	c.supportedAPIs = make(map[string]bool, len(apis))
+	for name := range apis {
+		c.supportedAPIs[name] = true
+	}
+	return nil
+}
+
+// SupportsAPI reports whether the named DSM API is available on this host.
+// Returns true if DiscoverAPIs has not been called yet (fail-open).
+func (c *SynologyClient) SupportsAPI(api string) bool {
+	if c.supportedAPIs == nil {
+		return true
+	}
+	return c.supportedAPIs[api]
 }
 
 // Login authenticates with the DSM and stores the session ID.
