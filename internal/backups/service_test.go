@@ -159,8 +159,8 @@ func TestGetBackupTask(t *testing.T) {
 	if detail.Status != Idle {
 		t.Errorf("expected status idle, got %s", detail.Status)
 	}
-	if detail.LastResult != Unknown {
-		t.Errorf("expected lastResult unknown, got %s", detail.LastResult)
+	if detail.LastResult != Warning {
+		t.Errorf("expected lastResult warning, got %s", detail.LastResult)
 	}
 	if detail.Type != "hyperBackup" {
 		t.Errorf("expected type hyperBackup, got %s", detail.Type)
@@ -219,24 +219,36 @@ func TestMapBackupStatus(t *testing.T) {
 	}
 }
 
-func TestMapBackupResult(t *testing.T) {
-	tests := []struct {
-		status string
-		want   BackupTaskResult
-	}{
-		{"success", Success},
-		{"error", Failed},
-		{"warning", Warning},
-		{"none", Unknown},
-		{"", Unknown},
-		{"other", Unknown},
-	}
+func TestFindLastCompletion(t *testing.T) {
+	logs := loadFixture[adapters.DSMBackupLogListResponse](t, "testdata/backup_logs.json")
 
-	for _, tt := range tests {
-		got := mapBackupResult(tt.status)
-		if got != tt.want {
-			t.Errorf("mapBackupResult(%q) = %s, want %s", tt.status, got, tt.want)
-		}
+	lastRun, result := findLastCompletion(&logs)
+	if lastRun == nil {
+		t.Error("expected lastRunAt from logs, got nil")
+	}
+	// Fixture has a warn-level entry within the run, so result should be Warning.
+	if result != Warning {
+		t.Errorf("expected Warning, got %s", result)
+	}
+}
+
+func TestFindLastCompletionEmpty(t *testing.T) {
+	lastRun, result := findLastCompletion(&adapters.DSMBackupLogListResponse{})
+	if lastRun != nil {
+		t.Errorf("expected nil time for empty logs, got %v", lastRun)
+	}
+	if result != Unknown {
+		t.Errorf("expected Unknown for empty logs, got %s", result)
+	}
+}
+
+func TestFindLastCompletionNil(t *testing.T) {
+	lastRun, result := findLastCompletion(nil)
+	if lastRun != nil {
+		t.Errorf("expected nil time for nil logs, got %v", lastRun)
+	}
+	if result != Unknown {
+		t.Errorf("expected Unknown for nil logs, got %s", result)
 	}
 }
 
@@ -305,22 +317,3 @@ func TestFindNextRunAt(t *testing.T) {
 	}
 }
 
-func TestFindLastRunAt(t *testing.T) {
-	logs := loadFixture[adapters.DSMBackupLogListResponse](t, "testdata/backup_logs.json")
-
-	lastRun := findLastRunAt(&logs)
-	if lastRun == nil {
-		t.Error("expected lastRunAt from logs, got nil")
-	}
-}
-
-func TestFindLastRunAtEmpty(t *testing.T) {
-	logs := &adapters.DSMBackupLogListResponse{
-		LogList: []adapters.DSMBackupLogEntry{},
-	}
-
-	lastRun := findLastRunAt(logs)
-	if lastRun != nil {
-		t.Errorf("expected nil for empty logs, got %v", lastRun)
-	}
-}

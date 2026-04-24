@@ -64,12 +64,23 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 			continue
 		}
 
-		tasks, scheduledTasks, err := s.fetchBackupData(db.backend)
+		tasks, _, err := s.fetchBackupData(db.backend)
 		if err != nil {
 			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
 		}
 
-		items = append(items, mapBackupTasks(db.device, tasks, scheduledTasks)...)
+		for _, t := range tasks.TaskList {
+			logs, _ := db.backend.ListBackupLogs(t.TaskID)
+			_, lastResult := findLastCompletion(logs)
+			items = append(items, BackupTask{
+				Device:     db.device,
+				Id:         fmt.Sprintf("%s.%d", db.device, t.TaskID),
+				Name:       t.Name,
+				Status:     mapBackupStatus(t.State),
+				LastResult: lastResult,
+				Type:       mapBackupType(t.Type),
+			})
+		}
 	}
 	if items == nil {
 		items = []BackupTask{}
@@ -102,19 +113,15 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 
 		nextRunAt := findNextRunAt(t.Name, scheduledTasks)
 
-		// Fetch logs to determine last run time.
-		logs, logErr := backend.ListBackupLogs(t.TaskID)
-		var lastRunAt *time.Time
-		if logErr == nil && logs != nil {
-			lastRunAt = findLastRunAt(logs)
-		}
+		logs, _ := backend.ListBackupLogs(t.TaskID)
+		lastRunAt, lastResult := findLastCompletion(logs)
 
 		return &BackupTaskDetail{
 			Device:     device,
 			Id:         compositeID,
 			Name:       t.Name,
 			Status:     mapBackupStatus(t.State),
-			LastResult: mapBackupResult(t.Status),
+			LastResult: lastResult,
 			Type:       mapBackupType(t.Type),
 			NextRunAt:  nextRunAt,
 			LastRunAt:  lastRunAt,
@@ -138,22 +145,6 @@ func (s *Service) fetchBackupData(backend BackupBackend) (*adapters.DSMBackupTas
 	return tasks, scheduledTasks, nil
 }
 
-// mapBackupTasks converts DSM backup tasks and scheduled tasks to API BackupTask models.
-func mapBackupTasks(device string, tasks *adapters.DSMBackupTaskListResponse, scheduled *adapters.DSMTaskSchedulerListResponse) []BackupTask {
-	result := make([]BackupTask, 0, len(tasks.TaskList))
-	for _, t := range tasks.TaskList {
-		result = append(result, BackupTask{
-			Device:     device,
-			Id:         fmt.Sprintf("%s.%d", device, t.TaskID),
-			Name:       t.Name,
-			Status:     mapBackupStatus(t.State),
-			LastResult: mapBackupResult(t.Status),
-			Type:       mapBackupType(t.Type),
-		})
-	}
-	return result
-}
-
 // findNextRunAt finds the next scheduled trigger time for a backup task by name.
 // It looks for the primary backup action (not integrity checks).
 func findNextRunAt(taskName string, scheduled *adapters.DSMTaskSchedulerListResponse) *time.Time {
@@ -170,15 +161,33 @@ func findNextRunAt(taskName string, scheduled *adapters.DSMTaskSchedulerListResp
 	return nil
 }
 
-// findLastRunAt scans the log list for the most recent task completion event.
-func findLastRunAt(logs *adapters.DSMBackupLogListResponse) *time.Time {
-	for _, entry := range logs.LogList {
+// findLastCompletion scans the log list (newest-first) for the most recent task
+// completion event and returns the run time and result.
+// It detects warnings by checking for warn-level entries between the completion
+// and the preceding "backup task started" entry.
+func findLastCompletion(logs *adapters.DSMBackupLogListResponse) (*time.Time, BackupTaskResult) {
+	if logs == nil {
+		return nil, Unknown
+	}
+	for i, entry := range logs.LogList {
 		lower := strings.ToLower(entry.Event)
-		if strings.Contains(lower, "backup task finished") || strings.Contains(lower, "backup task failed") {
-			return parseLogTime(entry.Time)
+		if strings.Contains(lower, "backup task failed") {
+			return parseLogTime(entry.Time), Failed
+		}
+		if strings.Contains(lower, "backup task finished") {
+			t := parseLogTime(entry.Time)
+			for _, older := range logs.LogList[i+1:] {
+				if strings.Contains(strings.ToLower(older.Event), "backup task started") {
+					break
+				}
+				if older.Level == "warn" {
+					return t, Warning
+				}
+			}
+			return t, Success
 		}
 	}
-	return nil
+	return nil, Unknown
 }
 
 // parseSchedulerTime parses the DSM task scheduler time format "2006-01-02 15:04".
@@ -222,23 +231,6 @@ func mapBackupStatus(state string) BackupTaskStatus {
 		return Error
 	default:
 		return Idle
-	}
-}
-
-// mapBackupResult converts a DSM backup task status string to BackupTaskResult.
-// The "status" field from SYNO.Backup.Task represents the outcome of the last run.
-func mapBackupResult(status string) BackupTaskResult {
-	switch status {
-	case "success":
-		return Success
-	case "error":
-		return Failed
-	case "warning":
-		return Warning
-	case "none", "":
-		return Unknown
-	default:
-		return Unknown
 	}
 }
 
