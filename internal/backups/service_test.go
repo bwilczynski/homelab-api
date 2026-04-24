@@ -226,7 +226,7 @@ func TestMapBackupResult(t *testing.T) {
 	}{
 		{"success", Success},
 		{"error", Failed},
-		{"warning", Skipped},
+		{"warning", Warning},
 		{"none", Unknown},
 		{"", Unknown},
 		{"other", Unknown},

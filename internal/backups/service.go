@@ -234,7 +234,7 @@ func mapBackupResult(status string) BackupTaskResult {
 	case "error":
 		return Failed
 	case "warning":
-		return Skipped
+		return Warning
 	case "none", "":
 		return Unknown
 	default:
