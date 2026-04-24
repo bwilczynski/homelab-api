@@ -2,7 +2,10 @@ package network
 
 import (
 	"context"
+	"errors"
 	"net/http"
+
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // networkClientDetailResponse is a custom 200 response for GetNetworkClient that
@@ -39,7 +42,15 @@ func NewHandler(svc *Service) *ServerHandler {
 func (h *ServerHandler) ListNetworkDevices(ctx context.Context, request ListNetworkDevicesRequestObject) (ListNetworkDevicesResponseObject, error) {
 	result, err := h.svc.ListDevices(ctx)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		return ListNetworkDevices500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	return ListNetworkDevices200JSONResponse(result), nil
 }
@@ -48,13 +59,31 @@ func (h *ServerHandler) ListNetworkDevices(ctx context.Context, request ListNetw
 func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetworkDeviceRequestObject) (GetNetworkDeviceResponseObject, error) {
 	detail, found, err := h.svc.GetDevice(ctx, request.DeviceId)
 	if err != nil {
-		return nil, err
+		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetNetworkDevice404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  "Not Found",
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
+		return GetNetworkDevice500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &msg,
+			},
+		}, nil
 	}
 	if !found {
 		msg := "Network device not found: " + request.DeviceId
 		return GetNetworkDevice404ApplicationProblemPlusJSONResponse{
 			NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
-				Type:   "https://homelab.local/problems/not-found",
+				Type:   apierrors.URNNotFound,
 				Title:  "Not Found",
 				Status: 404,
 				Detail: &msg,
@@ -68,7 +97,15 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetworkClientsRequestObject) (ListNetworkClientsResponseObject, error) {
 	result, err := h.svc.ListClients(ctx)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		return ListNetworkClients500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	return ListNetworkClients200JSONResponse(result), nil
 }
@@ -77,13 +114,31 @@ func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetw
 func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetworkClientRequestObject) (GetNetworkClientResponseObject, error) {
 	detail, found, err := h.svc.GetClient(ctx, request.ClientId)
 	if err != nil {
-		return nil, err
+		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetNetworkClient404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  "Not Found",
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
+		return GetNetworkClient500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &msg,
+			},
+		}, nil
 	}
 	if !found {
 		msg := "Network client not found: " + request.ClientId
 		return GetNetworkClient404ApplicationProblemPlusJSONResponse{
 			NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
-				Type:   "https://homelab.local/problems/not-found",
+				Type:   apierrors.URNNotFound,
 				Title:  "Not Found",
 				Status: 404,
 				Detail: &msg,

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // ContainerBackend defines the adapter interface for container operations.
@@ -53,7 +54,7 @@ func (s *Service) findBackend(device string) (ContainerBackend, error) {
 			return db.backend, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown device %q", device)
+	return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 }
 
 // ListContainers returns all containers with their resource usage from all backends.
@@ -169,7 +170,7 @@ func (s *Service) RestartContainer(ctx context.Context, containerID string) erro
 func parseContainerID(id string) (device, name string, err error) {
 	parts := strings.SplitN(id, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid container ID %q: expected format device.name", id)
+		return "", "", fmt.Errorf("invalid container ID %q: expected format device.name: %w", id, apierrors.ErrNotFound)
 	}
 	return parts[0], parts[1], nil
 }

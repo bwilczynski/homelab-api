@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // StorageBackend defines the adapter interface for storage operations.
@@ -48,7 +49,7 @@ func (s *Service) findBackend(device string) (StorageBackend, error) {
 			return db.backend, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown device %q", device)
+	return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 }
 
 // ListStorageVolumes returns all volumes with their associated disks from all backends.
@@ -134,7 +135,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 func parseVolumeID(id string) (device, name string, err error) {
 	parts := strings.SplitN(id, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid volume ID %q: expected format device.name", id)
+		return "", "", fmt.Errorf("invalid volume ID %q: expected format device.name: %w", id, apierrors.ErrNotFound)
 	}
 	return parts[0], parts[1], nil
 }

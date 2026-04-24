@@ -1,6 +1,11 @@
 package backups
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
+)
 
 // ServerHandler implements the generated StrictServerInterface for backups.
 type ServerHandler struct {
@@ -15,7 +20,15 @@ func NewHandler(svc *Service) *ServerHandler {
 func (h *ServerHandler) ListBackupTasks(ctx context.Context, request ListBackupTasksRequestObject) (ListBackupTasksResponseObject, error) {
 	result, err := h.svc.ListBackupTasks(ctx, request.Params.Device)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		return ListBackupTasks500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	return ListBackupTasks200JSONResponse(result), nil
 }
@@ -23,13 +36,31 @@ func (h *ServerHandler) ListBackupTasks(ctx context.Context, request ListBackupT
 func (h *ServerHandler) GetBackupTask(ctx context.Context, request GetBackupTaskRequestObject) (GetBackupTaskResponseObject, error) {
 	result, err := h.svc.GetBackupTask(ctx, request.TaskId)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetBackupTask404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  "Not Found",
+					Status: 404,
+					Detail: &detail,
+				},
+			}, nil
+		}
+		return GetBackupTask500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	if result == nil {
 		detail := "backup task not found"
 		return GetBackupTask404ApplicationProblemPlusJSONResponse{
 			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   "urn:homelab:error:not-found",
+				Type:   apierrors.URNNotFound,
 				Title:  "Not Found",
 				Status: 404,
 				Detail: &detail,

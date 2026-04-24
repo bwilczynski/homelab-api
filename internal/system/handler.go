@@ -1,6 +1,10 @@
 package system
 
-import "context"
+import (
+	"context"
+
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
+)
 
 // ServerHandler implements StrictServerInterface by delegating to the Service.
 type ServerHandler struct {
@@ -16,7 +20,15 @@ func NewHandler(svc *Service) *ServerHandler {
 func (h *ServerHandler) GetSystemHealth(ctx context.Context, request GetSystemHealthRequestObject) (GetSystemHealthResponseObject, error) {
 	health, err := h.svc.GetSystemHealth(ctx)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		return GetSystemHealth500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	return GetSystemHealth200JSONResponse(health), nil
 }
@@ -25,7 +37,15 @@ func (h *ServerHandler) GetSystemHealth(ctx context.Context, request GetSystemHe
 func (h *ServerHandler) ListSystemInfo(ctx context.Context, request ListSystemInfoRequestObject) (ListSystemInfoResponseObject, error) {
 	result, err := h.svc.ListSystemInfo(ctx, request.Params.Device)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		return ListSystemInfo500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	return ListSystemInfo200JSONResponse(result), nil
 }
@@ -34,7 +54,15 @@ func (h *ServerHandler) ListSystemInfo(ctx context.Context, request ListSystemIn
 func (h *ServerHandler) ListSystemUtilization(ctx context.Context, request ListSystemUtilizationRequestObject) (ListSystemUtilizationResponseObject, error) {
 	result, err := h.svc.ListSystemUtilization(ctx, request.Params.Device)
 	if err != nil {
-		return nil, err
+		detail := err.Error()
+		return ListSystemUtilization500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  "Internal Server Error",
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
 	}
 	return ListSystemUtilization200JSONResponse(result), nil
 }
