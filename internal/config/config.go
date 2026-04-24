@@ -24,17 +24,6 @@ type Backend struct {
 	Password    string      `yaml:"password"`
 	AuthVersion string      `yaml:"auth_version"` // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
 	InsecureTLS bool        `yaml:"insecure_tls"` // optional; skip TLS certificate verification (defaults to false)
-	Disable     []string    `yaml:"disable"`      // optional list of capabilities to disable, e.g. ["docker"]
-}
-
-// Disabled reports whether the named capability is disabled for this backend.
-func (b Backend) Disabled(capability string) bool {
-	for _, d := range b.Disable {
-		if d == capability {
-			return true
-		}
-	}
-	return false
 }
 
 // Config is the top-level configuration.

@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// DSM API names used for capability checks via SupportsAPI.
+const (
+	APISynoDockerContainer = "SYNO.Docker.Container"
+	APISynoBackupTask      = "SYNO.Backup.Task"
+)
+
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
 type dsmAPIInfo struct {
 	path    string
@@ -17,14 +23,15 @@ type dsmAPIInfo struct {
 
 // SynologyClient handles authentication and API calls to the Synology DSM.
 type SynologyClient struct {
-	host        string
-	user        string
-	pass        string
-	authVersion string // SYNO.API.Auth version to use for login (default "6")
-	insecureTLS bool
-	authInfo    *dsmAPIInfo
-	sid         string
-	client      *http.Client
+	host          string
+	user          string
+	pass          string
+	authVersion   string // SYNO.API.Auth version to use for login (default "6")
+	insecureTLS   bool
+	authInfo      *dsmAPIInfo
+	sid           string
+	client        *http.Client
+	supportedAPIs map[string]bool // nil means DiscoverAPIs not yet called (fail-open)
 }
 
 // NewSynologyClient creates a new Synology DSM API client.
@@ -105,6 +112,42 @@ func (c *SynologyClient) Ping() error {
 	}
 	resp.Body.Close()
 	return nil
+}
+
+// DiscoverAPIs queries the DSM for its full API catalogue and caches which APIs are
+// available. Call this once at startup; subsequent SupportsAPI calls are local.
+func (c *SynologyClient) DiscoverAPIs() error {
+	params := url.Values{
+		"api":     {"SYNO.API.Info"},
+		"version": {"1"},
+		"method":  {"query"},
+		"query":   {"all"},
+	}
+	resp, err := c.rawGet("query.cgi", params)
+	if err != nil {
+		return fmt.Errorf("discover APIs: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("discover APIs: request failed")
+	}
+	var apis map[string]json.RawMessage
+	if err := json.Unmarshal(resp.Data, &apis); err != nil {
+		return fmt.Errorf("discover APIs: parse response: %w", err)
+	}
+	c.supportedAPIs = make(map[string]bool, len(apis))
+	for name := range apis {
+		c.supportedAPIs[name] = true
+	}
+	return nil
+}
+
+// SupportsAPI reports whether the named DSM API is available on this host.
+// Returns true if DiscoverAPIs has not been called yet (fail-open).
+func (c *SynologyClient) SupportsAPI(api string) bool {
+	if c.supportedAPIs == nil {
+		return true
+	}
+	return c.supportedAPIs[api]
 }
 
 // Login authenticates with the DSM and stores the session ID.
@@ -583,4 +626,110 @@ func (c *SynologyClient) RestartContainer(name string) error {
 		"name": {name},
 	})
 	return err
+}
+
+// --- Backup types ---
+
+// DSMBackupTaskListResponse is the data payload from SYNO.Backup.Task list.
+type DSMBackupTaskListResponse struct {
+	TaskList          []DSMBackupTask `json:"task_list"`
+	Total             int             `json:"total"`
+	IsDataRestoring   bool            `json:"is_data_restoring"`
+	IsDownloading     bool            `json:"is_downloading"`
+	IsLunRestoring    bool            `json:"is_lun_restoring"`
+	IsRestoring       bool            `json:"is_restoring"`
+	IsSnapshotRestore bool            `json:"is_snapshot_restoring"`
+}
+
+// DSMBackupTask represents a single backup task from the Hyper Backup service.
+type DSMBackupTask struct {
+	TaskID       int    `json:"task_id"`
+	Name         string `json:"name"`
+	State        string `json:"state"`
+	Status       string `json:"status"`
+	Type         string `json:"type"`
+	TransferType string `json:"transfer_type"`
+	TargetID     string `json:"target_id"`
+	TargetType   string `json:"target_type"`
+	DataEnc      bool   `json:"data_enc"`
+}
+
+// DSMTaskSchedulerListResponse is the data payload from SYNO.Core.TaskScheduler list.
+type DSMTaskSchedulerListResponse struct {
+	Tasks []DSMScheduledTask `json:"tasks"`
+	Total int                `json:"total"`
+}
+
+// DSMScheduledTask represents a single task in the DSM task scheduler.
+type DSMScheduledTask struct {
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	Action         string `json:"action"`
+	AppName        string `json:"app_name"`
+	Enable         bool   `json:"enable"`
+	NextTriggerTime string `json:"next_trigger_time"`
+	Owner          string `json:"owner"`
+	Type           string `json:"type"`
+}
+
+// DSMBackupLogListResponse is the data payload from SYNO.SDS.Backup.Client.Common.Log list.
+type DSMBackupLogListResponse struct {
+	LogList    []DSMBackupLogEntry `json:"log_list"`
+	Total      int                 `json:"total"`
+	ErrorCount int                 `json:"error_count"`
+	InfoCount  int                 `json:"info_count"`
+}
+
+// DSMBackupLogEntry represents a single log entry for a backup task.
+type DSMBackupLogEntry struct {
+	Event string `json:"event"`
+	Level string `json:"level"`
+	Time  string `json:"time"`
+	User  string `json:"user"`
+}
+
+// ListBackupTasks retrieves all backup tasks from the Hyper Backup service.
+func (c *SynologyClient) ListBackupTasks() (*DSMBackupTaskListResponse, error) {
+	data, err := c.Call("SYNO.Backup.Task", "list", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMBackupTaskListResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse backup task list: %w", err)
+	}
+	return &result, nil
+}
+
+// ListScheduledTasks retrieves scheduled tasks from the DSM task scheduler.
+func (c *SynologyClient) ListScheduledTasks() (*DSMTaskSchedulerListResponse, error) {
+	data, err := c.Call("SYNO.Core.TaskScheduler", "list", "2", url.Values{
+		"offset": {"0"},
+		"limit":  {"50"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result DSMTaskSchedulerListResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse task scheduler list: %w", err)
+	}
+	return &result, nil
+}
+
+// ListBackupLogs retrieves recent log entries for a specific backup task.
+func (c *SynologyClient) ListBackupLogs(taskID int) (*DSMBackupLogListResponse, error) {
+	data, err := c.Call("SYNO.SDS.Backup.Client.Common.Log", "list", "1", url.Values{
+		"task_id": {fmt.Sprintf("%d", taskID)},
+		"offset":  {"0"},
+		"limit":   {"100"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result DSMBackupLogListResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse backup logs: %w", err)
+	}
+	return &result, nil
 }

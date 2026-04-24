@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -55,6 +56,26 @@ func main() {
 		logger.Info("backend registered", "name", b.Name, "type", string(b.Type), "host", b.Host)
 	}
 
+	// Discover supported APIs on each backend in parallel so capability checks
+	// are local (no per-request round-trip to a non-existent API).
+	var wg sync.WaitGroup
+	for name, client := range synologyClients {
+		wg.Add(1)
+		go func(name string, client *adapters.SynologyClient) {
+			defer wg.Done()
+			if err := client.DiscoverAPIs(); err != nil {
+				logger.Warn("API discovery failed, assuming all APIs available", "backend", name, "err", err)
+			} else {
+				logger.Info("API discovery complete",
+					"backend", name,
+					"docker", client.SupportsAPI(adapters.APISynoDockerContainer),
+					"backup", client.SupportsAPI(adapters.APISynoBackupTask),
+				)
+			}
+		}(name, client)
+	}
+	wg.Wait()
+
 	// Build the health monitor covering all backends.
 	healthCheckers := make(map[string]adapters.HealthChecker, len(synologyClients)+len(unifiClients))
 	for name, c := range synologyClients {
@@ -74,9 +95,10 @@ func main() {
 	synologyBackends := cfg.ByType(config.BackendTypeSynology)
 	dsmBackends := make(map[string]system.DSMBackendConfig, len(synologyBackends))
 	for _, b := range synologyBackends {
+		client := synologyClients[b.Name]
 		dsmBackends[b.Name] = system.DSMBackendConfig{
-			Backend:       synologyClients[b.Name],
-			DockerEnabled: !b.Disabled("docker"),
+			Backend:       client,
+			DockerEnabled: client.SupportsAPI(adapters.APISynoDockerContainer),
 		}
 	}
 	unifiBackends := make(map[string]system.UniFiBackend, len(unifiClients))
@@ -87,11 +109,11 @@ func main() {
 	systemHandler := system.NewStrictHandler(system.NewHandler(systemSvc), nil)
 	system.HandlerFromMux(systemHandler, r)
 
-	// Containers: Synology backends with Docker enabled.
+	// Containers: Synology backends that support Docker.
 	containerBackends := make(map[string]containers.ContainerBackend)
-	for _, b := range synologyBackends {
-		if !b.Disabled("docker") {
-			containerBackends[b.Name] = synologyClients[b.Name]
+	for name, client := range synologyClients {
+		if client.SupportsAPI(adapters.APISynoDockerContainer) {
+			containerBackends[name] = client
 		}
 	}
 	containersSvc := containers.NewService(containerBackends, monitor)
@@ -107,8 +129,14 @@ func main() {
 	storageHandler := storage.NewStrictHandler(storage.NewHandler(storageSvc), nil)
 	storage.HandlerFromMux(storageHandler, r)
 
-	// Backups: no backends yet.
-	backupsSvc := backups.NewService()
+	// Backups: Synology backends that support Hyper Backup.
+	backupBackends := make(map[string]backups.BackupBackend)
+	for name, client := range synologyClients {
+		if client.SupportsAPI(adapters.APISynoBackupTask) {
+			backupBackends[name] = client
+		}
+	}
+	backupsSvc := backups.NewService(backupBackends, monitor)
 	backupsHandler := backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil)
 	backups.HandlerFromMux(backupsHandler, r)
 
