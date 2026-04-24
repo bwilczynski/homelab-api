@@ -107,8 +107,12 @@ func main() {
 	storageHandler := storage.NewStrictHandler(storage.NewHandler(storageSvc), nil)
 	storage.HandlerFromMux(storageHandler, r)
 
-	// Backups: no backends yet.
-	backupsSvc := backups.NewService()
+	// Backups: all Synology backends.
+	backupBackends := make(map[string]backups.BackupBackend, len(synologyClients))
+	for name, client := range synologyClients {
+		backupBackends[name] = client
+	}
+	backupsSvc := backups.NewService(backupBackends, monitor)
 	backupsHandler := backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil)
 	backups.HandlerFromMux(backupsHandler, r)
 

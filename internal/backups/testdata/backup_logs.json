@@ -1,0 +1,34 @@
+{
+  "data": {
+    "error_count": 2,
+    "info_count": 10,
+    "log_list": [
+      {
+        "event": "[Backup to LOCAL] Trigger version rotation.",
+        "level": "info",
+        "time": "2026/04/24 02:31:00",
+        "user": "SYSTEM"
+      },
+      {
+        "event": "[Local][Backup to LOCAL] Backup task finished successfully. [100000 files scanned] [100 new files] [200 files modified] [99700 files unchanged]",
+        "level": "info",
+        "time": "2026/04/24 02:30:59",
+        "user": "SYSTEM"
+      },
+      {
+        "event": "[Local][Backup to LOCAL] Incomplete file backup. (The file is a special file.) [/volume1/docker/app/data/app.socket]",
+        "level": "warn",
+        "time": "2026/04/24 02:10:05",
+        "user": "SYSTEM"
+      },
+      {
+        "event": "[Local][Backup to LOCAL] Backup task started.",
+        "level": "info",
+        "time": "2026/04/24 01:00:25",
+        "user": "SYSTEM"
+      }
+    ],
+    "total": 4
+  },
+  "success": true
+}
