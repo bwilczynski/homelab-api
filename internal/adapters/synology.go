@@ -2,11 +2,14 @@ package adapters
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // DSM API names used for capability checks via SupportsAPI.
@@ -63,6 +66,16 @@ type SynologyResponse struct {
 // SynologyError contains error details from the DSM API.
 type SynologyError struct {
 	Code int `json:"code"`
+}
+
+// DSMAPIError is returned by Call when the DSM API responds with success=false.
+type DSMAPIError struct {
+	API  string
+	Code int
+}
+
+func (e *DSMAPIError) Error() string {
+	return fmt.Sprintf("synology API %s error code %d", e.API, e.Code)
 }
 
 // discoverAuth queries the DSM's API info endpoint to find the correct path and
@@ -228,7 +241,7 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 		if resp.Error != nil {
 			code = resp.Error.Code
 		}
-		return nil, fmt.Errorf("synology API %s error code %d", api, code)
+		return nil, &DSMAPIError{API: api, Code: code}
 	}
 	return resp.Data, nil
 }
@@ -441,11 +454,16 @@ func (c *SynologyClient) ListContainers() (*DSMContainerListResponse, error) {
 }
 
 // GetContainer retrieves a single container's details from the DSM Docker API.
+// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) GetContainer(name string) (*DSMContainerDetailResponse, error) {
 	data, err := c.Call("SYNO.Docker.Container", "get", "1", url.Values{
 		"name": {name},
 	})
 	if err != nil {
+		var apiErr *DSMAPIError
+		if errors.As(err, &apiErr) && apiErr.Code == 117 {
+			return nil, fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+		}
 		return nil, err
 	}
 	var result DSMContainerDetailResponse
