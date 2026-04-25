@@ -460,11 +460,7 @@ func (c *SynologyClient) GetContainer(name string) (*DSMContainerDetailResponse,
 		"name": {name},
 	})
 	if err != nil {
-		var apiErr *DSMAPIError
-		if errors.As(err, &apiErr) && apiErr.Code == 117 {
-			return nil, fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
-		}
-		return nil, err
+		return nil, mapContainerNotFound(name, err)
 	}
 	var result DSMContainerDetailResponse
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -623,26 +619,41 @@ func (c *SynologyClient) GetStorageVolumes() (*DSMStorageVolumeResponse, error) 
 }
 
 // StartContainer starts a container by name.
+// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) StartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "start", "1", url.Values{
 		"name": {name},
 	})
-	return err
+	return mapContainerNotFound(name, err)
 }
 
 // StopContainer stops a container by name.
+// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) StopContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "stop", "1", url.Values{
 		"name": {name},
 	})
-	return err
+	return mapContainerNotFound(name, err)
 }
 
 // RestartContainer restarts a container by name.
+// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) RestartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "restart", "1", url.Values{
 		"name": {name},
 	})
+	return mapContainerNotFound(name, err)
+}
+
+// mapContainerNotFound converts DSM error code 117 to apierrors.ErrNotFound.
+func mapContainerNotFound(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var apiErr *DSMAPIError
+	if errors.As(err, &apiErr) && apiErr.Code == 117 {
+		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	}
 	return err
 }
 
