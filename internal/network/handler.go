@@ -46,7 +46,7 @@ func (h *ServerHandler) ListNetworkDevices(ctx context.Context, request ListNetw
 		return ListNetworkDevices500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -62,9 +62,9 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetNetworkDevice404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &msg,
 				},
@@ -73,7 +73,7 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 		return GetNetworkDevice500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &msg,
 			},
@@ -82,9 +82,9 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 	if !found {
 		msg := "Network device not found: " + request.DeviceId
 		return GetNetworkDevice404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
+			NotFoundApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNNotFound,
-				Title:  "Not Found",
+				Title:  apierrors.TitleNotFound,
 				Status: 404,
 				Detail: &msg,
 			},
@@ -101,7 +101,7 @@ func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetw
 		return ListNetworkClients500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -117,9 +117,9 @@ func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetwork
 		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetNetworkClient404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &msg,
 				},
@@ -128,7 +128,7 @@ func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetwork
 		return GetNetworkClient500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &msg,
 			},
@@ -137,9 +137,9 @@ func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetwork
 	if !found {
 		msg := "Network client not found: " + request.ClientId
 		return GetNetworkClient404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse: NotFoundApplicationProblemPlusJSONResponse{
+			NotFoundApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNNotFound,
-				Title:  "Not Found",
+				Title:  apierrors.TitleNotFound,
 				Status: 404,
 				Detail: &msg,
 			},

@@ -24,7 +24,7 @@ func (h *ServerHandler) ListBackupTasks(ctx context.Context, request ListBackupT
 		return ListBackupTasks500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -41,7 +41,7 @@ func (h *ServerHandler) GetBackupTask(ctx context.Context, request GetBackupTask
 			return GetBackupTask404ApplicationProblemPlusJSONResponse{
 				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &detail,
 				},
@@ -50,7 +50,7 @@ func (h *ServerHandler) GetBackupTask(ctx context.Context, request GetBackupTask
 		return GetBackupTask500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -61,7 +61,7 @@ func (h *ServerHandler) GetBackupTask(ctx context.Context, request GetBackupTask
 		return GetBackupTask404ApplicationProblemPlusJSONResponse{
 			NotFoundApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNNotFound,
-				Title:  "Not Found",
+				Title:  apierrors.TitleNotFound,
 				Status: 404,
 				Detail: &detail,
 			},

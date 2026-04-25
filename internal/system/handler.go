@@ -24,7 +24,7 @@ func (h *ServerHandler) GetSystemHealth(ctx context.Context, request GetSystemHe
 		return GetSystemHealth500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -41,7 +41,7 @@ func (h *ServerHandler) ListSystemInfo(ctx context.Context, request ListSystemIn
 		return ListSystemInfo500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -58,7 +58,7 @@ func (h *ServerHandler) ListSystemUtilization(ctx context.Context, request ListS
 		return ListSystemUtilization500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},

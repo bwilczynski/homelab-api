@@ -2,7 +2,6 @@ package adapters
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +16,9 @@ const (
 	APISynoDockerContainer = "SYNO.Docker.Container"
 	APISynoBackupTask      = "SYNO.Backup.Task"
 )
+
+// DSM error codes.
+const dsmErrContainerNotFound = 117
 
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
 type dsmAPIInfo struct {
@@ -454,7 +456,6 @@ func (c *SynologyClient) ListContainers() (*DSMContainerListResponse, error) {
 }
 
 // GetContainer retrieves a single container's details from the DSM Docker API.
-// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) GetContainer(name string) (*DSMContainerDetailResponse, error) {
 	data, err := c.Call("SYNO.Docker.Container", "get", "1", url.Values{
 		"name": {name},
@@ -619,7 +620,6 @@ func (c *SynologyClient) GetStorageVolumes() (*DSMStorageVolumeResponse, error) 
 }
 
 // StartContainer starts a container by name.
-// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) StartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "start", "1", url.Values{
 		"name": {name},
@@ -628,7 +628,6 @@ func (c *SynologyClient) StartContainer(name string) error {
 }
 
 // StopContainer stops a container by name.
-// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) StopContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "stop", "1", url.Values{
 		"name": {name},
@@ -637,7 +636,6 @@ func (c *SynologyClient) StopContainer(name string) error {
 }
 
 // RestartContainer restarts a container by name.
-// DSM returns error code 117 when the named container does not exist.
 func (c *SynologyClient) RestartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "restart", "1", url.Values{
 		"name": {name},
@@ -650,8 +648,7 @@ func mapContainerNotFound(name string, err error) error {
 	if err == nil {
 		return nil
 	}
-	var apiErr *DSMAPIError
-	if errors.As(err, &apiErr) && apiErr.Code == 117 {
+	if apiErr, ok := err.(*DSMAPIError); ok && apiErr.Code == dsmErrContainerNotFound {
 		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
 	}
 	return err

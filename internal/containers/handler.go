@@ -24,7 +24,7 @@ func (h *ServerHandler) ListContainers(ctx context.Context, request ListContaine
 		return ListContainers500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -41,7 +41,7 @@ func (h *ServerHandler) GetContainer(ctx context.Context, request GetContainerRe
 			return GetContainer404ApplicationProblemPlusJSONResponse{
 				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &detail,
 				},
@@ -50,19 +50,8 @@ func (h *ServerHandler) GetContainer(ctx context.Context, request GetContainerRe
 		return GetContainer500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
-	}
-	if result == nil {
-		detail := "container not found"
-		return GetContainer404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  "Not Found",
-				Status: 404,
 				Detail: &detail,
 			},
 		}, nil
@@ -77,7 +66,7 @@ func (h *ServerHandler) RestartContainer(ctx context.Context, request RestartCon
 			return RestartContainer404ApplicationProblemPlusJSONResponse{
 				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &detail,
 				},
@@ -86,7 +75,7 @@ func (h *ServerHandler) RestartContainer(ctx context.Context, request RestartCon
 		return RestartContainer500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -102,7 +91,7 @@ func (h *ServerHandler) StartContainer(ctx context.Context, request StartContain
 			return StartContainer404ApplicationProblemPlusJSONResponse{
 				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &detail,
 				},
@@ -111,7 +100,7 @@ func (h *ServerHandler) StartContainer(ctx context.Context, request StartContain
 		return StartContainer500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -127,7 +116,7 @@ func (h *ServerHandler) StopContainer(ctx context.Context, request StopContainer
 			return StopContainer404ApplicationProblemPlusJSONResponse{
 				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &detail,
 				},
@@ -136,7 +125,7 @@ func (h *ServerHandler) StopContainer(ctx context.Context, request StopContainer
 		return StopContainer500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},

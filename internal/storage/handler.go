@@ -24,7 +24,7 @@ func (h *ServerHandler) ListStorageVolumes(ctx context.Context, request ListStor
 		return ListStorageVolumes500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -41,7 +41,7 @@ func (h *ServerHandler) GetStorageVolume(ctx context.Context, request GetStorage
 			return GetStorageVolume404ApplicationProblemPlusJSONResponse{
 				NotFoundApplicationProblemPlusJSONResponse{
 					Type:   apierrors.URNNotFound,
-					Title:  "Not Found",
+					Title:  apierrors.TitleNotFound,
 					Status: 404,
 					Detail: &detail,
 				},
@@ -50,7 +50,7 @@ func (h *ServerHandler) GetStorageVolume(ctx context.Context, request GetStorage
 		return GetStorageVolume500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
-				Title:  "Internal Server Error",
+				Title:  apierrors.TitleInternalServerError,
 				Status: 500,
 				Detail: &detail,
 			},
@@ -61,7 +61,7 @@ func (h *ServerHandler) GetStorageVolume(ctx context.Context, request GetStorage
 		return GetStorageVolume404ApplicationProblemPlusJSONResponse{
 			NotFoundApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNNotFound,
-				Title:  "Not Found",
+				Title:  apierrors.TitleNotFound,
 				Status: 404,
 				Detail: &detail,
 			},
