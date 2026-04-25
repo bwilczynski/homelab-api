@@ -643,7 +643,6 @@ func (c *SynologyClient) RestartContainer(name string) error {
 	return mapContainerNotFound(name, err)
 }
 
-// mapContainerNotFound converts DSM error code 117 to apierrors.ErrNotFound.
 func mapContainerNotFound(name string, err error) error {
 	if err == nil {
 		return nil
