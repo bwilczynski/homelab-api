@@ -9,11 +9,33 @@ The API contract is defined in [homelab-api-spec](https://github.com/bwilczynski
 ```sh
 git clone --recurse-submodules https://github.com/bwilczynski/homelab-api.git
 cd homelab-api
+cp config.sample.yaml config.yaml  # fill in backend credentials
 make generate
 make run
 ```
 
 The server starts on `http://localhost:8080`.
+
+## Configuration
+
+Backend connections are defined in `config.yaml`. Values support environment variable expansion (`${VAR_NAME}`). Set `CONFIG_FILE` to use a different path.
+
+```yaml
+backends:
+  - name: nas-01
+    type: synology
+    host: 192.168.1.10:5001
+    username: admin
+    password: ${NAS01_PASS}
+
+  - name: unifi
+    type: unifi
+    host: 192.168.1.1
+    username: admin
+    password: ${UNIFI_PASS}
+```
+
+Supported backend types: `synology`, `unifi`.
 
 ## Commands
 
@@ -36,7 +58,8 @@ internal/
   containers/         Container lifecycle (list, get, start, stop, restart)
   storage/            Storage volumes
   backups/            Backup tasks
-  adapters/           Backend clients (UniFi, Synology, Immich, Hue, Sonos, …)
+  network/            Network clients and devices
+  adapters/           Backend clients (Synology, UniFi)
 ```
 
 Each domain package contains:

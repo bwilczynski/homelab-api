@@ -11,10 +11,16 @@ Go implementation of the Homelab API — a unified surface over heterogeneous ho
 ```sh
 make generate   # Bundle spec + regenerate server stubs (all domains)
 make build      # Build the server binary to bin/server
-make run        # Run the server locally on :8080
+make run        # Run the server locally on :8080 (loads .env if present)
 make test       # Run tests (go test ./...)
 make lint       # go vet ./...
 make tidy       # go mod tidy
+```
+
+Run a single test:
+
+```sh
+go test ./internal/containers/ -run TestListContainers
 ```
 
 ### First time after cloning
@@ -24,6 +30,10 @@ git submodule update --init
 ```
 
 `make generate` automatically bundles the spec submodule before generating stubs.
+
+### Configuration
+
+Copy `config.sample.yaml` to `config.yaml` and fill in backend credentials. Values support `${ENV_VAR}` expansion. Set `CONFIG_FILE` env var to override the default path.
 
 ## Architecture
 
@@ -36,26 +46,25 @@ internal/
     api.gen.go        Generated StrictServerInterface + models — read-only
     handler.go        Implements StrictServerInterface, calls service layer
     service.go        Business logic
+    testdata/         JSON fixtures for tests
   containers/         tag: containers  (list, get, start, stop, restart)
-    api.gen.go
-    handler.go
-    service.go
   storage/            tag: storage  (volumes)
-    api.gen.go
-    handler.go
-    service.go
   backups/            tag: backups  (backup tasks)
-    api.gen.go
-    handler.go
-    service.go
-  adapters/           Backend clients (UniFi, Synology, Immich, Hue, Sonos, etc.)
+  network/            tag: network  (clients, devices)
+  adapters/           Backend clients (Synology, UniFi)
+  apierrors/          Shared error sentinels and RFC 9457 problem+json constants
+  health/             Background health monitor — probes backends periodically, services skip unreachable ones
+  config/             YAML config loader with env-var expansion
 ```
 
 **Key rules:**
 - Business logic belongs in `service.go`, not in handlers.
 - Handlers implement the generated `StrictServerInterface` and translate between request/response objects and service calls.
-- Each backend service gets its own file under `internal/adapters/`.
+- Errors use RFC 9457 problem+json responses — see `apierrors` for shared constants and `handler.go` files for the pattern.
+- Each domain `service.go` defines its own backend interface (e.g. `ContainerBackend`) that adapters satisfy. Services accept an optional `AvailabilityChecker` (the health monitor) to skip unreachable backends.
+- Each backend service gets its own file under `internal/adapters/` (`synology.go`, `unifi.go`).
 - Adapters handle auth/credential exchange; handlers and service layer never see raw credentials.
+- Tests use JSON fixtures in `testdata/` directories, loaded via a generic `loadFixture[T]` helper that extracts the `.data` field from the Synology response envelope.
 
 ## Code generation
 
@@ -84,9 +93,7 @@ Before saving a fixture, verify its top-level key set matches the raw response: 
 
 ## CI
 
-GitHub Actions workflow (`.github/workflows/validate.yaml`) runs on push to main and PRs:
-1. Checks out repo with submodules
-2. Bundles the spec (`make -C spec bundle`)
-3. Generates server stubs (`make generate`)
-4. Builds (`make build`)
-5. Runs tests (`make test`)
+GitHub Actions workflows:
+
+- **validate.yaml** — runs on push to main and PRs: checks out repo with submodules, bundles the spec, generates stubs, builds, and runs tests.
+- **image.yaml** — builds and publishes a Docker image to GHCR.
