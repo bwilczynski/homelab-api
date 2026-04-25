@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // DSM API names used for capability checks via SupportsAPI.
@@ -14,6 +16,9 @@ const (
 	APISynoDockerContainer = "SYNO.Docker.Container"
 	APISynoBackupTask      = "SYNO.Backup.Task"
 )
+
+// DSM error codes.
+const dsmErrContainerNotFound = 117
 
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
 type dsmAPIInfo struct {
@@ -63,6 +68,16 @@ type SynologyResponse struct {
 // SynologyError contains error details from the DSM API.
 type SynologyError struct {
 	Code int `json:"code"`
+}
+
+// DSMAPIError is returned by Call when the DSM API responds with success=false.
+type DSMAPIError struct {
+	API  string
+	Code int
+}
+
+func (e *DSMAPIError) Error() string {
+	return fmt.Sprintf("synology API %s error code %d", e.API, e.Code)
 }
 
 // discoverAuth queries the DSM's API info endpoint to find the correct path and
@@ -228,7 +243,7 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 		if resp.Error != nil {
 			code = resp.Error.Code
 		}
-		return nil, fmt.Errorf("synology API %s error code %d", api, code)
+		return nil, &DSMAPIError{API: api, Code: code}
 	}
 	return resp.Data, nil
 }
@@ -446,7 +461,7 @@ func (c *SynologyClient) GetContainer(name string) (*DSMContainerDetailResponse,
 		"name": {name},
 	})
 	if err != nil {
-		return nil, err
+		return nil, mapContainerNotFound(name, err)
 	}
 	var result DSMContainerDetailResponse
 	if err := json.Unmarshal(data, &result); err != nil {
@@ -609,7 +624,7 @@ func (c *SynologyClient) StartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "start", "1", url.Values{
 		"name": {name},
 	})
-	return err
+	return mapContainerNotFound(name, err)
 }
 
 // StopContainer stops a container by name.
@@ -617,7 +632,7 @@ func (c *SynologyClient) StopContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "stop", "1", url.Values{
 		"name": {name},
 	})
-	return err
+	return mapContainerNotFound(name, err)
 }
 
 // RestartContainer restarts a container by name.
@@ -625,6 +640,16 @@ func (c *SynologyClient) RestartContainer(name string) error {
 	_, err := c.Call("SYNO.Docker.Container", "restart", "1", url.Values{
 		"name": {name},
 	})
+	return mapContainerNotFound(name, err)
+}
+
+func mapContainerNotFound(name string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if apiErr, ok := err.(*DSMAPIError); ok && apiErr.Code == dsmErrContainerNotFound {
+		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	}
 	return err
 }
 

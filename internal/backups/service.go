@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // BackupBackend defines the adapter interface for backup operations.
@@ -50,7 +51,7 @@ func (s *Service) findBackend(device string) (BackupBackend, error) {
 			return db.backend, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown device %q", device)
+	return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 }
 
 // ListBackupTasks returns backup tasks from all (or a filtered) backends.
@@ -212,7 +213,7 @@ func parseLogTime(s string) *time.Time {
 func parseTaskID(id string) (device, taskID string, err error) {
 	parts := strings.SplitN(id, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid task ID %q: expected format device.taskId", id)
+		return "", "", fmt.Errorf("invalid task ID %q: expected format device.taskId: %w", id, apierrors.ErrNotFound)
 	}
 	return parts[0], parts[1], nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // UniFiBackend defines the adapter interface for UniFi network operations.
@@ -49,7 +50,7 @@ func (s *Service) findBackend(controller string) (UniFiBackend, error) {
 			return cb.unifi, nil
 		}
 	}
-	return nil, fmt.Errorf("unknown controller %q", controller)
+	return nil, fmt.Errorf("unknown controller %q: %w", controller, apierrors.ErrNotFound)
 }
 
 // ListDevices retrieves all managed network devices from all backends.
