@@ -44,6 +44,21 @@ Each domain package contains:
 - `handler.go` — implements the generated interface
 - `service.go` — business logic
 
+## Docker
+
+A multi-stage Dockerfile builds the server into a minimal [distroless](https://github.com/GoogleContainerTools/distroless) image.
+
+```sh
+docker build -t homelab-api .
+docker run -p 8080:8080 homelab-api
+```
+
+A pre-built image is published to GHCR on every push to `main`:
+
+```sh
+docker pull ghcr.io/bwilczynski/homelab-api:latest
+```
+
 ## Code generation
 
 Each API tag has its own oapi-codegen config (`oapi-codegen-{tag}.yaml`). Running `make generate` bundles the spec submodule and regenerates all domain packages. Generated files are gitignored.
