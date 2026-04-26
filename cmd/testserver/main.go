@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/containers"
 	"github.com/bwilczynski/homelab-api/internal/network"
@@ -54,18 +55,45 @@ type mockContainerBackend struct {
 	resources *adapters.DSMContainerResourceResponse
 }
 
+func (m *mockContainerBackend) hasContainer(name string) bool {
+	for _, c := range m.list.Containers {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *mockContainerBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
 	return m.list, nil
 }
-func (m *mockContainerBackend) GetContainer(string) (*adapters.DSMContainerDetailResponse, error) {
+func (m *mockContainerBackend) GetContainer(name string) (*adapters.DSMContainerDetailResponse, error) {
+	if !m.hasContainer(name) {
+		return nil, fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	}
 	return m.detail, nil
 }
 func (m *mockContainerBackend) GetContainerResources() (*adapters.DSMContainerResourceResponse, error) {
 	return m.resources, nil
 }
-func (m *mockContainerBackend) StartContainer(string) error   { return nil }
-func (m *mockContainerBackend) StopContainer(string) error    { return nil }
-func (m *mockContainerBackend) RestartContainer(string) error { return nil }
+func (m *mockContainerBackend) StartContainer(name string) error {
+	if !m.hasContainer(name) {
+		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	}
+	return nil
+}
+func (m *mockContainerBackend) StopContainer(name string) error {
+	if !m.hasContainer(name) {
+		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	}
+	return nil
+}
+func (m *mockContainerBackend) RestartContainer(name string) error {
+	if !m.hasContainer(name) {
+		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	}
+	return nil
+}
 
 // system.DSMBackend
 type mockDSMBackend struct {
