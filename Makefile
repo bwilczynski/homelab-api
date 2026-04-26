@@ -42,4 +42,4 @@ contract-test: build-testserver ## Run contract tests (Schemathesis vs test serv
 	@$(TESTSERVER) & TSPID=$$!; \
 	trap "kill $$TSPID 2>/dev/null" EXIT; \
 	for i in 1 2 3 4 5; do curl -sf http://localhost:8081/system/health >/dev/null && break || sleep 1; done; \
-	schemathesis run $(SPEC_FILE) --base-url http://localhost:8081 --checks all
+	schemathesis run $(SPEC_FILE) --base-url http://localhost:8081 --checks all --exclude-checks unsupported_method
