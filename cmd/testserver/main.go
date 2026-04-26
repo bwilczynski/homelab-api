@@ -22,10 +22,6 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/system"
 )
 
-// ---------------------------------------------------------------------------
-// Fixture loader
-// ---------------------------------------------------------------------------
-
 // loadFixture reads a JSON file and extracts the .data field from the
 // Synology/UniFi response envelope ({"data": T, ...}).
 func loadFixture[T any](path string) T {
@@ -44,10 +40,6 @@ func loadFixture[T any](path string) T {
 
 func ptr[T any](v T) *T { return &v }
 
-// ---------------------------------------------------------------------------
-// Mock backends
-// ---------------------------------------------------------------------------
-
 // containers.ContainerBackend
 type mockContainerBackend struct {
 	list      *adapters.DSMContainerListResponse
@@ -55,45 +47,30 @@ type mockContainerBackend struct {
 	resources *adapters.DSMContainerResourceResponse
 }
 
-func (m *mockContainerBackend) hasContainer(name string) bool {
+func (m *mockContainerBackend) checkContainer(name string) error {
 	for _, c := range m.list.Containers {
 		if c.Name == name {
-			return true
+			return nil
 		}
 	}
-	return false
+	return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
 }
 
 func (m *mockContainerBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
 	return m.list, nil
 }
 func (m *mockContainerBackend) GetContainer(name string) (*adapters.DSMContainerDetailResponse, error) {
-	if !m.hasContainer(name) {
-		return nil, fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
+	if err := m.checkContainer(name); err != nil {
+		return nil, err
 	}
 	return m.detail, nil
 }
 func (m *mockContainerBackend) GetContainerResources() (*adapters.DSMContainerResourceResponse, error) {
 	return m.resources, nil
 }
-func (m *mockContainerBackend) StartContainer(name string) error {
-	if !m.hasContainer(name) {
-		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
-	}
-	return nil
-}
-func (m *mockContainerBackend) StopContainer(name string) error {
-	if !m.hasContainer(name) {
-		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
-	}
-	return nil
-}
-func (m *mockContainerBackend) RestartContainer(name string) error {
-	if !m.hasContainer(name) {
-		return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
-	}
-	return nil
-}
+func (m *mockContainerBackend) StartContainer(name string) error   { return m.checkContainer(name) }
+func (m *mockContainerBackend) StopContainer(name string) error    { return m.checkContainer(name) }
+func (m *mockContainerBackend) RestartContainer(name string) error { return m.checkContainer(name) }
 
 // system.DSMBackend
 type mockDSMBackend struct {
@@ -164,10 +141,6 @@ func (m *mockNetworkBackend) GetClients() ([]adapters.UniFiSta, error) {
 	return m.clients, nil
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
@@ -180,8 +153,9 @@ func main() {
 	r := chi.NewRouter()
 
 	// Containers
+	containerList := ptr(loadFixture[adapters.DSMContainerListResponse](base + "/containers/testdata/container_list.json"))
 	cb := &mockContainerBackend{
-		list:      ptr(loadFixture[adapters.DSMContainerListResponse](base + "/containers/testdata/container_list.json")),
+		list:      containerList,
 		detail:    ptr(loadFixture[adapters.DSMContainerDetailResponse](base + "/containers/testdata/container_detail.json")),
 		resources: ptr(loadFixture[adapters.DSMContainerResourceResponse](base + "/containers/testdata/container_resources.json")),
 	}
@@ -193,7 +167,7 @@ func main() {
 		info:       ptr(loadFixture[adapters.DSMSystemInfoResponse](base + "/system/testdata/dsm-system-info.json")),
 		util:       ptr(loadFixture[adapters.DSMSystemUtilizationResponse](base + "/system/testdata/dsm-system-utilization.json")),
 		volumes:    ptr(loadFixture[adapters.DSMStorageVolumeResponse](base + "/system/testdata/dsm-storage-volumes.json")),
-		containers: ptr(loadFixture[adapters.DSMContainerListResponse](base + "/containers/testdata/container_list.json")),
+		containers: containerList,
 	}
 	unifiHealth := &mockUniFiHealthBackend{
 		health: loadFixture[[]adapters.UniFiSubsystemHealth](base + "/system/testdata/unifi-health.json"),
