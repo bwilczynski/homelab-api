@@ -4,6 +4,7 @@ go 1.26.2
 
 require (
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/httplog/v3 v3.3.0
 	github.com/oapi-codegen/runtime v1.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
