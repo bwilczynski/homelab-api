@@ -19,6 +19,8 @@ type mockBackupBackend struct {
 	logsErr   error
 }
 
+func (m *mockBackupBackend) SupportsBackups() bool { return true }
+
 func (m *mockBackupBackend) ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error) {
 	return m.tasks, m.tasksErr
 }

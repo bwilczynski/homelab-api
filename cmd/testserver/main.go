@@ -68,6 +68,7 @@ func (m *mockContainerBackend) GetContainer(name string) (*adapters.DSMContainer
 func (m *mockContainerBackend) GetContainerResources() (*adapters.DSMContainerResourceResponse, error) {
 	return m.resources, nil
 }
+func (m *mockContainerBackend) SupportsContainers() bool           { return true }
 func (m *mockContainerBackend) StartContainer(name string) error   { return m.checkContainer(name) }
 func (m *mockContainerBackend) StopContainer(name string) error    { return m.checkContainer(name) }
 func (m *mockContainerBackend) RestartContainer(name string) error { return m.checkContainer(name) }
@@ -117,6 +118,8 @@ type mockBackupBackend struct {
 	scheduled *adapters.DSMTaskSchedulerListResponse
 	logs      *adapters.DSMBackupLogListResponse
 }
+
+func (m *mockBackupBackend) SupportsBackups() bool { return true }
 
 func (m *mockBackupBackend) ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error) {
 	return m.tasks, nil

@@ -31,6 +31,7 @@ func (m *mockBackend) GetContainerResources() (*adapters.DSMContainerResourceRes
 	return m.resourcesResp, nil
 }
 
+func (m *mockBackend) SupportsContainers() bool          { return true }
 func (m *mockBackend) StartContainer(name string) error   { return m.startErr }
 func (m *mockBackend) StopContainer(name string) error    { return m.stopErr }
 func (m *mockBackend) RestartContainer(name string) error { return m.restartErr }
