@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -36,7 +37,26 @@ type ImageSourceConfig struct {
 
 // UpdatesConfig holds configuration for the software update tracking feature.
 type UpdatesConfig struct {
-	Sources []ImageSourceConfig `yaml:"sources"` // image → GitHub source mappings
+	Sources       []ImageSourceConfig `yaml:"sources"`        // image → GitHub source mappings
+	CheckInterval Duration            `yaml:"check_interval"` // how often to refresh from upstream (default: 1h)
+}
+
+// Duration wraps time.Duration to support YAML unmarshalling from strings like "30m" or "2h".
+type Duration struct {
+	time.Duration
+}
+
+func (d *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	d.Duration = dur
+	return nil
 }
 
 // Config is the top-level configuration.

@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,19 +52,21 @@ type updateCache struct {
 
 // Service implements system domain business logic.
 type Service struct {
-	dsmBackends   []dsmEntry
-	unifiBackends []unifiEntry
-	monitor       adapters.AvailabilityChecker // optional; nil means all backends available
-	sources       map[string]string            // image (without tag) → GitHub "owner/repo"
-	mu            sync.RWMutex
-	cache         *updateCache
+	dsmBackends    []dsmEntry
+	unifiBackends  []unifiEntry
+	monitor        adapters.AvailabilityChecker // optional; nil means all backends available
+	sources        map[string]string            // image (without tag) → GitHub "owner/repo"
+	updateCacheTTL time.Duration
+	logger         *slog.Logger
+	mu             sync.RWMutex
+	cache          *updateCache
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
 // sources maps container images (without tag) to their GitHub release repos for update checks.
 // An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
 // backends that are currently unreachable.
-func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, sources []config.ImageSourceConfig, monitor ...adapters.AvailabilityChecker) *Service {
+func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, updatesCfg config.UpdatesConfig, logger *slog.Logger, monitor ...adapters.AvailabilityChecker) *Service {
 	dsms := make([]dsmEntry, 0, len(dsmBackends))
 	for device, cfg := range dsmBackends {
 		dsms = append(dsms, dsmEntry{device: device, dsm: cfg.Backend, dockerEnabled: cfg.DockerEnabled})
@@ -76,12 +79,23 @@ func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[strin
 	}
 	sort.Slice(unifis, func(i, j int) bool { return unifis[i].controller < unifis[j].controller })
 
-	srcMap := make(map[string]string, len(sources))
-	for _, s := range sources {
+	srcMap := make(map[string]string, len(updatesCfg.Sources))
+	for _, s := range updatesCfg.Sources {
 		srcMap[s.Image] = s.Source
 	}
 
-	svc := &Service{dsmBackends: dsms, unifiBackends: unifis, sources: srcMap}
+	ttl := updatesCfg.CheckInterval.Duration
+	if ttl <= 0 {
+		ttl = time.Hour
+	}
+
+	svc := &Service{
+		dsmBackends:    dsms,
+		unifiBackends:  unifis,
+		sources:        srcMap,
+		updateCacheTTL: ttl,
+		logger:         logger,
+	}
 	if len(monitor) > 0 {
 		svc.monitor = monitor[0]
 	}
@@ -367,10 +381,8 @@ func mapVolumeStatus(status string) HealthStatus {
 	}
 }
 
-const updateCacheTTL = time.Hour
-
 // ListSystemUpdates returns tracked containers and their update status.
-// Results are served from an in-memory cache refreshed every hour.
+// Results are served from an in-memory cache; TTL is configured via check_interval (default 1h).
 func (s *Service) ListSystemUpdates(ctx context.Context, status *SystemUpdateStatus, updateType *SystemUpdateType) (SystemUpdateList, error) {
 	items, err := s.getUpdates(ctx)
 	if err != nil {
@@ -412,7 +424,7 @@ func (s *Service) CheckSystemUpdates(ctx context.Context) (SystemUpdateList, err
 // getUpdates returns cached update data, refreshing if the cache is stale.
 func (s *Service) getUpdates(ctx context.Context) ([]ContainerSystemUpdateDetail, error) {
 	s.mu.RLock()
-	if s.cache != nil && time.Since(s.cache.checkedAt) < updateCacheTTL {
+	if s.cache != nil && time.Since(s.cache.checkedAt) < s.updateCacheTTL {
 		items := s.cache.items
 		s.mu.RUnlock()
 		return items, nil
@@ -453,6 +465,13 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 			}
 
 			githubRepo, sourceURL := s.resolveSource(image)
+			if githubRepo == "" {
+				s.logger.Warn("no GitHub source for container image; update status will be unknown",
+					"container", c.Name,
+					"image", image,
+					"hint", "add an entry under updates.sources in config.yaml",
+				)
+			}
 
 			item := ContainerSystemUpdateDetail{
 				Id:             c.Name,

@@ -16,6 +16,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/backups"
+	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
@@ -178,7 +179,8 @@ func main() {
 	systemSvc := system.NewService(
 		map[string]system.DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]system.UniFiBackend{"unifi": unifiHealth},
-		nil,
+		config.UpdatesConfig{},
+		slog.Default(),
 	)
 	system.HandlerFromMux(system.NewStrictHandler(system.NewHandler(systemSvc), nil), r)
 

@@ -70,7 +70,7 @@ func main() {
 	for name, client := range unifiClients {
 		unifiBackends[name] = client
 	}
-	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates.Sources, monitor)
+	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates, logger, monitor)
 	system.HandlerFromMux(system.NewStrictHandler(system.NewHandler(systemSvc), nil), r)
 
 	// Containers: all Synology backends; capability checked per-request via SupportsContainers.

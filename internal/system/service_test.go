@@ -3,10 +3,12 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"os"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/config"
 )
 
 // --- Mock backends ---
@@ -117,7 +119,8 @@ func newTestService(dsm DSMBackend, unifi UniFiBackend) *Service {
 	return NewService(
 		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]UniFiBackend{"unifi": unifi},
-		nil,
+		config.UpdatesConfig{},
+		slog.Default(),
 	)
 }
 
