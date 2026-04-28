@@ -575,6 +575,7 @@ func (s *Service) toSystemUpdateList(items []ContainerSystemUpdateDetail, status
 			Name:           item.Name,
 			Type:           SystemUpdateType(item.Type),
 			Status:         item.Status,
+			Device:         item.Device,
 			CurrentVersion: item.CurrentVersion,
 			LatestVersion:  item.LatestVersion,
 			CheckedAt:      item.CheckedAt,
