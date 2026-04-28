@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
@@ -28,6 +30,7 @@ type dsmAPIInfo struct {
 
 // SynologyClient handles authentication and API calls to the Synology DSM.
 type SynologyClient struct {
+	name          string
 	host          string
 	user          string
 	pass          string
@@ -36,22 +39,30 @@ type SynologyClient struct {
 	authInfo      *dsmAPIInfo
 	sid           string
 	client        *http.Client
-	supportedAPIs map[string]bool // nil means DiscoverAPIs not yet called (fail-open)
+	logger        *slog.Logger
+	mu              sync.RWMutex
+	supportedAPIs   map[string]bool // nil = not yet called; non-nil = discovery succeeded
+	discoveryFailed bool            // true when DiscoverAPIs was called but failed
 }
 
 // NewSynologyClient creates a new Synology DSM API client.
 // authVersion is the SYNO.API.Auth version to use for login (default "6"; use "3" for older DSM).
 // Set insecureTLS to true to skip TLS certificate verification (opt-in).
-func NewSynologyClient(host, user, pass, authVersion string, insecureTLS bool) *SynologyClient {
+func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS bool, logger *slog.Logger) *SynologyClient {
 	if authVersion == "" {
 		authVersion = "6"
 	}
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &SynologyClient{
+		name:        name,
 		host:        host,
 		user:        user,
 		pass:        pass,
 		authVersion: authVersion,
 		insecureTLS: insecureTLS,
+		logger:      logger,
 		client: &http.Client{
 			Transport: tlsTransport(insecureTLS),
 		},
@@ -116,6 +127,7 @@ func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
 
 // Ping reports whether the DSM is reachable by making a short-timeout unauthenticated
 // request to the API info endpoint. It satisfies the adapters.HealthChecker interface.
+// If API discovery previously failed, Ping retries it after a successful connectivity check.
 func (c *SynologyClient) Ping() error {
 	cl := &http.Client{
 		Timeout:   3 * time.Second,
@@ -126,11 +138,17 @@ func (c *SynologyClient) Ping() error {
 		return fmt.Errorf("synology unreachable: %w", err)
 	}
 	resp.Body.Close()
+	c.mu.RLock()
+	failed := c.discoveryFailed
+	c.mu.RUnlock()
+	if failed {
+		_ = c.DiscoverAPIs() // outcome logged inside DiscoverAPIs; retried on next Ping if still failing
+	}
 	return nil
 }
 
 // DiscoverAPIs queries the DSM for its full API catalogue and caches which APIs are
-// available. Call this once at startup; subsequent SupportsAPI calls are local.
+// available. Logs the outcome and retries automatically via Ping when the backend recovers.
 func (c *SynologyClient) DiscoverAPIs() error {
 	params := url.Values{
 		"api":     {"SYNO.API.Info"},
@@ -140,29 +158,64 @@ func (c *SynologyClient) DiscoverAPIs() error {
 	}
 	resp, err := c.rawGet("query.cgi", params)
 	if err != nil {
-		return fmt.Errorf("discover APIs: %w", err)
+		return c.failDiscovery(fmt.Errorf("discover APIs: %w", err))
 	}
 	if !resp.Success {
-		return fmt.Errorf("discover APIs: request failed")
+		return c.failDiscovery(fmt.Errorf("discover APIs: request failed"))
 	}
 	var apis map[string]json.RawMessage
 	if err := json.Unmarshal(resp.Data, &apis); err != nil {
-		return fmt.Errorf("discover APIs: parse response: %w", err)
+		return c.failDiscovery(fmt.Errorf("discover APIs: parse response: %w", err))
 	}
-	c.supportedAPIs = make(map[string]bool, len(apis))
+	supported := make(map[string]bool, len(apis))
 	for name := range apis {
-		c.supportedAPIs[name] = true
+		supported[name] = true
 	}
+	c.mu.Lock()
+	c.supportedAPIs = supported
+	c.discoveryFailed = false
+	c.mu.Unlock()
+	c.logger.Info("API discovery complete",
+		"backend", c.name,
+		"docker", supported[APISynoDockerContainer],
+		"backup", supported[APISynoBackupTask],
+	)
 	return nil
 }
 
+// failDiscovery marks the client as having failed API discovery, logs a warning, and returns the error.
+func (c *SynologyClient) failDiscovery(err error) error {
+	c.mu.Lock()
+	c.discoveryFailed = true
+	c.mu.Unlock()
+	c.logger.Warn("API discovery failed; capabilities unavailable until backend is reachable",
+		"backend", c.name, "err", err)
+	return err
+}
+
 // SupportsAPI reports whether the named DSM API is available on this host.
-// Returns true if DiscoverAPIs has not been called yet (fail-open).
+// Returns false when discovery failed (backend was unreachable); retries automatically via Ping.
+// Returns true only before DiscoverAPIs has ever been called (startup window).
 func (c *SynologyClient) SupportsAPI(api string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.discoveryFailed {
+		return false
+	}
 	if c.supportedAPIs == nil {
-		return true
+		return true // not yet attempted; fail-open during startup
 	}
 	return c.supportedAPIs[api]
+}
+
+// SupportsContainers reports whether this backend supports Docker container management.
+func (c *SynologyClient) SupportsContainers() bool {
+	return c.SupportsAPI(APISynoDockerContainer)
+}
+
+// SupportsBackups reports whether this backend supports Hyper Backup task management.
+func (c *SynologyClient) SupportsBackups() bool {
+	return c.SupportsAPI(APISynoBackupTask)
 }
 
 // Login authenticates with the DSM and stores the session ID.

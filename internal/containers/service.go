@@ -13,6 +13,7 @@ import (
 
 // ContainerBackend defines the adapter interface for container operations.
 type ContainerBackend interface {
+	SupportsContainers() bool
 	ListContainers() (*adapters.DSMContainerListResponse, error)
 	GetContainer(name string) (*adapters.DSMContainerDetailResponse, error)
 	GetContainerResources() (*adapters.DSMContainerResourceResponse, error)
@@ -51,6 +52,9 @@ func NewService(backends map[string]ContainerBackend, monitor ...adapters.Availa
 func (s *Service) findBackend(device string) (ContainerBackend, error) {
 	for _, db := range s.backends {
 		if db.device == device {
+			if !db.backend.SupportsContainers() {
+				return nil, fmt.Errorf("device %q does not support containers: %w", device, apierrors.ErrNotFound)
+			}
 			return db.backend, nil
 		}
 	}
@@ -62,6 +66,9 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 	var items []Container
 	for _, db := range s.backends {
 		if device != nil && *device != db.device {
+			continue
+		}
+		if !db.backend.SupportsContainers() {
 			continue
 		}
 		if s.monitor != nil && !s.monitor.Available(db.device) {

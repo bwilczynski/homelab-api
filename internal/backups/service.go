@@ -13,6 +13,7 @@ import (
 
 // BackupBackend defines the adapter interface for backup operations.
 type BackupBackend interface {
+	SupportsBackups() bool
 	ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error)
 	ListScheduledTasks() (*adapters.DSMTaskSchedulerListResponse, error)
 	ListBackupLogs(taskID int) (*adapters.DSMBackupLogListResponse, error)
@@ -48,6 +49,9 @@ func NewService(backends map[string]BackupBackend, monitor ...adapters.Availabil
 func (s *Service) findBackend(device string) (BackupBackend, error) {
 	for _, db := range s.backends {
 		if db.device == device {
+			if !db.backend.SupportsBackups() {
+				return nil, fmt.Errorf("device %q does not support backups: %w", device, apierrors.ErrNotFound)
+			}
 			return db.backend, nil
 		}
 	}
@@ -59,6 +63,9 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 	var items []BackupTask
 	for _, db := range s.backends {
 		if device != nil && *device != db.device {
+			continue
+		}
+		if !db.backend.SupportsBackups() {
 			continue
 		}
 		if s.monitor != nil && !s.monitor.Available(db.device) {
