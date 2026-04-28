@@ -117,6 +117,7 @@ func newTestService(dsm DSMBackend, unifi UniFiBackend) *Service {
 	return NewService(
 		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]UniFiBackend{"unifi": unifi},
+		nil,
 	)
 }
 

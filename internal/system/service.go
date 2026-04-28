@@ -6,9 +6,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/config"
 )
 
 // DSMBackend defines the adapter interface for DSM system operations.
@@ -41,17 +43,27 @@ type unifiEntry struct {
 	unifi      UniFiBackend
 }
 
+// updateCache holds the cached update results and when they were fetched.
+type updateCache struct {
+	items     []ContainerSystemUpdateDetail
+	checkedAt time.Time
+}
+
 // Service implements system domain business logic.
 type Service struct {
 	dsmBackends   []dsmEntry
 	unifiBackends []unifiEntry
 	monitor       adapters.AvailabilityChecker // optional; nil means all backends available
+	sources       map[string]string            // image (without tag) → GitHub "owner/repo"
+	mu            sync.RWMutex
+	cache         *updateCache
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
+// sources maps container images (without tag) to their GitHub release repos for update checks.
 // An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
 // backends that are currently unreachable.
-func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, monitor ...adapters.AvailabilityChecker) *Service {
+func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, sources []config.ImageSourceConfig, monitor ...adapters.AvailabilityChecker) *Service {
 	dsms := make([]dsmEntry, 0, len(dsmBackends))
 	for device, cfg := range dsmBackends {
 		dsms = append(dsms, dsmEntry{device: device, dsm: cfg.Backend, dockerEnabled: cfg.DockerEnabled})
@@ -64,7 +76,12 @@ func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[strin
 	}
 	sort.Slice(unifis, func(i, j int) bool { return unifis[i].controller < unifis[j].controller })
 
-	svc := &Service{dsmBackends: dsms, unifiBackends: unifis}
+	srcMap := make(map[string]string, len(sources))
+	for _, s := range sources {
+		srcMap[s.Image] = s.Source
+	}
+
+	svc := &Service{dsmBackends: dsms, unifiBackends: unifis, sources: srcMap}
 	if len(monitor) > 0 {
 		svc.monitor = monitor[0]
 	}
@@ -348,6 +365,208 @@ func mapVolumeStatus(status string) HealthStatus {
 	default:
 		return Unhealthy
 	}
+}
+
+const updateCacheTTL = time.Hour
+
+// ListSystemUpdates returns tracked containers and their update status.
+// Results are served from an in-memory cache refreshed every hour.
+func (s *Service) ListSystemUpdates(ctx context.Context, status *SystemUpdateStatus, updateType *SystemUpdateType) (SystemUpdateList, error) {
+	items, err := s.getUpdates(ctx)
+	if err != nil {
+		return SystemUpdateList{}, err
+	}
+	return s.toSystemUpdateList(items, status, updateType), nil
+}
+
+// GetSystemUpdate returns detailed update info for a single tracked component.
+func (s *Service) GetSystemUpdate(ctx context.Context, id string) (*SystemUpdateDetail, error) {
+	items, err := s.getUpdates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if item.Id == id {
+			var detail SystemUpdateDetail
+			if err := detail.FromContainerSystemUpdateDetail(item); err != nil {
+				return nil, fmt.Errorf("marshal update detail for %s: %w", id, err)
+			}
+			return &detail, nil
+		}
+	}
+	return nil, nil // not found
+}
+
+// CheckSystemUpdates forces a fresh upstream check and returns the full list.
+func (s *Service) CheckSystemUpdates(ctx context.Context) (SystemUpdateList, error) {
+	items, err := s.refreshUpdates(ctx)
+	if err != nil {
+		return SystemUpdateList{}, err
+	}
+	s.mu.Lock()
+	s.cache = &updateCache{items: items, checkedAt: time.Now().UTC()}
+	s.mu.Unlock()
+	return s.toSystemUpdateList(items, nil, nil), nil
+}
+
+// getUpdates returns cached update data, refreshing if the cache is stale.
+func (s *Service) getUpdates(ctx context.Context) ([]ContainerSystemUpdateDetail, error) {
+	s.mu.RLock()
+	if s.cache != nil && time.Since(s.cache.checkedAt) < updateCacheTTL {
+		items := s.cache.items
+		s.mu.RUnlock()
+		return items, nil
+	}
+	s.mu.RUnlock()
+
+	items, err := s.refreshUpdates(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	s.cache = &updateCache{items: items, checkedAt: time.Now().UTC()}
+	s.mu.Unlock()
+	return items, nil
+}
+
+// refreshUpdates scans all Docker-enabled DSM backends for containers with version
+// tags, looks up the GitHub release source for each, and returns assembled details.
+func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDetail, error) {
+	checkedAt := time.Now().UTC()
+	var items []ContainerSystemUpdateDetail
+
+	for _, de := range s.dsmBackends {
+		if !de.dockerEnabled {
+			continue
+		}
+		if s.monitor != nil && !s.monitor.Available(de.device) {
+			continue
+		}
+		resp, err := de.dsm.ListContainers()
+		if err != nil {
+			continue
+		}
+		for _, c := range resp.Containers {
+			image, tag := splitImageTag(c.Image)
+			if !isVersionTag(tag) {
+				continue
+			}
+
+			githubRepo, sourceURL := s.resolveSource(image)
+
+			item := ContainerSystemUpdateDetail{
+				Id:             c.Name,
+				Name:           c.Name,
+				Type:           ContainerSystemUpdateDetailTypeContainer,
+				Status:         Unknown,
+				CurrentVersion: tag,
+				LatestVersion:  tag,
+				CheckedAt:      checkedAt,
+				Image:          image,
+				Device:         de.device,
+				Source:         sourceURL,
+				ReleaseUrl:     sourceURL + "/releases",
+				PublishedAt:    checkedAt,
+			}
+
+			if githubRepo != "" {
+				release, err := fetchLatestRelease(githubRepo)
+				if err == nil {
+					item.LatestVersion = release.TagName
+					item.ReleaseUrl = release.HTMLURL
+					item.PublishedAt = release.PublishedAt
+					if release.TagName == tag {
+						item.Status = UpToDate
+					} else {
+						item.Status = UpdateAvailable
+					}
+				}
+			}
+
+			items = append(items, item)
+		}
+	}
+
+	if items == nil {
+		items = []ContainerSystemUpdateDetail{}
+	}
+	return items, nil
+}
+
+// resolveSource returns the GitHub "owner/repo" and a source URL for the given image.
+// It first checks the explicit sources map, then falls back to ghcr.io auto-derivation.
+func (s *Service) resolveSource(image string) (githubRepo string, sourceURL string) {
+	if repo, ok := s.sources[image]; ok {
+		return repo, fmt.Sprintf("https://github.com/%s", repo)
+	}
+	if repo, ok := githubRepoFromGHCR(image); ok {
+		return repo, fmt.Sprintf("https://github.com/%s", repo)
+	}
+	return "", "https://github.com"
+}
+
+// githubRepoFromGHCR derives a GitHub "owner/repo" from a ghcr.io image reference.
+func githubRepoFromGHCR(image string) (string, bool) {
+	const prefix = "ghcr.io/"
+	if !strings.HasPrefix(image, prefix) {
+		return "", false
+	}
+	rest := image[len(prefix):]
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) < 2 {
+		return "", false
+	}
+	return parts[0] + "/" + parts[1], true
+}
+
+// splitImageTag splits "registry/image:tag" into ("registry/image", "tag").
+// Returns ("image", "") if there is no tag separator.
+func splitImageTag(image string) (string, string) {
+	i := strings.LastIndex(image, ":")
+	if i < 0 {
+		return image, ""
+	}
+	return image[:i], image[i+1:]
+}
+
+// isVersionTag returns true when the tag looks like a version (not empty, not "latest",
+// not a SHA digest).
+func isVersionTag(tag string) bool {
+	if tag == "" || tag == "latest" {
+		return false
+	}
+	if strings.HasPrefix(tag, "sha256:") {
+		return false
+	}
+	return true
+}
+
+// toSystemUpdateList maps detail items to the base SystemUpdate list, applying optional filters.
+func (s *Service) toSystemUpdateList(items []ContainerSystemUpdateDetail, status *SystemUpdateStatus, updateType *SystemUpdateType) SystemUpdateList {
+	result := make([]SystemUpdate, 0, len(items))
+	for _, item := range items {
+		if status != nil && item.Status != *status {
+			continue
+		}
+		if updateType != nil && SystemUpdateType(item.Type) != *updateType {
+			continue
+		}
+		result = append(result, SystemUpdate{
+			Id:             item.Id,
+			Name:           item.Name,
+			Type:           SystemUpdateType(item.Type),
+			Status:         item.Status,
+			CurrentVersion: item.CurrentVersion,
+			LatestVersion:  item.LatestVersion,
+			CheckedAt:      item.CheckedAt,
+		})
+	}
+	return SystemUpdateList{Items: result}
+}
+
+// String returns the string representation of a SystemUpdateStatus (used as a fallback version string).
+func (s SystemUpdateStatus) String() string {
+	return string(s)
 }
 
 // parseUptime converts a DSM uptime string "H:M:S" to total seconds.

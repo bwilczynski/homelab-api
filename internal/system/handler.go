@@ -66,3 +66,63 @@ func (h *ServerHandler) ListSystemUtilization(ctx context.Context, request ListS
 	}
 	return ListSystemUtilization200JSONResponse(result), nil
 }
+
+// ListSystemUpdates implements StrictServerInterface.
+func (h *ServerHandler) ListSystemUpdates(ctx context.Context, request ListSystemUpdatesRequestObject) (ListSystemUpdatesResponseObject, error) {
+	result, err := h.svc.ListSystemUpdates(ctx, request.Params.Status, request.Params.Type)
+	if err != nil {
+		detail := err.Error()
+		return ListSystemUpdates500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return ListSystemUpdates200JSONResponse(result), nil
+}
+
+// GetSystemUpdate implements StrictServerInterface.
+func (h *ServerHandler) GetSystemUpdate(ctx context.Context, request GetSystemUpdateRequestObject) (GetSystemUpdateResponseObject, error) {
+	detail, err := h.svc.GetSystemUpdate(ctx, request.UpdateId)
+	if err != nil {
+		d := err.Error()
+		return GetSystemUpdate500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &d,
+			},
+		}, nil
+	}
+	if detail == nil {
+		return GetSystemUpdate404ApplicationProblemPlusJSONResponse{
+			NotFoundApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNNotFound,
+				Title:  apierrors.TitleNotFound,
+				Status: 404,
+			},
+		}, nil
+	}
+	return GetSystemUpdate200JSONResponse(*detail), nil
+}
+
+// CheckSystemUpdates implements StrictServerInterface.
+func (h *ServerHandler) CheckSystemUpdates(ctx context.Context, request CheckSystemUpdatesRequestObject) (CheckSystemUpdatesResponseObject, error) {
+	result, err := h.svc.CheckSystemUpdates(ctx)
+	if err != nil {
+		detail := err.Error()
+		return CheckSystemUpdates500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return CheckSystemUpdates200JSONResponse(result), nil
+}

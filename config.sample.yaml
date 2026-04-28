@@ -21,3 +21,17 @@ backends:
     host: 192.168.1.1
     username: admin
     password: ${UNIFI_PASS}
+
+# Optional: map container images to their upstream GitHub release repos.
+# All containers with a version tag are discovered automatically from running backends.
+# Use this section only for images where the GitHub repo cannot be derived from the
+# image name (i.e. non-ghcr.io images, or ghcr.io images whose repo name differs
+# from the GitHub project — e.g. immich-app/immich-server → immich-app/immich).
+# updates:
+#   sources:
+#     - image: ghcr.io/immich-app/immich-server
+#       source: immich-app/immich
+#     - image: prom/prometheus
+#       source: prometheus/prometheus
+#     - image: grafana/grafana
+#       source: grafana/grafana

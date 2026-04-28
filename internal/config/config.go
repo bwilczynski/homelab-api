@@ -26,9 +26,23 @@ type Backend struct {
 	InsecureTLS bool        `yaml:"insecure_tls"` // optional; skip TLS certificate verification (defaults to false)
 }
 
+// ImageSourceConfig maps a container image (without tag) to its GitHub release source.
+// Containers with version tags are discovered automatically from running backends;
+// this config provides the GitHub repo to use when checking for newer versions.
+type ImageSourceConfig struct {
+	Image  string `yaml:"image"`  // image reference without tag, e.g. "ghcr.io/dani-garcia/vaultwarden"
+	Source string `yaml:"source"` // GitHub repo "owner/repo", e.g. "dani-garcia/vaultwarden"
+}
+
+// UpdatesConfig holds configuration for the software update tracking feature.
+type UpdatesConfig struct {
+	Sources []ImageSourceConfig `yaml:"sources"` // image → GitHub source mappings
+}
+
 // Config is the top-level configuration.
 type Config struct {
-	Backends []Backend `yaml:"backends"`
+	Backends []Backend     `yaml:"backends"`
+	Updates  UpdatesConfig `yaml:"updates"`
 }
 
 // Load reads and parses a YAML config file. Values containing ${VAR}

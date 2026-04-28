@@ -178,6 +178,7 @@ func main() {
 	systemSvc := system.NewService(
 		map[string]system.DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]system.UniFiBackend{"unifi": unifiHealth},
+		nil,
 	)
 	system.HandlerFromMux(system.NewStrictHandler(system.NewHandler(systemSvc), nil), r)
 
