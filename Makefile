@@ -43,4 +43,4 @@ contract-test: build-testserver ## Run contract tests (Schemathesis vs test serv
 	trap "kill $$TSPID 2>/dev/null" EXIT; \
 	READY=0; for i in 1 2 3 4 5; do curl -sf http://localhost:8081/system/health >/dev/null && READY=1 && break || sleep 1; done; \
 	[ $$READY -eq 1 ] || { echo "test server failed to start"; exit 1; }; \
-	schemathesis run $(SPEC_FILE) --base-url http://localhost:8081 --checks all --exclude-checks unsupported_method
+	schemathesis run $(SPEC_FILE) --url http://localhost:8081 --checks all --exclude-checks unsupported_method
