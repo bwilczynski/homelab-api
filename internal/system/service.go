@@ -474,7 +474,7 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 			}
 
 			item := ContainerSystemUpdateDetail{
-				Id:             c.Name,
+				Id:             de.device + "." + c.Name,
 				Name:           c.Name,
 				Type:           ContainerSystemUpdateDetailTypeContainer,
 				Status:         Unknown,
