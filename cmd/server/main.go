@@ -40,13 +40,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	synologyClients, unifiClients := buildClients(cfg)
+	synologyClients, unifiClients := buildClients(cfg, logger)
 	logger.Info("backends configured", "synology", len(synologyClients), "unifi", len(unifiClients))
 	for _, b := range cfg.Backends {
 		logger.Info("backend registered", "name", b.Name, "type", string(b.Type), "host", b.Host)
 	}
 
-	discoverAPIs(logger, synologyClients)
+	discoverAPIs(synologyClients)
 
 	monitor := health.NewMonitor(buildHealthCheckers(synologyClients, unifiClients), 30*time.Second, logger)
 	go monitor.Start(context.Background())

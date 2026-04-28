@@ -9,13 +9,13 @@ import (
 )
 
 // buildClients creates Synology and UniFi clients from a loaded config.
-func buildClients(cfg *config.Config) (map[string]*adapters.SynologyClient, map[string]*adapters.UniFiClient) {
+func buildClients(cfg *config.Config, logger *slog.Logger) (map[string]*adapters.SynologyClient, map[string]*adapters.UniFiClient) {
 	synologyClients := make(map[string]*adapters.SynologyClient)
 	unifiClients := make(map[string]*adapters.UniFiClient)
 	for _, b := range cfg.Backends {
 		switch b.Type {
 		case config.BackendTypeSynology:
-			synologyClients[b.Name] = adapters.NewSynologyClient(b.Host, b.Username, b.Password, b.AuthVersion, b.InsecureTLS)
+			synologyClients[b.Name] = adapters.NewSynologyClient(b.Name, b.Host, b.Username, b.Password, b.AuthVersion, b.InsecureTLS, logger)
 		case config.BackendTypeUniFi:
 			unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password, b.InsecureTLS)
 		}
@@ -24,24 +24,15 @@ func buildClients(cfg *config.Config) (map[string]*adapters.SynologyClient, map[
 }
 
 // discoverAPIs runs API discovery on all Synology clients in parallel.
-// On failure, each client marks itself as having no capabilities until it comes back online.
-func discoverAPIs(logger *slog.Logger, clients map[string]*adapters.SynologyClient) {
+// Each client logs its own outcome and retries automatically via Ping when the backend recovers.
+func discoverAPIs(clients map[string]*adapters.SynologyClient) {
 	var wg sync.WaitGroup
-	for name, client := range clients {
+	for _, client := range clients {
 		wg.Add(1)
-		go func(name string, client *adapters.SynologyClient) {
+		go func(client *adapters.SynologyClient) {
 			defer wg.Done()
-			if err := client.DiscoverAPIs(); err != nil {
-				logger.Warn("API discovery failed; capabilities unavailable until backend is reachable",
-					"backend", name, "err", err)
-			} else {
-				logger.Info("API discovery complete",
-					"backend", name,
-					"docker", client.SupportsAPI(adapters.APISynoDockerContainer),
-					"backup", client.SupportsAPI(adapters.APISynoBackupTask),
-				)
-			}
-		}(name, client)
+			_ = client.DiscoverAPIs()
+		}(client)
 	}
 	wg.Wait()
 }
