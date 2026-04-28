@@ -2,9 +2,23 @@ package system
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
+
+// systemUpdateDetailResponse is a hand-written response wrapper for GetSystemUpdate 200.
+// GetSystemUpdate200JSONResponse is defined as `type T SystemUpdateDetail`, which loses
+// the custom MarshalJSON on SystemUpdateDetail, causing {} to be serialised. This type
+// holds the original SystemUpdateDetail and delegates encoding to it directly.
+type systemUpdateDetailResponse struct{ detail SystemUpdateDetail }
+
+func (r systemUpdateDetailResponse) VisitGetSystemUpdateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	return json.NewEncoder(w).Encode(r.detail)
+}
 
 // ServerHandler implements StrictServerInterface by delegating to the Service.
 type ServerHandler struct {
@@ -107,7 +121,7 @@ func (h *ServerHandler) GetSystemUpdate(ctx context.Context, request GetSystemUp
 			},
 		}, nil
 	}
-	return GetSystemUpdate200JSONResponse(*detail), nil
+	return systemUpdateDetailResponse{*detail}, nil
 }
 
 // CheckSystemUpdates implements StrictServerInterface.
