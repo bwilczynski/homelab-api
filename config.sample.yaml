@@ -22,17 +22,35 @@ backends:
     username: admin
     password: ${UNIFI_PASS}
 
-# Optional: software update tracking configuration.
+# Software update tracking configuration.
 # All containers with a version tag are discovered automatically from running backends.
-# Use sources only for images where the GitHub repo cannot be derived from the image name
-# (i.e. non-ghcr.io images, or ghcr.io images whose repo name differs from the GitHub
-# project — e.g. ghcr.io/immich-app/immich-server → immich-app/immich).
-# updates:
-#   check_interval: 1h   # how often to refresh from upstream (default: 1h, e.g. 30m, 6h, 24h)
-#   sources:
-#     - image: ghcr.io/immich-app/immich-server
-#       source: immich-app/immich
-#     - image: prom/prometheus
-#       source: prometheus/prometheus
-#     - image: grafana/grafana
-#       source: grafana/grafana
+# ghcr.io/{owner}/{repo} images resolve automatically; use sources for everything else.
+updates:
+  # check_interval: 1h  # how often to refresh from upstream (default: 1h, e.g. 30m, 6h, 24h)
+  sources:
+    # Immich: monorepo — both server and ML images share the same GitHub release
+    - image: ghcr.io/immich-app/immich-server
+      source: immich-app/immich
+    - image: ghcr.io/immich-app/immich-machine-learning
+      source: immich-app/immich
+    # Vaultwarden: Docker Hub image name differs from GitHub repo
+    - image: vaultwarden/server
+      source: dani-garcia/vaultwarden
+    # UniFi: Docker Hub, repo name differs
+    - image: jacobalberty/unifi
+      source: jacobalberty/unifi-docker
+    # Grafana stack: Docker Hub images
+    - image: grafana/grafana
+      source: grafana/grafana
+    - image: grafana/loki
+      source: grafana/loki
+    - image: grafana/alloy
+      source: grafana/alloy
+    # Prometheus stack: Docker Hub images
+    - image: prom/prometheus
+      source: prometheus/prometheus
+    - image: prom/node-exporter
+      source: prometheus/node_exporter
+    # cAdvisor: GCR image
+    - image: gcr.io/cadvisor/cadvisor
+      source: google/cadvisor
