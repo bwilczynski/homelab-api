@@ -70,6 +70,22 @@ internal/
 
 Each API tag has its own oapi-codegen config (`oapi-codegen-{tag}.yaml`) that generates a chi-server interface, strict-server wrappers, and models into the corresponding domain package. Models are included per-package (no shared models package) since the bundled spec has all `$ref`s resolved inline.
 
+**Union/discriminator response types (`anyOf` + discriminator) require a hand-written response wrapper in `handler.go`.** oapi-codegen emits `type FooResponse SomeUnionType` — a new type definition, not an alias. Go does not carry method sets across type definitions, so `SomeUnionType.MarshalJSON()` is invisible when the generated `Visit*` method calls `json.NewEncoder(w).Encode(response)`. The encoder falls back to struct reflection, sees only the unexported `union json.RawMessage` field, and emits `{}`.
+
+Fix: in `handler.go`, define a small response type that holds the union value and delegates encoding to it:
+
+```go
+type myDetailResponse struct{ detail SomeUnionType }
+
+func (r myDetailResponse) VisitFooResponse(w http.ResponseWriter) error {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(200)
+    return json.NewEncoder(w).Encode(r.detail) // SomeUnionType.MarshalJSON fires correctly
+}
+```
+
+Return this type from the handler instead of the generated `Foo200JSONResponse`. This pattern applies to every endpoint whose 200 response schema uses `anyOf` + `discriminator` (e.g. `SystemUpdateDetail`).
+
 ## Spec is read-only
 
 The `spec/` submodule and all `api.gen.go` files are read-only in this repo. Never modify them here. If the spec seems wrong or incomplete, changes must go through the [homelab-api-spec](https://github.com/bwilczynski/homelab-api-spec) repo. This repo only implements the contract.
