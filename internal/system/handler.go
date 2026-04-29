@@ -83,6 +83,28 @@ func (h *ServerHandler) ListSystemUtilization(ctx context.Context, request ListS
 
 // ListSystemUpdates implements StrictServerInterface.
 func (h *ServerHandler) ListSystemUpdates(ctx context.Context, request ListSystemUpdatesRequestObject) (ListSystemUpdatesResponseObject, error) {
+	if s := request.Params.Status; s != nil && !s.Valid() {
+		detail := "Invalid value for parameter 'status': must be one of upToDate, updateAvailable, unknown."
+		return ListSystemUpdates400ApplicationProblemPlusJSONResponse{
+			BadRequestApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNBadRequest,
+				Title:  apierrors.TitleBadRequest,
+				Status: 400,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	if t := request.Params.Type; t != nil && !t.Valid() {
+		detail := "Invalid value for parameter 'type': must be one of container."
+		return ListSystemUpdates400ApplicationProblemPlusJSONResponse{
+			BadRequestApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNBadRequest,
+				Title:  apierrors.TitleBadRequest,
+				Status: 400,
+				Detail: &detail,
+			},
+		}, nil
+	}
 	result, err := h.svc.ListSystemUpdates(ctx, request.Params.Status, request.Params.Type)
 	if err != nil {
 		detail := err.Error()
