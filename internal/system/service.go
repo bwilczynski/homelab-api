@@ -525,6 +525,17 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 	// Phase 2: fetch all unique repos concurrently.
 	releases := fetchReleases(repos, s.logger)
 
+	// Build a lookup from the previous cache so we can preserve release data
+	// for repos where the GitHub API failed (e.g. rate-limited).
+	prevByID := make(map[string]ContainerSystemUpdateDetail)
+	s.mu.RLock()
+	if s.cache != nil {
+		for _, item := range s.cache.items {
+			prevByID[item.Id] = item
+		}
+	}
+	s.mu.RUnlock()
+
 	// Phase 3: assemble results.
 	items := make([]ContainerSystemUpdateDetail, 0, len(candidates))
 	for _, cc := range candidates {
@@ -552,6 +563,12 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 			} else {
 				item.Status = UpdateAvailable
 			}
+		} else if prev, ok := prevByID[item.Id]; ok && prev.Status != Unknown {
+			// GitHub API failed — preserve previous release data instead of downgrading to unknown.
+			item.Status = prev.Status
+			item.LatestVersion = prev.LatestVersion
+			item.ReleaseUrl = prev.ReleaseUrl
+			item.PublishedAt = prev.PublishedAt
 		}
 
 		items = append(items, item)

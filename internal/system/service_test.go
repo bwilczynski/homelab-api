@@ -466,6 +466,41 @@ func newTestServiceWithUpdates(dsm DSMBackend, sources map[string]string) *Servi
 	)
 }
 
+func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
+	svc := newTestServiceWithUpdates(&mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "app", Image: "ghcr.io/owner/repo:v1.0.0"},
+			},
+		},
+	}, nil)
+
+	// Seed cache with a known-good status.
+	svc.SeedUpdateCache([]ContainerSystemUpdateDetail{
+		{
+			Id: "nas-01.app", Name: "app",
+			Type: ContainerSystemUpdateDetailTypeContainer, Status: UpToDate,
+			Device: "nas-01", Image: "ghcr.io/owner/repo",
+			CurrentVersion: "v1.0.0", LatestVersion: "v1.0.0",
+			Source: "https://github.com/owner/repo", ReleaseUrl: "https://github.com/owner/repo/releases/tag/v1.0.0",
+		},
+	})
+
+	// Force a refresh — GitHub API is unreachable (no mock server),
+	// so fetchReleases will fail. Status should be preserved from cache.
+	result, err := svc.CheckSystemUpdates(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Status != UpToDate {
+		t.Errorf("expected status preserved as upToDate, got %s", result.Items[0].Status)
+	}
+}
+
 func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
 	svc := newTestServiceWithUpdates(&mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
