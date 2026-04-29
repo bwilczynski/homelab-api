@@ -384,6 +384,14 @@ func mapVolumeStatus(status string) HealthStatus {
 	}
 }
 
+// SeedUpdateCache pre-populates the update cache with the given items.
+// Intended for test servers that cannot reach upstream sources.
+func (s *Service) SeedUpdateCache(items []ContainerSystemUpdateDetail) {
+	s.mu.Lock()
+	s.cache = &updateCache{items: items, checkedAt: time.Now().UTC()}
+	s.mu.Unlock()
+}
+
 // ListSystemUpdates returns tracked containers and their update status.
 // Results are served from an in-memory cache; TTL is configured via check_interval (default 1h).
 func (s *Service) ListSystemUpdates(ctx context.Context, status *SystemUpdateStatus, updateType *SystemUpdateType) (SystemUpdateList, error) {
@@ -515,7 +523,7 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 	}
 
 	// Phase 2: fetch all unique repos concurrently.
-	releases := fetchReleases(repos)
+	releases := fetchReleases(repos, s.logger)
 
 	// Phase 3: assemble results.
 	items := make([]ContainerSystemUpdateDetail, 0, len(candidates))

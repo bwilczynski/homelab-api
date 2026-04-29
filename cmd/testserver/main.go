@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -185,6 +186,33 @@ func main() {
 		config.UpdatesConfig{},
 		slog.Default(),
 	)
+	now := time.Now().UTC()
+	systemSvc.SeedUpdateCache([]system.ContainerSystemUpdateDetail{
+		{
+			Id: "nas-01.immich_server", Name: "immich_server",
+			Type: system.ContainerSystemUpdateDetailTypeContainer, Status: system.UpdateAvailable,
+			Device: "nas-01", Image: "ghcr.io/immich-app/immich-server",
+			CurrentVersion: "v2.6.3", LatestVersion: "v2.7.0",
+			Source: "https://github.com/immich-app/immich", ReleaseUrl: "https://github.com/immich-app/immich/releases/tag/v2.7.0",
+			CheckedAt: now, PublishedAt: now,
+		},
+		{
+			Id: "nas-01.immich_machine_learning", Name: "immich_machine_learning",
+			Type: system.ContainerSystemUpdateDetailTypeContainer, Status: system.UpToDate,
+			Device: "nas-01", Image: "ghcr.io/immich-app/immich-machine-learning",
+			CurrentVersion: "v2.6.3", LatestVersion: "v2.6.3",
+			Source: "https://github.com/immich-app/immich", ReleaseUrl: "https://github.com/immich-app/immich/releases/tag/v2.6.3",
+			CheckedAt: now, PublishedAt: now,
+		},
+		{
+			Id: "nas-01.prometheus", Name: "prometheus",
+			Type: system.ContainerSystemUpdateDetailTypeContainer, Status: system.UpToDate,
+			Device: "nas-01", Image: "prom/prometheus",
+			CurrentVersion: "v3.2.1", LatestVersion: "v3.2.1",
+			Source: "https://github.com/prometheus/prometheus", ReleaseUrl: "https://github.com/prometheus/prometheus/releases/tag/v3.2.1",
+			CheckedAt: now, PublishedAt: now,
+		},
+	})
 	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,

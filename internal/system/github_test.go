@@ -2,6 +2,7 @@ package system
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,7 +101,7 @@ func TestFetchReleases_Deduplicates(t *testing.T) {
 		"dani-garcia/vaultwarden": {},
 		"grafana/grafana":         {},
 	}
-	results := fetchReleases(repos)
+	results := fetchReleases(repos, slog.Default())
 
 	if callCount != 2 {
 		t.Errorf("expected 2 HTTP calls for 2 unique repos, got %d", callCount)

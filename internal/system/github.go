@@ -3,6 +3,7 @@ package system
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -21,8 +22,8 @@ var (
 )
 
 // fetchReleases fetches the latest GitHub release for each unique repo concurrently.
-// Returns a map from "owner/repo" to the release (nil on error).
-func fetchReleases(repos map[string]struct{}) map[string]*githubRelease {
+// Returns a map from "owner/repo" to the release; repos that fail are omitted and logged.
+func fetchReleases(repos map[string]struct{}, logger *slog.Logger) map[string]*githubRelease {
 	results := make(map[string]*githubRelease, len(repos))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -35,6 +36,8 @@ func fetchReleases(repos map[string]struct{}) map[string]*githubRelease {
 			mu.Lock()
 			if err == nil {
 				results[repo] = release
+			} else {
+				logger.Warn("failed to fetch latest release", "repo", repo, "err", err)
 			}
 			mu.Unlock()
 		}(repo)
