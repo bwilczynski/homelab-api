@@ -455,6 +455,185 @@ func TestListSystemUtilization_DeviceFilter_NoMatch(t *testing.T) {
 	}
 }
 
+// --- Tests: ListSystemUpdates ---
+
+func newTestServiceWithUpdates(dsm DSMBackend, sources map[string]string) *Service {
+	return NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+	)
+}
+
+func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
+	svc := newTestServiceWithUpdates(&mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "app1", Image: "ghcr.io/owner/repo:1.2.3"},
+				{Name: "app2", Image: "ghcr.io/owner/repo:latest"},
+				{Name: "app3", Image: "ghcr.io/owner/other"},
+			},
+		},
+	}, nil)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only app1 has a version tag; latest and no-tag are excluded.
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Name != "app1" {
+		t.Errorf("expected app1, got %s", result.Items[0].Name)
+	}
+}
+
+func TestListSystemUpdates_StatusFilter(t *testing.T) {
+	svc := newTestServiceWithUpdates(&mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "a", Image: "ghcr.io/owner/repo:v1"},
+				{Name: "b", Image: "ghcr.io/other/lib:2.0"},
+			},
+		},
+	}, nil)
+
+	// Without GitHub server, all resolve to Unknown.
+	status := Unknown
+	result, err := svc.ListSystemUpdates(context.Background(), &status, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Errorf("expected 2 unknown items, got %d", len(result.Items))
+	}
+
+	status = UpToDate
+	result, err = svc.ListSystemUpdates(context.Background(), &status, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Errorf("expected 0 upToDate items, got %d", len(result.Items))
+	}
+}
+
+func TestListSystemUpdates_IDFormat(t *testing.T) {
+	svc := newTestServiceWithUpdates(&mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "vaultwarden", Image: "vaultwarden/server:1.32.0"},
+			},
+		},
+	}, nil)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Id != "nas-01.vaultwarden" {
+		t.Errorf("expected id nas-01.vaultwarden, got %s", result.Items[0].Id)
+	}
+}
+
+func TestListSystemUpdates_SkipsNonDockerBackend(t *testing.T) {
+	svc := NewService(
+		map[string]DSMBackendConfig{
+			"nas-01": {
+				Backend: &mockDSMBackend{
+					conts: &adapters.DSMContainerListResponse{
+						Containers: []adapters.DSMContainer{
+							{Name: "app", Image: "ghcr.io/owner/repo:v1"},
+						},
+					},
+				},
+				DockerEnabled: false,
+			},
+		},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+	)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Errorf("expected 0 items when docker disabled, got %d", len(result.Items))
+	}
+}
+
+// --- Tests: helper functions ---
+
+func TestSplitImageTag(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantImage string
+		wantTag   string
+	}{
+		{"ghcr.io/owner/repo:v1.2.3", "ghcr.io/owner/repo", "v1.2.3"},
+		{"nginx:latest", "nginx", "latest"},
+		{"nginx", "nginx", ""},
+		{"registry.io/img:sha256:abc", "registry.io/img:sha256", "abc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			img, tag := splitImageTag(tt.input)
+			if img != tt.wantImage || tag != tt.wantTag {
+				t.Errorf("splitImageTag(%q) = (%q, %q), want (%q, %q)", tt.input, img, tag, tt.wantImage, tt.wantTag)
+			}
+		})
+	}
+}
+
+func TestIsVersionTag(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"1.2.3", true},
+		{"v1.0.0", true},
+		{"latest", false},
+		{"", false},
+		{"sha256:abcdef", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			if got := isVersionTag(tt.tag); got != tt.want {
+				t.Errorf("isVersionTag(%q) = %v, want %v", tt.tag, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGithubRepoFromGHCR(t *testing.T) {
+	tests := []struct {
+		image    string
+		wantRepo string
+		wantOK   bool
+	}{
+		{"ghcr.io/immich-app/immich-server", "immich-app/immich-server", true},
+		{"ghcr.io/dani-garcia/vaultwarden", "dani-garcia/vaultwarden", true},
+		{"docker.io/grafana/grafana", "", false},
+		{"ghcr.io/solo", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.image, func(t *testing.T) {
+			repo, ok := githubRepoFromGHCR(tt.image)
+			if repo != tt.wantRepo || ok != tt.wantOK {
+				t.Errorf("githubRepoFromGHCR(%q) = (%q, %v), want (%q, %v)", tt.image, repo, ok, tt.wantRepo, tt.wantOK)
+			}
+		})
+	}
+}
+
 // --- Tests: parseUptime ---
 
 func TestParseUptime(t *testing.T) {
