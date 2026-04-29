@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -14,11 +15,36 @@ type githubRelease struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
+var githubClient = &http.Client{Timeout: 10 * time.Second}
+
+// fetchReleases fetches the latest GitHub release for each unique repo concurrently.
+// Returns a map from "owner/repo" to the release (nil on error).
+func fetchReleases(repos map[string]struct{}) map[string]*githubRelease {
+	results := make(map[string]*githubRelease, len(repos))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	for repo := range repos {
+		wg.Add(1)
+		go func(repo string) {
+			defer wg.Done()
+			release, err := fetchLatestRelease(repo)
+			mu.Lock()
+			if err == nil {
+				results[repo] = release
+			}
+			mu.Unlock()
+		}(repo)
+	}
+	wg.Wait()
+	return results
+}
+
 // fetchLatestRelease calls the GitHub releases API for the given "owner/repo"
 // and returns the latest release metadata.
 func fetchLatestRelease(repo string) (*githubRelease, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	resp, err := http.Get(url) //nolint:noctx
+	resp, err := githubClient.Get(url) //nolint:noctx
 	if err != nil {
 		return nil, fmt.Errorf("fetch release for %s: %w", repo, err)
 	}

@@ -58,8 +58,10 @@ type Service struct {
 	sources        map[string]string            // image (without tag) → GitHub "owner/repo"
 	updateCacheTTL time.Duration
 	logger         *slog.Logger
+	warnedImages   map[string]bool // images already warned about missing source
 	mu             sync.RWMutex
 	cache          *updateCache
+	refreshMu      sync.Mutex // serialises refreshUpdates calls to prevent stampede
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
@@ -95,6 +97,7 @@ func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[strin
 		sources:        srcMap,
 		updateCacheTTL: ttl,
 		logger:         logger,
+		warnedImages:   make(map[string]bool),
 	}
 	if len(monitor) > 0 {
 		svc.monitor = monitor[0]
@@ -422,7 +425,20 @@ func (s *Service) CheckSystemUpdates(ctx context.Context) (SystemUpdateList, err
 }
 
 // getUpdates returns cached update data, refreshing if the cache is stale.
+// Uses refreshMu to ensure only one goroutine refreshes at a time.
 func (s *Service) getUpdates(ctx context.Context) ([]ContainerSystemUpdateDetail, error) {
+	s.mu.RLock()
+	if s.cache != nil && time.Since(s.cache.checkedAt) < s.updateCacheTTL {
+		items := s.cache.items
+		s.mu.RUnlock()
+		return items, nil
+	}
+	s.mu.RUnlock()
+
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+
+	// Re-check after acquiring lock — another goroutine may have refreshed.
 	s.mu.RLock()
 	if s.cache != nil && time.Since(s.cache.checkedAt) < s.updateCacheTTL {
 		items := s.cache.items
@@ -441,11 +457,24 @@ func (s *Service) getUpdates(ctx context.Context) ([]ContainerSystemUpdateDetail
 	return items, nil
 }
 
+// containerCandidate holds pre-resolved data for a container before GitHub lookup.
+type containerCandidate struct {
+	device    string
+	name      string
+	image     string
+	tag       string
+	repo      string // GitHub "owner/repo"; empty if unresolved
+	sourceURL string
+}
+
 // refreshUpdates scans all Docker-enabled DSM backends for containers with version
 // tags, looks up the GitHub release source for each, and returns assembled details.
 func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDetail, error) {
 	checkedAt := time.Now().UTC()
-	var items []ContainerSystemUpdateDetail
+
+	// Phase 1: collect candidates and unique repos to fetch.
+	var candidates []containerCandidate
+	repos := make(map[string]struct{})
 
 	for _, de := range s.dsmBackends {
 		if !de.dockerEnabled {
@@ -465,50 +494,61 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 			}
 
 			githubRepo, sourceURL := s.resolveSource(image)
-			if githubRepo == "" {
+			if githubRepo == "" && !s.warnedImages[image] {
+				s.warnedImages[image] = true
 				s.logger.Warn("no GitHub source for container image; update status will be unknown",
 					"container", c.Name,
 					"image", image,
 					"hint", "add an entry under updates.sources in config.yaml",
 				)
 			}
-
-			item := ContainerSystemUpdateDetail{
-				Id:             de.device + "." + c.Name,
-				Name:           c.Name,
-				Type:           ContainerSystemUpdateDetailTypeContainer,
-				Status:         Unknown,
-				CurrentVersion: tag,
-				LatestVersion:  tag,
-				CheckedAt:      checkedAt,
-				Image:          image,
-				Device:         de.device,
-				Source:         sourceURL,
-				ReleaseUrl:     sourceURL + "/releases",
-				PublishedAt:    checkedAt,
-			}
-
 			if githubRepo != "" {
-				release, err := fetchLatestRelease(githubRepo)
-				if err == nil {
-					item.LatestVersion = release.TagName
-					item.ReleaseUrl = release.HTMLURL
-					item.PublishedAt = release.PublishedAt
-					if release.TagName == tag {
-						item.Status = UpToDate
-					} else {
-						item.Status = UpdateAvailable
-					}
-				}
+				repos[githubRepo] = struct{}{}
 			}
 
-			items = append(items, item)
+			candidates = append(candidates, containerCandidate{
+				device: de.device, name: c.Name,
+				image: image, tag: tag,
+				repo: githubRepo, sourceURL: sourceURL,
+			})
 		}
 	}
 
-	if items == nil {
-		items = []ContainerSystemUpdateDetail{}
+	// Phase 2: fetch all unique repos concurrently.
+	releases := fetchReleases(repos)
+
+	// Phase 3: assemble results.
+	items := make([]ContainerSystemUpdateDetail, 0, len(candidates))
+	for _, cc := range candidates {
+		item := ContainerSystemUpdateDetail{
+			Id:             cc.device + "." + cc.name,
+			Name:           cc.name,
+			Type:           ContainerSystemUpdateDetailTypeContainer,
+			Status:         Unknown,
+			CurrentVersion: cc.tag,
+			LatestVersion:  cc.tag,
+			CheckedAt:      checkedAt,
+			Image:          cc.image,
+			Device:         cc.device,
+			Source:         cc.sourceURL,
+			ReleaseUrl:     cc.sourceURL + "/releases",
+			PublishedAt:    checkedAt,
+		}
+
+		if release, ok := releases[cc.repo]; ok {
+			item.LatestVersion = release.TagName
+			item.ReleaseUrl = release.HTMLURL
+			item.PublishedAt = release.PublishedAt
+			if release.TagName == cc.tag {
+				item.Status = UpToDate
+			} else {
+				item.Status = UpdateAvailable
+			}
+		}
+
+		items = append(items, item)
 	}
+
 	return items, nil
 }
 
@@ -582,11 +622,6 @@ func (s *Service) toSystemUpdateList(items []ContainerSystemUpdateDetail, status
 		})
 	}
 	return SystemUpdateList{Items: result}
-}
-
-// String returns the string representation of a SystemUpdateStatus (used as a fallback version string).
-func (s SystemUpdateStatus) String() string {
-	return string(s)
 }
 
 // parseUptime converts a DSM uptime string "H:M:S" to total seconds.
