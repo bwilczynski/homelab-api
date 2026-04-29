@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
 
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
@@ -73,7 +74,7 @@ func main() {
 	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates, logger, monitor)
 	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
 		BaseRouter:       r,
-		ErrorHandlerFunc: problemBadRequestHandler,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Containers: all Synology backends; capability checked per-request via SupportsContainers.
@@ -84,7 +85,7 @@ func main() {
 	containersSvc := containers.NewService(containerBackends, monitor)
 	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
 		BaseRouter:       r,
-		ErrorHandlerFunc: problemBadRequestHandler,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Storage: all Synology backends.
@@ -95,7 +96,7 @@ func main() {
 	storageSvc := storage.NewService(storageBackends, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       r,
-		ErrorHandlerFunc: problemBadRequestHandler,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Backups: all Synology backends; capability checked per-request via SupportsBackups.
@@ -106,7 +107,7 @@ func main() {
 	backupsSvc := backups.NewService(backupBackends, monitor)
 	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
 		BaseRouter:       r,
-		ErrorHandlerFunc: problemBadRequestHandler,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Network: all UniFi backends.
@@ -117,7 +118,7 @@ func main() {
 	networkSvc := network.NewService(networkBackends, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       r,
-		ErrorHandlerFunc: problemBadRequestHandler,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	addr := ":8080"
