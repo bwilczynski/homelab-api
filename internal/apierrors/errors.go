@@ -7,9 +7,11 @@ var ErrNotFound = errors.New("not found")
 
 // RFC 9457 problem+json constants.
 const (
+	URNBadRequest          = "urn:homelab:error:bad-request"
 	URNNotFound            = "urn:homelab:error:not-found"
 	URNInternalServerError = "urn:homelab:error:internal-server-error"
 
+	TitleBadRequest          = "Bad Request"
 	TitleNotFound            = "Not Found"
 	TitleInternalServerError = "Internal Server Error"
 )

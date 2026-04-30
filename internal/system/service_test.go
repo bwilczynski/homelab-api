@@ -3,10 +3,14 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/config"
 )
 
 // --- Mock backends ---
@@ -117,6 +121,8 @@ func newTestService(dsm DSMBackend, unifi UniFiBackend) *Service {
 	return NewService(
 		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]UniFiBackend{"unifi": unifi},
+		config.UpdatesConfig{},
+		slog.Default(),
 	)
 }
 
@@ -448,6 +454,266 @@ func TestListSystemUtilization_DeviceFilter_NoMatch(t *testing.T) {
 
 	if len(result.Items) != 0 {
 		t.Errorf("expected 0 items for non-matching device, got %d", len(result.Items))
+	}
+}
+
+// --- Tests: ListSystemUpdates ---
+
+// overrideGitHubClient swaps the package-level githubBaseURL and githubClient
+// to point at the given test server, restoring originals via t.Cleanup.
+func overrideGitHubClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	origBaseURL := githubBaseURL
+	origClient := githubClient
+	githubBaseURL = srv.URL
+	githubClient = srv.Client()
+	t.Cleanup(func() {
+		srv.Close()
+		githubBaseURL = origBaseURL
+		githubClient = origClient
+	})
+}
+
+// mockGitHubServer creates an httptest server that serves the GitHub release fixture
+// and swaps the package-level githubBaseURL and githubClient for the test duration.
+func mockGitHubServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	fixture, err := os.ReadFile("testdata/github-release-latest.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+	overrideGitHubClient(t, srv)
+	return srv
+}
+
+func newTestServiceWithUpdates(t *testing.T, dsm DSMBackend) *Service {
+	t.Helper()
+	mockGitHubServer(t)
+	return NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+	)
+}
+
+func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
+	// Set up a mock server that always returns 429 to simulate rate limiting.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	overrideGitHubClient(t, srv)
+
+	svc := NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: &mockDSMBackend{
+			conts: &adapters.DSMContainerListResponse{
+				Containers: []adapters.DSMContainer{
+					{Name: "app", Image: "ghcr.io/owner/repo:v1.0.0"},
+				},
+			},
+		}, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+	)
+
+	// Seed cache with a known-good status.
+	svc.SeedUpdateCache([]ContainerSystemUpdateDetail{
+		{
+			Id: "nas-01.app", Name: "app",
+			Type: ContainerSystemUpdateDetailTypeContainer, Status: UpToDate,
+			Device: "nas-01", Image: "ghcr.io/owner/repo",
+			CurrentVersion: "v1.0.0", LatestVersion: "v1.0.0",
+			Source: "https://github.com/owner/repo", ReleaseUrl: "https://github.com/owner/repo/releases/tag/v1.0.0",
+		},
+	})
+
+	// Force a refresh — GitHub API returns 429,
+	// so fetchReleases will fail. Status should be preserved from cache.
+	result, err := svc.CheckSystemUpdates(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Status != UpToDate {
+		t.Errorf("expected status preserved as upToDate, got %s", result.Items[0].Status)
+	}
+}
+
+func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
+	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "app1", Image: "ghcr.io/owner/repo:1.2.3"},
+				{Name: "app2", Image: "ghcr.io/owner/repo:latest"},
+				{Name: "app3", Image: "ghcr.io/owner/other"},
+			},
+		},
+	})
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Only app1 has a version tag; latest and no-tag are excluded.
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Name != "app1" {
+		t.Errorf("expected app1, got %s", result.Items[0].Name)
+	}
+}
+
+func TestListSystemUpdates_StatusFilter(t *testing.T) {
+	// The fixture returns tag_name "1.35.8". Use one container matching
+	// (upToDate) and one not matching (updateAvailable) to test filtering.
+	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "a", Image: "ghcr.io/owner/repo:1.35.8"},  // matches fixture → upToDate
+				{Name: "b", Image: "ghcr.io/other/lib:1.0.0"},    // doesn't match → updateAvailable
+			},
+		},
+	})
+
+	status := UpToDate
+	result, err := svc.ListSystemUpdates(context.Background(), &status, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Errorf("expected 1 upToDate item, got %d", len(result.Items))
+	}
+
+	status = UpdateAvailable
+	result, err = svc.ListSystemUpdates(context.Background(), &status, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Errorf("expected 1 updateAvailable item, got %d", len(result.Items))
+	}
+}
+
+func TestListSystemUpdates_IDFormat(t *testing.T) {
+	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "vaultwarden", Image: "ghcr.io/dani-garcia/vaultwarden:1.32.0"},
+			},
+		},
+	})
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Id != "nas-01.vaultwarden" {
+		t.Errorf("expected id nas-01.vaultwarden, got %s", result.Items[0].Id)
+	}
+}
+
+func TestListSystemUpdates_SkipsNonDockerBackend(t *testing.T) {
+	svc := NewService(
+		map[string]DSMBackendConfig{
+			"nas-01": {
+				Backend: &mockDSMBackend{
+					conts: &adapters.DSMContainerListResponse{
+						Containers: []adapters.DSMContainer{
+							{Name: "app", Image: "ghcr.io/owner/repo:v1"},
+						},
+					},
+				},
+				DockerEnabled: false,
+			},
+		},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+	)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Errorf("expected 0 items when docker disabled, got %d", len(result.Items))
+	}
+}
+
+// --- Tests: helper functions ---
+
+func TestSplitImageTag(t *testing.T) {
+	tests := []struct {
+		input     string
+		wantImage string
+		wantTag   string
+	}{
+		{"ghcr.io/owner/repo:v1.2.3", "ghcr.io/owner/repo", "v1.2.3"},
+		{"nginx:latest", "nginx", "latest"},
+		{"nginx", "nginx", ""},
+		{"registry.io/img:sha256:abc", "registry.io/img:sha256", "abc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			img, tag := splitImageTag(tt.input)
+			if img != tt.wantImage || tag != tt.wantTag {
+				t.Errorf("splitImageTag(%q) = (%q, %q), want (%q, %q)", tt.input, img, tag, tt.wantImage, tt.wantTag)
+			}
+		})
+	}
+}
+
+func TestIsVersionTag(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"1.2.3", true},
+		{"v1.0.0", true},
+		{"latest", false},
+		{"", false},
+		{"sha256:abcdef", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.tag, func(t *testing.T) {
+			if got := isVersionTag(tt.tag); got != tt.want {
+				t.Errorf("isVersionTag(%q) = %v, want %v", tt.tag, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGithubRepoFromGHCR(t *testing.T) {
+	tests := []struct {
+		image    string
+		wantRepo string
+		wantOK   bool
+	}{
+		{"ghcr.io/immich-app/immich-server", "immich-app/immich-server", true},
+		{"ghcr.io/dani-garcia/vaultwarden", "dani-garcia/vaultwarden", true},
+		{"docker.io/grafana/grafana", "", false},
+		{"ghcr.io/solo", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.image, func(t *testing.T) {
+			repo, ok := githubRepoFromGHCR(tt.image)
+			if repo != tt.wantRepo || ok != tt.wantOK {
+				t.Errorf("githubRepoFromGHCR(%q) = (%q, %v), want (%q, %v)", tt.image, repo, ok, tt.wantRepo, tt.wantOK)
+			}
+		})
 	}
 }
 

@@ -10,12 +10,14 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/backups"
+	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
@@ -163,7 +165,10 @@ func main() {
 		resources: ptr(loadFixture[adapters.DSMContainerResourceResponse](base + "/containers/testdata/container_resources.json")),
 	}
 	containersSvc := containers.NewService(map[string]containers.ContainerBackend{"nas-01": cb})
-	containers.HandlerFromMux(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), r)
+	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// System
 	dsm := &mockDSMBackend{
@@ -178,15 +183,50 @@ func main() {
 	systemSvc := system.NewService(
 		map[string]system.DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]system.UniFiBackend{"unifi": unifiHealth},
+		config.UpdatesConfig{},
+		slog.Default(),
 	)
-	system.HandlerFromMux(system.NewStrictHandler(system.NewHandler(systemSvc), nil), r)
+	now := time.Now().UTC()
+	systemSvc.SeedUpdateCache([]system.ContainerSystemUpdateDetail{
+		{
+			Id: "nas-01.immich_server", Name: "immich_server",
+			Type: system.ContainerSystemUpdateDetailTypeContainer, Status: system.UpdateAvailable,
+			Device: "nas-01", Image: "ghcr.io/immich-app/immich-server",
+			CurrentVersion: "v2.6.3", LatestVersion: "v2.7.0",
+			Source: "https://github.com/immich-app/immich", ReleaseUrl: "https://github.com/immich-app/immich/releases/tag/v2.7.0",
+			CheckedAt: now, PublishedAt: now,
+		},
+		{
+			Id: "nas-01.immich_machine_learning", Name: "immich_machine_learning",
+			Type: system.ContainerSystemUpdateDetailTypeContainer, Status: system.UpToDate,
+			Device: "nas-01", Image: "ghcr.io/immich-app/immich-machine-learning",
+			CurrentVersion: "v2.6.3", LatestVersion: "v2.6.3",
+			Source: "https://github.com/immich-app/immich", ReleaseUrl: "https://github.com/immich-app/immich/releases/tag/v2.6.3",
+			CheckedAt: now, PublishedAt: now,
+		},
+		{
+			Id: "nas-01.prometheus", Name: "prometheus",
+			Type: system.ContainerSystemUpdateDetailTypeContainer, Status: system.UpToDate,
+			Device: "nas-01", Image: "prom/prometheus",
+			CurrentVersion: "v3.2.1", LatestVersion: "v3.2.1",
+			Source: "https://github.com/prometheus/prometheus", ReleaseUrl: "https://github.com/prometheus/prometheus/releases/tag/v3.2.1",
+			CheckedAt: now, PublishedAt: now,
+		},
+	})
+	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Storage
 	sb := &mockStorageBackend{
 		volumes: ptr(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
 	}
 	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb})
-	storage.HandlerFromMux(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), r)
+	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Backups
 	bb := &mockBackupBackend{
@@ -195,7 +235,10 @@ func main() {
 		logs:      ptr(loadFixture[adapters.DSMBackupLogListResponse](base + "/backups/testdata/backup_logs.json")),
 	}
 	backupsSvc := backups.NewService(map[string]backups.BackupBackend{"nas-01": bb})
-	backups.HandlerFromMux(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), r)
+	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Network
 	nb := &mockNetworkBackend{
@@ -203,7 +246,10 @@ func main() {
 		clients: loadFixture[[]adapters.UniFiSta](base + "/network/testdata/unifi-clients.json"),
 	}
 	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb})
-	network.HandlerFromMux(network.NewStrictHandler(network.NewHandler(networkSvc), nil), r)
+	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	addr := ":" + port()
 	logger.Info("starting test server", "addr", addr)

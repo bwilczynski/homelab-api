@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
 
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
@@ -70,8 +71,11 @@ func main() {
 	for name, client := range unifiClients {
 		unifiBackends[name] = client
 	}
-	systemSvc := system.NewService(dsmBackends, unifiBackends, monitor)
-	system.HandlerFromMux(system.NewStrictHandler(system.NewHandler(systemSvc), nil), r)
+	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates, logger, monitor)
+	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Containers: all Synology backends; capability checked per-request via SupportsContainers.
 	containerBackends := make(map[string]containers.ContainerBackend, len(synologyClients))
@@ -79,7 +83,10 @@ func main() {
 		containerBackends[name] = client
 	}
 	containersSvc := containers.NewService(containerBackends, monitor)
-	containers.HandlerFromMux(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), r)
+	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Storage: all Synology backends.
 	storageBackends := make(map[string]storage.StorageBackend, len(synologyClients))
@@ -87,7 +94,10 @@ func main() {
 		storageBackends[name] = client
 	}
 	storageSvc := storage.NewService(storageBackends, monitor)
-	storage.HandlerFromMux(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), r)
+	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Backups: all Synology backends; capability checked per-request via SupportsBackups.
 	backupBackends := make(map[string]backups.BackupBackend, len(synologyClients))
@@ -95,7 +105,10 @@ func main() {
 		backupBackends[name] = client
 	}
 	backupsSvc := backups.NewService(backupBackends, monitor)
-	backups.HandlerFromMux(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), r)
+	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	// Network: all UniFi backends.
 	networkBackends := make(map[string]network.UniFiBackend, len(unifiClients))
@@ -103,7 +116,10 @@ func main() {
 		networkBackends[name] = client
 	}
 	networkSvc := network.NewService(networkBackends, monitor)
-	network.HandlerFromMux(network.NewStrictHandler(network.NewHandler(networkSvc), nil), r)
+	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
 
 	addr := ":8080"
 	logger.Info("starting server", "addr", addr)
