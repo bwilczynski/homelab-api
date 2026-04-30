@@ -94,9 +94,9 @@ func TestFetchLatestRelease_ParsesAllFields(t *testing.T) {
 		t.Fatalf("parse fixture: %v", err)
 	}
 
-	var release githubRelease
+	var release GitHubRelease
 	if err := json.Unmarshal(fixture, &release); err != nil {
-		t.Fatalf("unmarshal into githubRelease: %v", err)
+		t.Fatalf("unmarshal into GitHubRelease: %v", err)
 	}
 
 	// tag_name

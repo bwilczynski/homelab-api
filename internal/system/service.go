@@ -44,10 +44,10 @@ type unifiEntry struct {
 	unifi      UniFiBackend
 }
 
-// updateCache holds the cached update results and when they were fetched.
-type updateCache struct {
-	items     []ContainerSystemUpdateDetail
-	checkedAt time.Time
+// githubReleasesCache holds cached GitHub release data indexed by "owner/repo".
+type githubReleasesCache struct {
+	releases  map[string]*GitHubRelease
+	fetchedAt time.Time
 }
 
 // Service implements system domain business logic.
@@ -60,8 +60,8 @@ type Service struct {
 	logger         *slog.Logger
 	warnedImages   map[string]bool // images already warned about missing source
 	mu             sync.RWMutex
-	cache          *updateCache
-	refreshMu      sync.Mutex // serialises refreshUpdates calls to prevent stampede
+	ghCache        *githubReleasesCache
+	refreshMu      sync.Mutex // serialises GitHub fetches to prevent stampede
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
@@ -384,11 +384,11 @@ func mapVolumeStatus(status string) HealthStatus {
 	}
 }
 
-// SeedUpdateCache pre-populates the update cache with the given items.
+// SeedGitHubReleases pre-populates the GitHub releases cache.
 // Intended for test servers that cannot reach upstream sources.
-func (s *Service) SeedUpdateCache(items []ContainerSystemUpdateDetail) {
+func (s *Service) SeedGitHubReleases(releases map[string]*GitHubRelease) {
 	s.mu.Lock()
-	s.cache = &updateCache{items: items, checkedAt: time.Now().UTC()}
+	s.ghCache = &githubReleasesCache{releases: releases, fetchedAt: time.Now().UTC()}
 	s.mu.Unlock()
 }
 
@@ -425,47 +425,17 @@ func (s *Service) CheckSystemUpdates(ctx context.Context) (SystemUpdateList, err
 	s.refreshMu.Lock()
 	defer s.refreshMu.Unlock()
 
-	items, err := s.refreshUpdates(ctx)
+	items, err := s.buildUpdateItems(ctx, true)
 	if err != nil {
 		return SystemUpdateList{}, err
 	}
-	s.mu.Lock()
-	s.cache = &updateCache{items: items, checkedAt: time.Now().UTC()}
-	s.mu.Unlock()
 	return s.toSystemUpdateList(items, nil, nil), nil
 }
 
-// getUpdates returns cached update data, refreshing if the cache is stale.
-// Uses refreshMu to ensure only one goroutine refreshes at a time.
+// getUpdates always scans DSM live for current container versions and returns assembled
+// update details. GitHub release data is served from cache when still within the TTL.
 func (s *Service) getUpdates(ctx context.Context) ([]ContainerSystemUpdateDetail, error) {
-	s.mu.RLock()
-	if s.cache != nil && time.Since(s.cache.checkedAt) < s.updateCacheTTL {
-		items := s.cache.items
-		s.mu.RUnlock()
-		return items, nil
-	}
-	s.mu.RUnlock()
-
-	s.refreshMu.Lock()
-	defer s.refreshMu.Unlock()
-
-	// Re-check after acquiring lock — another goroutine may have refreshed.
-	s.mu.RLock()
-	if s.cache != nil && time.Since(s.cache.checkedAt) < s.updateCacheTTL {
-		items := s.cache.items
-		s.mu.RUnlock()
-		return items, nil
-	}
-	s.mu.RUnlock()
-
-	items, err := s.refreshUpdates(ctx)
-	if err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	s.cache = &updateCache{items: items, checkedAt: time.Now().UTC()}
-	s.mu.Unlock()
-	return items, nil
+	return s.buildUpdateItems(ctx, false)
 }
 
 // containerCandidate holds pre-resolved data for a container before GitHub lookup.
@@ -478,12 +448,13 @@ type containerCandidate struct {
 	sourceURL string
 }
 
-// refreshUpdates scans all Docker-enabled DSM backends for containers with version
-// tags, looks up the GitHub release source for each, and returns assembled details.
-func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDetail, error) {
+// buildUpdateItems scans all Docker-enabled DSM backends live for current container
+// versions and assembles update details using GitHub release data.
+// When forceGitHub is true the GitHub cache is bypassed; otherwise it is used if fresh.
+func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]ContainerSystemUpdateDetail, error) {
 	checkedAt := time.Now().UTC()
 
-	// Phase 1: collect candidates and unique repos to fetch.
+	// Phase 1: always scan DSM live so CurrentVersion reflects the running container.
 	var candidates []containerCandidate
 	repos := make(map[string]struct{})
 
@@ -525,19 +496,8 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 		}
 	}
 
-	// Phase 2: fetch all unique repos concurrently.
-	releases := fetchReleases(repos, s.logger)
-
-	// Build a lookup from the previous cache so we can preserve release data
-	// for repos where the GitHub API failed (e.g. rate-limited).
-	prevByID := make(map[string]ContainerSystemUpdateDetail)
-	s.mu.RLock()
-	if s.cache != nil {
-		for _, item := range s.cache.items {
-			prevByID[item.Id] = item
-		}
-	}
-	s.mu.RUnlock()
+	// Phase 2: get GitHub releases — cached or fresh depending on TTL and forceGitHub.
+	releases := s.getOrFetchReleases(repos, forceGitHub)
 
 	// Phase 3: assemble results.
 	items := make([]ContainerSystemUpdateDetail, 0, len(candidates))
@@ -566,18 +526,65 @@ func (s *Service) refreshUpdates(_ context.Context) ([]ContainerSystemUpdateDeta
 			} else {
 				item.Status = UpdateAvailable
 			}
-		} else if prev, ok := prevByID[item.Id]; ok && prev.Status != Unknown {
-			// GitHub API failed — preserve previous release data instead of downgrading to unknown.
-			item.Status = prev.Status
-			item.LatestVersion = prev.LatestVersion
-			item.ReleaseUrl = prev.ReleaseUrl
-			item.PublishedAt = prev.PublishedAt
 		}
 
 		items = append(items, item)
 	}
 
 	return items, nil
+}
+
+// getOrFetchReleases returns GitHub release data for the given repos.
+// When forceGitHub is false it serves from the in-memory cache if still within the TTL.
+// Failed fetches preserve the previously cached release for the affected repo so that
+// a rate-limit or network error does not downgrade a known status to unknown.
+func (s *Service) getOrFetchReleases(repos map[string]struct{}, forceGitHub bool) map[string]*GitHubRelease {
+	if !forceGitHub {
+		s.mu.RLock()
+		if s.ghCache != nil && time.Since(s.ghCache.fetchedAt) < s.updateCacheTTL {
+			releases := s.ghCache.releases
+			s.mu.RUnlock()
+			return releases
+		}
+		s.mu.RUnlock()
+
+		// Cache stale: acquire refreshMu to prevent a fetch stampede.
+		s.refreshMu.Lock()
+		defer s.refreshMu.Unlock()
+
+		// Double-check after acquiring lock — another goroutine may have refreshed.
+		s.mu.RLock()
+		if s.ghCache != nil && time.Since(s.ghCache.fetchedAt) < s.updateCacheTTL {
+			releases := s.ghCache.releases
+			s.mu.RUnlock()
+			return releases
+		}
+		s.mu.RUnlock()
+	}
+
+	// Fetch fresh releases from GitHub.
+	fresh := fetchReleases(repos, s.logger)
+
+	// Merge into the previous cache: start with old entries so repos whose fetch
+	// failed (e.g. rate-limited) retain their last known release.
+	s.mu.Lock()
+	prevLen := 0
+	if s.ghCache != nil {
+		prevLen = len(s.ghCache.releases)
+	}
+	merged := make(map[string]*GitHubRelease, max(len(fresh), prevLen))
+	if s.ghCache != nil {
+		for k, v := range s.ghCache.releases {
+			merged[k] = v
+		}
+	}
+	for k, v := range fresh {
+		merged[k] = v // overwrite with successfully fetched releases
+	}
+	s.ghCache = &githubReleasesCache{releases: merged, fetchedAt: time.Now().UTC()}
+	s.mu.Unlock()
+
+	return merged
 }
 
 // resolveSource returns the GitHub "owner/repo" and a source URL for the given image.

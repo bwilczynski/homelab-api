@@ -522,19 +522,14 @@ func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
 		slog.Default(),
 	)
 
-	// Seed cache with a known-good status.
-	svc.SeedUpdateCache([]ContainerSystemUpdateDetail{
-		{
-			Id: "nas-01.app", Name: "app",
-			Type: ContainerSystemUpdateDetailTypeContainer, Status: UpToDate,
-			Device: "nas-01", Image: "ghcr.io/owner/repo",
-			CurrentVersion: "v1.0.0", LatestVersion: "v1.0.0",
-			Source: "https://github.com/owner/repo", ReleaseUrl: "https://github.com/owner/repo/releases/tag/v1.0.0",
-		},
+	// Seed GitHub releases cache with a known-good release.
+	svc.SeedGitHubReleases(map[string]*GitHubRelease{
+		"owner/repo": {TagName: "v1.0.0", HTMLURL: "https://github.com/owner/repo/releases/tag/v1.0.0"},
 	})
 
 	// Force a refresh — GitHub API returns 429,
-	// so fetchReleases will fail. Status should be preserved from cache.
+	// so fetchReleases will fail. Cached release data should be preserved:
+	// container v1.0.0 == release v1.0.0 → UpToDate.
 	result, err := svc.CheckSystemUpdates(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -545,6 +540,55 @@ func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
 	}
 	if result.Items[0].Status != UpToDate {
 		t.Errorf("expected status preserved as upToDate, got %s", result.Items[0].Status)
+	}
+}
+
+func TestListSystemUpdates_PicksUpNewVersionAfterUpgrade(t *testing.T) {
+	// Backend starts with container running v1.0.0.
+	backend := &mockDSMBackend{
+		conts: &adapters.DSMContainerListResponse{
+			Containers: []adapters.DSMContainer{
+				{Name: "app", Image: "ghcr.io/owner/repo:v1.0.0"},
+			},
+		},
+	}
+	// GitHub fixture returns tag_name "1.35.8", so v1.0.0 is behind.
+	svc := newTestServiceWithUpdates(t, backend)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].CurrentVersion != "v1.0.0" {
+		t.Errorf("expected CurrentVersion v1.0.0, got %s", result.Items[0].CurrentVersion)
+	}
+	if result.Items[0].Status != UpdateAvailable {
+		t.Errorf("expected updateAvailable before upgrade, got %s", result.Items[0].Status)
+	}
+
+	// Simulate upgrade: container now runs 1.35.8 (matches GitHub latest).
+	backend.conts = &adapters.DSMContainerListResponse{
+		Containers: []adapters.DSMContainer{
+			{Name: "app", Image: "ghcr.io/owner/repo:1.35.8"},
+		},
+	}
+
+	// Second call (still within TTL): DSM is scanned live, so new version is picked up immediately.
+	result, err = svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].CurrentVersion != "1.35.8" {
+		t.Errorf("expected CurrentVersion 1.35.8 after upgrade, got %s", result.Items[0].CurrentVersion)
+	}
+	if result.Items[0].Status != UpToDate {
+		t.Errorf("expected upToDate after upgrade, got %s", result.Items[0].Status)
 	}
 }
 
