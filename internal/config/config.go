@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -34,10 +35,43 @@ type Auth struct {
 	Audience string `yaml:"audience"`
 }
 
+// ImageSourceConfig maps a container image (without tag) to its GitHub release source.
+// Containers with version tags are discovered automatically from running backends;
+// this config provides the GitHub repo to use when checking for newer versions.
+type ImageSourceConfig struct {
+	Image  string `yaml:"image"`  // image reference without tag, e.g. "ghcr.io/dani-garcia/vaultwarden"
+	Source string `yaml:"source"` // GitHub repo "owner/repo", e.g. "dani-garcia/vaultwarden"
+}
+
+// UpdatesConfig holds configuration for the software update tracking feature.
+type UpdatesConfig struct {
+	Sources       []ImageSourceConfig `yaml:"sources"`        // image → GitHub source mappings
+	CheckInterval Duration            `yaml:"check_interval"` // how often to refresh from upstream (default: 1h)
+}
+
+// Duration wraps time.Duration to support YAML unmarshalling from strings like "30m" or "2h".
+type Duration struct {
+	time.Duration
+}
+
+func (d *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	if err := unmarshal(&s); err != nil {
+		return err
+	}
+	dur, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	d.Duration = dur
+	return nil
+}
+
 // Config is the top-level configuration.
 type Config struct {
-	Auth     Auth      `yaml:"auth"`
-	Backends []Backend `yaml:"backends"`
+	Auth     Auth          `yaml:"auth"`
+	Backends []Backend     `yaml:"backends"`
+	Updates  UpdatesConfig `yaml:"updates"`
 }
 
 // Load reads and parses a YAML config file. Values containing ${VAR}

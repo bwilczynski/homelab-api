@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/httplog/v3"
 	jwt "github.com/golang-jwt/jwt/v5"
 
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/auth"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
@@ -88,10 +89,11 @@ func main() {
 	for name, client := range unifiClients {
 		unifiBackends[name] = client
 	}
-	systemSvc := system.NewService(dsmBackends, unifiBackends, monitor)
+	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates, logger, monitor)
 	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
-		BaseRouter:  r,
-		Middlewares: []system.MiddlewareFunc{scopeMw},
+		BaseRouter:       r,
+		Middlewares:      []system.MiddlewareFunc{scopeMw},
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Containers: all Synology backends; capability checked per-request via SupportsContainers.
@@ -101,8 +103,9 @@ func main() {
 	}
 	containersSvc := containers.NewService(containerBackends, monitor)
 	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
-		BaseRouter:  r,
-		Middlewares: []containers.MiddlewareFunc{scopeMw},
+		BaseRouter:       r,
+		Middlewares:      []containers.MiddlewareFunc{scopeMw},
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Storage: all Synology backends.
@@ -112,8 +115,9 @@ func main() {
 	}
 	storageSvc := storage.NewService(storageBackends, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
-		BaseRouter:  r,
-		Middlewares: []storage.MiddlewareFunc{scopeMw},
+		BaseRouter:       r,
+		Middlewares:      []storage.MiddlewareFunc{scopeMw},
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Backups: all Synology backends; capability checked per-request via SupportsBackups.
@@ -123,8 +127,9 @@ func main() {
 	}
 	backupsSvc := backups.NewService(backupBackends, monitor)
 	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
-		BaseRouter:  r,
-		Middlewares: []backups.MiddlewareFunc{scopeMw},
+		BaseRouter:       r,
+		Middlewares:      []backups.MiddlewareFunc{scopeMw},
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	// Network: all UniFi backends.
@@ -134,8 +139,9 @@ func main() {
 	}
 	networkSvc := network.NewService(networkBackends, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
-		BaseRouter:  r,
-		Middlewares: []network.MiddlewareFunc{scopeMw},
+		BaseRouter:       r,
+		Middlewares:      []network.MiddlewareFunc{scopeMw},
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
 	addr := ":8080"
