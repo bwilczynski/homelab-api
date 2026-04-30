@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -68,6 +69,30 @@ func JWTMiddleware(cfg config.Auth, keyFunc jwt.Keyfunc) func(http.Handler) http
 func ScopeMiddleware(cfg config.Auth) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !cfg.Enabled {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			requiredScopes, ok := r.Context().Value("bearerAuth.Scopes").([]string)
+			if !ok || len(requiredScopes) == 0 {
+				writeProblem(w, http.StatusForbidden, apierrors.URNForbidden, apierrors.TitleForbidden, "No required scopes declared for this operation.")
+				return
+			}
+
+			tokenScopes, _ := r.Context().Value(tokenScopesKey).([]string)
+			scopeSet := make(map[string]bool, len(tokenScopes))
+			for _, s := range tokenScopes {
+				scopeSet[s] = true
+			}
+			for _, required := range requiredScopes {
+				if !scopeSet[required] {
+					writeProblem(w, http.StatusForbidden, apierrors.URNForbidden, apierrors.TitleForbidden,
+						fmt.Sprintf("Insufficient scopes. Required: %s.", strings.Join(requiredScopes, ", ")))
+					return
+				}
+			}
+
 			next.ServeHTTP(w, r)
 		})
 	}

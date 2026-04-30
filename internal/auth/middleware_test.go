@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"net/http"
@@ -156,5 +157,130 @@ func TestJWTMiddleware_ValidToken(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+// scopeTestHandler chains JWTMiddleware + ScopeMiddleware + okHandler.
+// It injects bearerAuth.Scopes into context before calling ScopeMiddleware,
+// simulating what the oapi-codegen ServerInterfaceWrapper does.
+func scopeTestHandler(cfg config.Auth, keyFunc jwt.Keyfunc, requiredScopes []string) http.Handler {
+	scopeMw := auth.ScopeMiddleware(cfg)
+	inner := scopeMw(okHandler)
+	// Wrap inner to inject the required scopes, simulating oapi-codegen's wrapper.
+	withScopes := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		if requiredScopes != nil {
+			ctx = context.WithValue(ctx, "bearerAuth.Scopes", requiredScopes)
+		}
+		inner.ServeHTTP(w, r.WithContext(ctx))
+	})
+	return auth.JWTMiddleware(cfg, keyFunc)(withScopes)
+}
+
+func TestScopeMiddleware_Disabled(t *testing.T) {
+	cfg := config.Auth{Enabled: false}
+	handler := scopeTestHandler(cfg, nil, []string{"read:containers"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestScopeMiddleware_NoRequiredScopes(t *testing.T) {
+	priv, pub := testKeyPair(t)
+	token := makeToken(t, priv, jwt.MapClaims{
+		"iss":   "https://test-issuer",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"scope": "read:containers",
+	})
+	handler := scopeTestHandler(authCfg(), staticKeyFunc(pub), nil) // nil = no scopes injected
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rec.Code)
+	}
+}
+
+func TestScopeMiddleware_SufficientScope(t *testing.T) {
+	priv, pub := testKeyPair(t)
+	token := makeToken(t, priv, jwt.MapClaims{
+		"iss":   "https://test-issuer",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"scope": "read:containers",
+	})
+	handler := scopeTestHandler(authCfg(), staticKeyFunc(pub), []string{"read:containers"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestScopeMiddleware_InsufficientScope(t *testing.T) {
+	priv, pub := testKeyPair(t)
+	token := makeToken(t, priv, jwt.MapClaims{
+		"iss":   "https://test-issuer",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"scope": "read:containers",
+	})
+	handler := scopeTestHandler(authCfg(), staticKeyFunc(pub), []string{"write:containers"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rec.Code)
+	}
+}
+
+func TestScopeMiddleware_MultipleScopes_AllPresent(t *testing.T) {
+	priv, pub := testKeyPair(t)
+	token := makeToken(t, priv, jwt.MapClaims{
+		"iss":   "https://test-issuer",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"scope": "read:containers write:containers read:system",
+	})
+	handler := scopeTestHandler(authCfg(), staticKeyFunc(pub), []string{"read:containers", "write:containers"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestScopeMiddleware_MultipleScopes_OneMissing(t *testing.T) {
+	priv, pub := testKeyPair(t)
+	token := makeToken(t, priv, jwt.MapClaims{
+		"iss":   "https://test-issuer",
+		"exp":   time.Now().Add(time.Hour).Unix(),
+		"scope": "read:containers",
+	})
+	handler := scopeTestHandler(authCfg(), staticKeyFunc(pub), []string{"read:containers", "write:containers"})
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rec.Code)
 	}
 }
