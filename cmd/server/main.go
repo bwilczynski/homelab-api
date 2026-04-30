@@ -7,9 +7,12 @@ import (
 	"os"
 	"time"
 
+	keyfunc "github.com/MicahParks/keyfunc/v3"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
+	jwt "github.com/golang-jwt/jwt/v5"
 
+	"github.com/bwilczynski/homelab-api/internal/auth"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
@@ -40,6 +43,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	var jwkKeyFunc jwt.Keyfunc
+	if cfg.Auth.Enabled {
+		k, err := keyfunc.NewDefault([]string{cfg.Auth.JWKSURL})
+		if err != nil {
+			logger.Error("failed to initialize JWKS", "err", err)
+			os.Exit(1)
+		}
+		jwkKeyFunc = k.Keyfunc
+		logger.Info("authorization enabled", "issuer", cfg.Auth.Issuer)
+	}
+
+	jwtMw := auth.JWTMiddleware(cfg.Auth, jwkKeyFunc)
+	scopeMw := auth.ScopeMiddleware(cfg.Auth)
+
 	synologyClients, unifiClients := buildClients(cfg, logger)
 	logger.Info("backends configured", "synology", len(synologyClients), "unifi", len(unifiClients))
 	for _, b := range cfg.Backends {
@@ -57,6 +74,7 @@ func main() {
 		Schema:        httplog.SchemaECS,
 		RecoverPanics: true,
 	}))
+	r.Use(jwtMw)
 
 	// System: all DSM + all UniFi backends.
 	dsmBackends := make(map[string]system.DSMBackendConfig, len(synologyClients))
@@ -71,7 +89,10 @@ func main() {
 		unifiBackends[name] = client
 	}
 	systemSvc := system.NewService(dsmBackends, unifiBackends, monitor)
-	system.HandlerFromMux(system.NewStrictHandler(system.NewHandler(systemSvc), nil), r)
+	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
+		BaseRouter:  r,
+		Middlewares: []system.MiddlewareFunc{scopeMw},
+	})
 
 	// Containers: all Synology backends; capability checked per-request via SupportsContainers.
 	containerBackends := make(map[string]containers.ContainerBackend, len(synologyClients))
@@ -79,7 +100,10 @@ func main() {
 		containerBackends[name] = client
 	}
 	containersSvc := containers.NewService(containerBackends, monitor)
-	containers.HandlerFromMux(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), r)
+	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
+		BaseRouter:  r,
+		Middlewares: []containers.MiddlewareFunc{scopeMw},
+	})
 
 	// Storage: all Synology backends.
 	storageBackends := make(map[string]storage.StorageBackend, len(synologyClients))
@@ -87,7 +111,10 @@ func main() {
 		storageBackends[name] = client
 	}
 	storageSvc := storage.NewService(storageBackends, monitor)
-	storage.HandlerFromMux(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), r)
+	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
+		BaseRouter:  r,
+		Middlewares: []storage.MiddlewareFunc{scopeMw},
+	})
 
 	// Backups: all Synology backends; capability checked per-request via SupportsBackups.
 	backupBackends := make(map[string]backups.BackupBackend, len(synologyClients))
@@ -95,7 +122,10 @@ func main() {
 		backupBackends[name] = client
 	}
 	backupsSvc := backups.NewService(backupBackends, monitor)
-	backups.HandlerFromMux(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), r)
+	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
+		BaseRouter:  r,
+		Middlewares: []backups.MiddlewareFunc{scopeMw},
+	})
 
 	// Network: all UniFi backends.
 	networkBackends := make(map[string]network.UniFiBackend, len(unifiClients))
@@ -103,7 +133,10 @@ func main() {
 		networkBackends[name] = client
 	}
 	networkSvc := network.NewService(networkBackends, monitor)
-	network.HandlerFromMux(network.NewStrictHandler(network.NewHandler(networkSvc), nil), r)
+	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
+		BaseRouter:  r,
+		Middlewares: []network.MiddlewareFunc{scopeMw},
+	})
 
 	addr := ":8080"
 	logger.Info("starting server", "addr", addr)
