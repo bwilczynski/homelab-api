@@ -7,10 +7,13 @@ import (
 	"os"
 	"time"
 
+	keyfunc "github.com/MicahParks/keyfunc/v3"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/httplog/v3"
+	jwt "github.com/golang-jwt/jwt/v5"
 
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
+	"github.com/bwilczynski/homelab-api/internal/auth"
 	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/containers"
@@ -41,6 +44,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	var jwkKeyFunc jwt.Keyfunc
+	if cfg.Auth.Enabled {
+		k, err := keyfunc.NewDefault([]string{cfg.Auth.JWKSURL})
+		if err != nil {
+			logger.Error("failed to initialize JWKS", "err", err)
+			os.Exit(1)
+		}
+		jwkKeyFunc = k.Keyfunc
+		logger.Info("authorization enabled", "issuer", cfg.Auth.Issuer)
+	}
+
+	jwtMw := auth.JWTMiddleware(cfg.Auth, jwkKeyFunc)
+	scopeMw := auth.ScopeMiddleware(cfg.Auth)
+
 	synologyClients, unifiClients := buildClients(cfg, logger)
 	logger.Info("backends configured", "synology", len(synologyClients), "unifi", len(unifiClients))
 	for _, b := range cfg.Backends {
@@ -58,6 +75,7 @@ func main() {
 		Schema:        httplog.SchemaECS,
 		RecoverPanics: true,
 	}))
+	r.Use(jwtMw)
 
 	// System: all DSM + all UniFi backends.
 	dsmBackends := make(map[string]system.DSMBackendConfig, len(synologyClients))
@@ -74,6 +92,7 @@ func main() {
 	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates, logger, monitor)
 	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
 		BaseRouter:       r,
+		Middlewares:      []system.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
@@ -85,6 +104,7 @@ func main() {
 	containersSvc := containers.NewService(containerBackends, monitor)
 	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
 		BaseRouter:       r,
+		Middlewares:      []containers.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
@@ -96,6 +116,7 @@ func main() {
 	storageSvc := storage.NewService(storageBackends, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       r,
+		Middlewares:      []storage.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
@@ -107,6 +128,7 @@ func main() {
 	backupsSvc := backups.NewService(backupBackends, monitor)
 	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
 		BaseRouter:       r,
+		Middlewares:      []backups.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
@@ -118,6 +140,7 @@ func main() {
 	networkSvc := network.NewService(networkBackends, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       r,
+		Middlewares:      []network.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 

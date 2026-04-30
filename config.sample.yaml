@@ -2,6 +2,14 @@
 # Copy this file to config.yaml and fill in your values.
 # Values can reference environment variables: ${VAR_NAME}
 
+# Authorization settings.
+# Set enabled: true and fill in issuer/jwks_url when you have an IdP deployed.
+auth:
+  enabled: false
+  issuer: https://idp.homelab.local
+  jwks_url: https://idp.homelab.local/.well-known/jwks.json
+  audience: homelab-api  # optional; omit or leave empty to skip audience validation
+
 backends:
   - name: nas-01
     type: synology

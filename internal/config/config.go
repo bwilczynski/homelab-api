@@ -27,6 +27,14 @@ type Backend struct {
 	InsecureTLS bool        `yaml:"insecure_tls"` // optional; skip TLS certificate verification (defaults to false)
 }
 
+// Auth holds JWT/JWKS authorization settings.
+type Auth struct {
+	Enabled  bool   `yaml:"enabled"`
+	Issuer   string `yaml:"issuer"`
+	JWKSURL  string `yaml:"jwks_url"`
+	Audience string `yaml:"audience"`
+}
+
 // ImageSourceConfig maps a container image (without tag) to its GitHub release source.
 // Containers with version tags are discovered automatically from running backends;
 // this config provides the GitHub repo to use when checking for newer versions.
@@ -61,6 +69,7 @@ func (d *Duration) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // Config is the top-level configuration.
 type Config struct {
+	Auth     Auth          `yaml:"auth"`
 	Backends []Backend     `yaml:"backends"`
 	Updates  UpdatesConfig `yaml:"updates"`
 }
@@ -88,6 +97,15 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) validate() error {
+	if c.Auth.Enabled {
+		if c.Auth.Issuer == "" {
+			return fmt.Errorf("auth.issuer is required when auth is enabled")
+		}
+		if c.Auth.JWKSURL == "" {
+			return fmt.Errorf("auth.jwks_url is required when auth is enabled")
+		}
+	}
+
 	if len(c.Backends) == 0 {
 		return fmt.Errorf("no backends configured")
 	}
