@@ -7,7 +7,7 @@ Add JWT-based authorization to all API endpoints. The OpenAPI spec already defin
 ## Key Decisions
 
 - **Token validation:** JWKS-based JWT verification with background key refresh
-- **Middleware placement:** Single chi router-level middleware for both token validation and scope checking
+- **Middleware placement:** Two middlewares — chi router-level for JWT validation, oapi-codegen operation-level for scope checking
 - **Dev mode:** Config toggle (`auth.enabled: false`) to bypass auth entirely during development
 - **Dependencies:** `golang-jwt/jwt/v5` for JWT parsing, `MicahParks/keyfunc/v3` for JWKS caching
 - **Error format:** RFC 9457 problem+json, consistent with existing `apierrors` patterns
@@ -45,7 +45,7 @@ type Auth struct {
 
 When `enabled: true`, the server fails to start if `issuer` or `jwks_url` are missing.
 
-## Auth Middleware
+## Auth Middlewares
 
 New package: `internal/auth/`
 
@@ -57,41 +57,60 @@ The generated code has three middleware layers:
 2. **`ServerInterfaceWrapper`** — injects `BearerAuthScopes` into context, then runs `ChiServerOptions.Middlewares` (type `MiddlewareFunc = func(http.Handler) http.Handler`).
 3. **`StrictMiddlewareFunc`** — runs inside the strict handler, after request unmarshaling.
 
-The auth middleware needs access to scopes in context, so it must be registered at layer 2 — via `HandlerWithOptions` with `ChiServerOptions.Middlewares`, not via `r.Use()`.
+Authorization is split across layers 1 and 2:
+
+- **Layer 1 (chi middleware):** JWT validation — extracts and validates the bearer token, stores parsed claims (including scopes) in context. Rejects unauthenticated requests early (401) before routing.
+- **Layer 2 (operation middleware):** Scope checking — reads required scopes from `BearerAuthScopes` context (set by generated wrapper), reads token scopes from context (set by layer 1), returns 403 if insufficient.
 
 ### `middleware.go`
 
-A middleware (`func(http.Handler) http.Handler`) registered via `ChiServerOptions.Middlewares` on each domain:
+Two middleware constructors:
+
+**`JWTMiddleware`** — chi router-level (`r.Use(...)`):
 
 1. If auth is disabled, call `next` immediately.
 2. Extract `Authorization: Bearer <token>` header; return 401 if missing or malformed.
 3. Parse and validate JWT using JWKS keyset (signature, expiry, issuer, audience).
 4. Extract scopes from the token's `scope` claim (space-delimited string per RFC 8693).
-5. Read required scopes from context (`BearerAuthScopes` — injected by oapi-codegen generated wrapper before this middleware runs).
-6. If no required scopes in context, allow through.
-7. Check that token scopes are a superset of required scopes; return 403 if insufficient.
-8. Call `next`.
-
-Constructor:
+5. Store token scopes in context (using a package-level context key).
+6. Call `next`.
 
 ```go
-func NewMiddleware(cfg config.Auth, jwks *keyfunc.Keyfunc) func(http.Handler) http.Handler
+func JWTMiddleware(cfg config.Auth, jwks jwt.Keyfunc) func(http.Handler) http.Handler
 ```
 
-When `cfg.Enabled` is `false`, `jwks` can be nil — the middleware short-circuits.
+**`ScopeMiddleware`** — operation-level via `ChiServerOptions.Middlewares`:
+
+1. If auth is disabled, call `next` immediately.
+2. Read required scopes from context (`BearerAuthScopes` — injected by oapi-codegen generated wrapper before this middleware runs).
+3. If no required scopes in context, allow through.
+4. Read token scopes from context (set by `JWTMiddleware`).
+5. Check that token scopes are a superset of required scopes; return 403 if insufficient.
+6. Call `next`.
+
+```go
+func ScopeMiddleware(cfg config.Auth) func(http.Handler) http.Handler
+```
+
+When `cfg.Enabled` is `false`, both middlewares short-circuit as no-ops.
 
 ### `middleware_test.go`
 
-Test cases:
+Test cases for `JWTMiddleware`:
 - Auth disabled: requests pass through without a token
 - Missing Authorization header → 401
 - Malformed Authorization header (not "Bearer ...") → 401
 - Expired token → 401
 - Invalid signature → 401
-- Valid token, missing required scope → 403
-- Valid token, correct scope → 200
-- Valid token, multiple required scopes, token has all → 200
-- Valid token, multiple required scopes, token missing one → 403
+- Valid token → 200, scopes stored in context
+
+Test cases for `ScopeMiddleware`:
+- Auth disabled: requests pass through
+- No required scopes in context → pass through
+- Valid token scopes, correct required scope → 200
+- Valid token scopes, missing required scope → 403
+- Multiple required scopes, token has all → 200
+- Multiple required scopes, token missing one → 403
 
 Tests generate RSA keys in-memory and sign test JWTs — no external JWKS endpoint needed.
 
@@ -140,19 +159,25 @@ On startup:
    - Validate that `issuer` and `jwks_url` are present; `log.Fatal` if not.
    - Initialize `keyfunc.NewDefault` with the JWKS URL (provides background refresh).
    - Perform initial JWKS fetch to fail fast if the endpoint is unreachable.
-3. Create auth middleware via `auth.NewMiddleware(cfg.Auth, jwksKeyfunc)`.
-4. Switch each domain from `HandlerFromMux` to `HandlerWithOptions`, passing the auth middleware via `ChiServerOptions.Middlewares`:
+3. Create both middlewares:
+   - `auth.JWTMiddleware(cfg.Auth, jwksKeyfunc.Keyfunc)` — register via `r.Use(...)` after request logger.
+   - `auth.ScopeMiddleware(cfg.Auth)` — pass to each domain via `ChiServerOptions.Middlewares`.
+4. Switch each domain from `HandlerFromMux` to `HandlerWithOptions`:
 
 ```go
-authMw := auth.NewMiddleware(cfg.Auth, jwksKeyfunc)
+jwtMw := auth.JWTMiddleware(cfg.Auth, jwksKeyfunc.Keyfunc)
+scopeMw := auth.ScopeMiddleware(cfg.Auth)
+
+r.Use(jwtMw)
+
 opts := system.ChiServerOptions{
     BaseRouter:  r,
-    Middlewares: []system.MiddlewareFunc{authMw},
+    Middlewares: []system.MiddlewareFunc{scopeMw},
 }
 system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), opts)
 ```
 
-Same pattern for all 5 domains (containers, storage, backups, network). The `MiddlewareFunc` type is identical across packages (`func(http.Handler) http.Handler`), so the same `authMw` value works for all.
+Same pattern for all 5 domains (containers, storage, backups, network). The `MiddlewareFunc` type is identical across packages (`func(http.Handler) http.Handler`), so the same `scopeMw` value works for all.
 
 ## Dependencies
 
@@ -166,7 +191,7 @@ Same pattern for all 5 domains (containers, storage, backups, network). The `Mid
 | `internal/config/config.go` | Add `Auth` struct and field to `Config` |
 | `config.sample.yaml` | Add `auth:` section |
 | `internal/apierrors/errors.go` | Add `URNUnauthorized`, `URNForbidden`, `TitleUnauthorized`, `TitleForbidden` |
-| `internal/auth/middleware.go` | New — auth middleware |
-| `internal/auth/middleware_test.go` | New — middleware tests |
-| `cmd/server/main.go` | Initialize JWKS, register auth middleware |
+| `internal/auth/middleware.go` | New — `JWTMiddleware` + `ScopeMiddleware` |
+| `internal/auth/middleware_test.go` | New — tests for both middlewares |
+| `cmd/server/main.go` | Initialize JWKS, register JWT middleware on router, scope middleware on each domain via `HandlerWithOptions` |
 | `go.mod` / `go.sum` | Add new dependencies |
