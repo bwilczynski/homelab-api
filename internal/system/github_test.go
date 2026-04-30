@@ -29,16 +29,7 @@ func TestFetchLatestRelease(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(fixture)
 	}))
-	defer srv.Close()
-
-	origClient := githubClient
-	origFn := githubBaseURL
-	githubBaseURL = srv.URL
-	githubClient = srv.Client()
-	defer func() {
-		githubClient = origClient
-		githubBaseURL = origFn
-	}()
+	overrideGitHubClient(t, srv)
 
 	release, err := fetchLatestRelease("dani-garcia/vaultwarden")
 	if err != nil {
@@ -60,16 +51,7 @@ func TestFetchLatestRelease_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
-	defer srv.Close()
-
-	origClient := githubClient
-	origFn := githubBaseURL
-	githubBaseURL = srv.URL
-	githubClient = srv.Client()
-	defer func() {
-		githubClient = origClient
-		githubBaseURL = origFn
-	}()
+	overrideGitHubClient(t, srv)
 
 	_, err := fetchLatestRelease("no-such/repo")
 	if err == nil {
@@ -86,16 +68,7 @@ func TestFetchReleases_Deduplicates(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(fixture)
 	}))
-	defer srv.Close()
-
-	origClient := githubClient
-	origFn := githubBaseURL
-	githubBaseURL = srv.URL
-	githubClient = srv.Client()
-	defer func() {
-		githubClient = origClient
-		githubBaseURL = origFn
-	}()
+	overrideGitHubClient(t, srv)
 
 	repos := map[string]struct{}{
 		"dani-garcia/vaultwarden": {},

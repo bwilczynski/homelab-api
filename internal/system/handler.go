@@ -16,7 +16,7 @@ type systemUpdateDetailResponse struct{ detail SystemUpdateDetail }
 
 func (r systemUpdateDetailResponse) VisitGetSystemUpdateResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	return json.NewEncoder(w).Encode(r.detail)
 }
 

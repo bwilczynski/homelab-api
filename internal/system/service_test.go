@@ -459,6 +459,21 @@ func TestListSystemUtilization_DeviceFilter_NoMatch(t *testing.T) {
 
 // --- Tests: ListSystemUpdates ---
 
+// overrideGitHubClient swaps the package-level githubBaseURL and githubClient
+// to point at the given test server, restoring originals via t.Cleanup.
+func overrideGitHubClient(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	origBaseURL := githubBaseURL
+	origClient := githubClient
+	githubBaseURL = srv.URL
+	githubClient = srv.Client()
+	t.Cleanup(func() {
+		srv.Close()
+		githubBaseURL = origBaseURL
+		githubClient = origClient
+	})
+}
+
 // mockGitHubServer creates an httptest server that serves the GitHub release fixture
 // and swaps the package-level githubBaseURL and githubClient for the test duration.
 func mockGitHubServer(t *testing.T) *httptest.Server {
@@ -472,17 +487,7 @@ func mockGitHubServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(fixture)
 	}))
-
-	origBaseURL := githubBaseURL
-	origClient := githubClient
-	githubBaseURL = srv.URL
-	githubClient = srv.Client()
-	t.Cleanup(func() {
-		srv.Close()
-		githubBaseURL = origBaseURL
-		githubClient = origClient
-	})
-
+	overrideGitHubClient(t, srv)
 	return srv
 }
 
@@ -502,15 +507,7 @@ func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
-	origBaseURL := githubBaseURL
-	origClient := githubClient
-	githubBaseURL = srv.URL
-	githubClient = srv.Client()
-	t.Cleanup(func() {
-		srv.Close()
-		githubBaseURL = origBaseURL
-		githubClient = origClient
-	})
+	overrideGitHubClient(t, srv)
 
 	svc := NewService(
 		map[string]DSMBackendConfig{"nas-01": {Backend: &mockDSMBackend{

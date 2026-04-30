@@ -422,6 +422,9 @@ func (s *Service) GetSystemUpdate(ctx context.Context, id string) (*SystemUpdate
 
 // CheckSystemUpdates forces a fresh upstream check and returns the full list.
 func (s *Service) CheckSystemUpdates(ctx context.Context) (SystemUpdateList, error) {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+
 	items, err := s.refreshUpdates(ctx)
 	if err != nil {
 		return SystemUpdateList{}, err
