@@ -83,7 +83,7 @@ func JWTMiddleware(cfg config.Auth, jwks jwt.Keyfunc) func(http.Handler) http.Ha
 
 1. If auth is disabled, call `next` immediately.
 2. Read required scopes from context (`BearerAuthScopes` — injected by oapi-codegen generated wrapper before this middleware runs).
-3. If no required scopes in context, allow through.
+3. If no required scopes in context, return 403 (deny by default — every operation must declare scopes).
 4. Read token scopes from context (set by `JWTMiddleware`).
 5. Check that token scopes are a superset of required scopes; return 403 if insufficient.
 6. Call `next`.
@@ -106,7 +106,7 @@ Test cases for `JWTMiddleware`:
 
 Test cases for `ScopeMiddleware`:
 - Auth disabled: requests pass through
-- No required scopes in context → pass through
+- No required scopes in context → 403 (deny by default)
 - Valid token scopes, correct required scope → 200
 - Valid token scopes, missing required scope → 403
 - Multiple required scopes, token has all → 200
