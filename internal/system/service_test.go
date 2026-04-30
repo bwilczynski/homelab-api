@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 
@@ -457,7 +459,36 @@ func TestListSystemUtilization_DeviceFilter_NoMatch(t *testing.T) {
 
 // --- Tests: ListSystemUpdates ---
 
-func newTestServiceWithUpdates(dsm DSMBackend, sources map[string]string) *Service {
+// mockGitHubServer creates an httptest server that serves the GitHub release fixture
+// and swaps the package-level githubBaseURL and githubClient for the test duration.
+func mockGitHubServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	fixture, err := os.ReadFile("testdata/github-release-latest.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(fixture)
+	}))
+
+	origBaseURL := githubBaseURL
+	origClient := githubClient
+	githubBaseURL = srv.URL
+	githubClient = srv.Client()
+	t.Cleanup(func() {
+		srv.Close()
+		githubBaseURL = origBaseURL
+		githubClient = origClient
+	})
+
+	return srv
+}
+
+func newTestServiceWithUpdates(t *testing.T, dsm DSMBackend) *Service {
+	t.Helper()
+	mockGitHubServer(t)
 	return NewService(
 		map[string]DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
 		map[string]UniFiBackend{},
@@ -467,13 +498,32 @@ func newTestServiceWithUpdates(dsm DSMBackend, sources map[string]string) *Servi
 }
 
 func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
-	svc := newTestServiceWithUpdates(&mockDSMBackend{
-		conts: &adapters.DSMContainerListResponse{
-			Containers: []adapters.DSMContainer{
-				{Name: "app", Image: "ghcr.io/owner/repo:v1.0.0"},
+	// Set up a mock server that always returns 429 to simulate rate limiting.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	origBaseURL := githubBaseURL
+	origClient := githubClient
+	githubBaseURL = srv.URL
+	githubClient = srv.Client()
+	t.Cleanup(func() {
+		srv.Close()
+		githubBaseURL = origBaseURL
+		githubClient = origClient
+	})
+
+	svc := NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: &mockDSMBackend{
+			conts: &adapters.DSMContainerListResponse{
+				Containers: []adapters.DSMContainer{
+					{Name: "app", Image: "ghcr.io/owner/repo:v1.0.0"},
+				},
 			},
-		},
-	}, nil)
+		}, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+	)
 
 	// Seed cache with a known-good status.
 	svc.SeedUpdateCache([]ContainerSystemUpdateDetail{
@@ -486,7 +536,7 @@ func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
 		},
 	})
 
-	// Force a refresh — GitHub API is unreachable (no mock server),
+	// Force a refresh — GitHub API returns 429,
 	// so fetchReleases will fail. Status should be preserved from cache.
 	result, err := svc.CheckSystemUpdates(context.Background())
 	if err != nil {
@@ -502,7 +552,7 @@ func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
 }
 
 func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
-	svc := newTestServiceWithUpdates(&mockDSMBackend{
+	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{
 				{Name: "app1", Image: "ghcr.io/owner/repo:1.2.3"},
@@ -510,7 +560,7 @@ func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
 				{Name: "app3", Image: "ghcr.io/owner/other"},
 			},
 		},
-	}, nil)
+	})
 
 	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
 	if err != nil {
@@ -527,43 +577,44 @@ func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
 }
 
 func TestListSystemUpdates_StatusFilter(t *testing.T) {
-	svc := newTestServiceWithUpdates(&mockDSMBackend{
+	// The fixture returns tag_name "1.35.8". Use one container matching
+	// (upToDate) and one not matching (updateAvailable) to test filtering.
+	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{
-				{Name: "a", Image: "ghcr.io/owner/repo:v1"},
-				{Name: "b", Image: "ghcr.io/other/lib:2.0"},
+				{Name: "a", Image: "ghcr.io/owner/repo:1.35.8"},  // matches fixture → upToDate
+				{Name: "b", Image: "ghcr.io/other/lib:1.0.0"},    // doesn't match → updateAvailable
 			},
 		},
-	}, nil)
+	})
 
-	// Without GitHub server, all resolve to Unknown.
-	status := Unknown
+	status := UpToDate
 	result, err := svc.ListSystemUpdates(context.Background(), &status, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result.Items) != 2 {
-		t.Errorf("expected 2 unknown items, got %d", len(result.Items))
+	if len(result.Items) != 1 {
+		t.Errorf("expected 1 upToDate item, got %d", len(result.Items))
 	}
 
-	status = UpToDate
+	status = UpdateAvailable
 	result, err = svc.ListSystemUpdates(context.Background(), &status, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result.Items) != 0 {
-		t.Errorf("expected 0 upToDate items, got %d", len(result.Items))
+	if len(result.Items) != 1 {
+		t.Errorf("expected 1 updateAvailable item, got %d", len(result.Items))
 	}
 }
 
 func TestListSystemUpdates_IDFormat(t *testing.T) {
-	svc := newTestServiceWithUpdates(&mockDSMBackend{
+	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{
-				{Name: "vaultwarden", Image: "vaultwarden/server:1.32.0"},
+				{Name: "vaultwarden", Image: "ghcr.io/dani-garcia/vaultwarden:1.32.0"},
 			},
 		},
-	}, nil)
+	})
 
 	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
 	if err != nil {
