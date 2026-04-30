@@ -592,6 +592,46 @@ func TestListSystemUpdates_PicksUpNewVersionAfterUpgrade(t *testing.T) {
 	}
 }
 
+func TestListSystemUpdates_UpToDateWhenVPrefixMismatch(t *testing.T) {
+	// GitHub releases often use a "v" prefix (e.g. "v11.5.2") while some Docker
+	// images omit it (e.g. grafana/grafana uses "11.5.2"). The status comparison
+	// must normalise both sides so an upgraded container is not stuck as updateAvailable.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// GitHub returns v-prefixed tag; Docker image has no v.
+		w.Write([]byte(`{"tag_name":"v11.5.2","html_url":"https://github.com/grafana/grafana/releases/tag/v11.5.2","published_at":"2025-01-01T00:00:00Z"}`))
+	}))
+	overrideGitHubClient(t, srv)
+
+	svc := NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: &mockDSMBackend{
+			conts: &adapters.DSMContainerListResponse{
+				Containers: []adapters.DSMContainer{
+					{Name: "grafana", Image: "grafana/grafana:11.5.2"},
+				},
+			},
+		}, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{
+			Sources: []config.ImageSourceConfig{
+				{Image: "grafana/grafana", Source: "grafana/grafana"},
+			},
+		},
+		slog.Default(),
+	)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Status != UpToDate {
+		t.Errorf("expected upToDate when container tag matches GitHub tag modulo v-prefix, got %s", result.Items[0].Status)
+	}
+}
+
 func TestListSystemUpdates_FiltersVersionTags(t *testing.T) {
 	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{

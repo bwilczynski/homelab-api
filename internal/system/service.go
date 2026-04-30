@@ -521,7 +521,7 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 			item.LatestVersion = release.TagName
 			item.ReleaseUrl = release.HTMLURL
 			item.PublishedAt = release.PublishedAt
-			if release.TagName == cc.tag {
+			if normalizeVersion(release.TagName) == normalizeVersion(cc.tag) {
 				item.Status = UpToDate
 			} else {
 				item.Status = UpdateAvailable
@@ -611,6 +611,12 @@ func githubRepoFromGHCR(image string) (string, bool) {
 		return "", false
 	}
 	return parts[0] + "/" + parts[1], true
+}
+
+// normalizeVersion strips a leading "v" so that "v1.2.3" and "1.2.3" compare equal.
+// Some GitHub release tags include the prefix while the corresponding Docker image tag does not.
+func normalizeVersion(v string) string {
+	return strings.TrimPrefix(v, "v")
 }
 
 // splitImageTag splits "registry/image:tag" into ("registry/image", "tag").
