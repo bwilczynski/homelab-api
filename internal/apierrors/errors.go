@@ -9,7 +9,11 @@ var ErrNotFound = errors.New("not found")
 const (
 	URNNotFound            = "urn:homelab:error:not-found"
 	URNInternalServerError = "urn:homelab:error:internal-server-error"
+	URNUnauthorized        = "urn:homelab:error:unauthorized"
+	URNForbidden           = "urn:homelab:error:forbidden"
 
 	TitleNotFound            = "Not Found"
 	TitleInternalServerError = "Internal Server Error"
+	TitleUnauthorized        = "Unauthorized"
+	TitleForbidden           = "Forbidden"
 )
