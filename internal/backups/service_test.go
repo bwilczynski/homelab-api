@@ -13,26 +13,30 @@ import (
 
 // mockBackupBackend implements BackupBackend for testing.
 type mockBackupBackend struct {
-	tasks     *adapters.DSMBackupTaskListResponse
-	scheduled *adapters.DSMTaskSchedulerListResponse
-	logs      *adapters.DSMBackupLogListResponse
-	tasksErr  error
-	schedErr  error
-	logsErr   error
+	tasks      *adapters.DSMBackupTaskListResponse
+	taskDetail *adapters.DSMBackupTaskDetailResponse
+	taskStatus *adapters.DSMBackupTaskStatusResponse
+	target     *adapters.DSMBackupTargetResponse
+	tasksErr   error
+	detailErr  error
+	statusErr  error
+	targetErr  error
 }
 
-func (m *mockBackupBackend) SupportsBackups() bool { return true }
+func (m *mockBackupBackend) SupportsBackups() bool    { return true }
+func (m *mockBackupBackend) Location() *time.Location { return time.UTC }
 
 func (m *mockBackupBackend) ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error) {
 	return m.tasks, m.tasksErr
 }
-
-func (m *mockBackupBackend) ListScheduledTasks() (*adapters.DSMTaskSchedulerListResponse, error) {
-	return m.scheduled, m.schedErr
+func (m *mockBackupBackend) GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error) {
+	return m.taskDetail, m.detailErr
 }
-
-func (m *mockBackupBackend) ListBackupLogs(taskID int) (*adapters.DSMBackupLogListResponse, error) {
-	return m.logs, m.logsErr
+func (m *mockBackupBackend) GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error) {
+	return m.taskStatus, m.statusErr
+}
+func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error) {
+	return m.target, m.targetErr
 }
 
 func loadFixture[T any](t *testing.T, path string) T {
@@ -52,10 +56,10 @@ func loadFixture[T any](t *testing.T, path string) T {
 
 func TestListBackupTasks(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
-	scheduled := loadFixture[adapters.DSMTaskSchedulerListResponse](t, "testdata/task_scheduler.json")
+	taskStatus := loadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
 
 	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks, scheduled: &scheduled},
+		"nas-01": &mockBackupBackend{tasks: &tasks, taskStatus: &taskStatus},
 	})
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -80,8 +84,8 @@ func TestListBackupTasks(t *testing.T) {
 	if task.Status != Idle {
 		t.Errorf("expected status idle, got %s", task.Status)
 	}
-	if task.LastResult != Unknown {
-		t.Errorf("expected lastResult unknown, got %s", task.LastResult)
+	if task.LastResult != Warning {
+		t.Errorf("expected lastResult Warning, got %s", task.LastResult)
 	}
 	if task.Type != "hyperBackup" {
 		t.Errorf("expected type hyperBackup, got %s", task.Type)
@@ -90,10 +94,9 @@ func TestListBackupTasks(t *testing.T) {
 
 func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
-	scheduled := loadFixture[adapters.DSMTaskSchedulerListResponse](t, "testdata/task_scheduler.json")
 
 	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks, scheduled: &scheduled},
+		"nas-01": &mockBackupBackend{tasks: &tasks},
 	})
 
 	// Matching device
@@ -120,8 +123,7 @@ func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 func TestListBackupTasksEmpty(t *testing.T) {
 	svc := NewService(map[string]BackupBackend{
 		"nas-01": &mockBackupBackend{
-			tasks:     &adapters.DSMBackupTaskListResponse{TaskList: []adapters.DSMBackupTask{}},
-			scheduled: &adapters.DSMTaskSchedulerListResponse{Tasks: []adapters.DSMScheduledTask{}},
+			tasks: &adapters.DSMBackupTaskListResponse{TaskList: []adapters.DSMBackupTask{}},
 		},
 	})
 
@@ -136,11 +138,17 @@ func TestListBackupTasksEmpty(t *testing.T) {
 
 func TestGetBackupTask(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
-	scheduled := loadFixture[adapters.DSMTaskSchedulerListResponse](t, "testdata/task_scheduler.json")
-	logs := loadFixture[adapters.DSMBackupLogListResponse](t, "testdata/backup_logs.json")
+	taskDetail := loadFixture[adapters.DSMBackupTaskDetailResponse](t, "testdata/backup_task_detail.json")
+	taskStatus := loadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
+	target := loadFixture[adapters.DSMBackupTargetResponse](t, "testdata/backup_target.json")
 
 	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks, scheduled: &scheduled, logs: &logs},
+		"nas-01": &mockBackupBackend{
+			tasks:      &tasks,
+			taskDetail: &taskDetail,
+			taskStatus: &taskStatus,
+			target:     &target,
+		},
 	})
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")
@@ -150,7 +158,6 @@ func TestGetBackupTask(t *testing.T) {
 	if detail == nil {
 		t.Fatal("expected task detail, got nil")
 	}
-
 	if detail.Id != "nas-01.3" {
 		t.Errorf("expected id nas-01.3, got %s", detail.Id)
 	}
@@ -164,25 +171,37 @@ func TestGetBackupTask(t *testing.T) {
 		t.Errorf("expected status idle, got %s", detail.Status)
 	}
 	if detail.LastResult != Warning {
-		t.Errorf("expected lastResult warning, got %s", detail.LastResult)
+		t.Errorf("expected lastResult Warning, got %s", detail.LastResult)
 	}
 	if detail.Type != "hyperBackup" {
 		t.Errorf("expected type hyperBackup, got %s", detail.Type)
 	}
+	if detail.LastRunAt == nil {
+		t.Error("expected lastRunAt to be set")
+	}
 	if detail.NextRunAt == nil {
 		t.Error("expected nextRunAt to be set")
 	}
-	if detail.LastRunAt == nil {
-		t.Error("expected lastRunAt to be set from logs")
+	if detail.Size == nil {
+		t.Error("expected size to be set")
+	}
+	if detail.Size != nil && *detail.Size != 3206674163 {
+		t.Errorf("expected size 3206674163, got %d", *detail.Size)
+	}
+	// Folders is *[]string — check the pointer and dereference
+	if detail.Folders == nil || len(*detail.Folders) == 0 {
+		t.Error("expected folders to be non-empty")
+	}
+	if detail.Folders != nil && len(*detail.Folders) > 0 && (*detail.Folders)[0] != "/volume1/docker" {
+		t.Errorf("expected first folder /volume1/docker, got %s", (*detail.Folders)[0])
 	}
 }
 
 func TestGetBackupTaskNotFound(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
-	scheduled := loadFixture[adapters.DSMTaskSchedulerListResponse](t, "testdata/task_scheduler.json")
 
 	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks, scheduled: &scheduled},
+		"nas-01": &mockBackupBackend{tasks: &tasks},
 	})
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.999")
@@ -222,7 +241,6 @@ func TestMapBackupStatus(t *testing.T) {
 		}
 	}
 }
-
 
 func TestMapBackupType(t *testing.T) {
 	tests := []struct {

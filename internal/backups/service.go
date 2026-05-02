@@ -14,9 +14,11 @@ import (
 // BackupBackend defines the adapter interface for backup operations.
 type BackupBackend interface {
 	SupportsBackups() bool
+	Location() *time.Location
 	ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error)
-	ListScheduledTasks() (*adapters.DSMTaskSchedulerListResponse, error)
-	ListBackupLogs(taskID int) (*adapters.DSMBackupLogListResponse, error)
+	GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error)
+	GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error)
+	GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error)
 }
 
 type deviceBackend struct {
@@ -72,18 +74,19 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 			continue
 		}
 
-		tasks, _, err := s.fetchBackupData(db.backend)
+		tasks, err := db.backend.ListBackupTasks()
 		if err != nil {
 			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
 		}
 
 		for _, t := range tasks.TaskList {
+			status, _ := db.backend.GetBackupTaskStatus(t.TaskID)
 			items = append(items, BackupTask{
 				Device:     db.device,
 				Id:         fmt.Sprintf("%s.%d", db.device, t.TaskID),
 				Name:       t.Name,
 				Status:     mapBackupStatus(t.State),
-				LastResult: mapBackupResult(nil),
+				LastResult: mapBackupResult(status),
 				Type:       mapBackupType(t.Type),
 			})
 		}
@@ -106,7 +109,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		return nil, err
 	}
 
-	tasks, _, err := s.fetchBackupData(backend)
+	tasks, err := backend.ListBackupTasks()
 	if err != nil {
 		return nil, fmt.Errorf("get backup task from %s: %w", device, err)
 	}
@@ -117,33 +120,53 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 			continue
 		}
 
+		loc := backend.Location()
+
+		status, _ := backend.GetBackupTaskStatus(t.TaskID)
+		detail, _ := backend.GetBackupTaskDetail(t.TaskID)
+		target, _ := backend.GetBackupTarget(t.TaskID)
+
+		var lastBkpSuccessTime, nextBkpTime string
+		if status != nil {
+			lastBkpSuccessTime = status.LastBkpSuccessTime
+			nextBkpTime = status.NextBkpTime
+		}
+		lastRunAt := parseBackupTime(lastBkpSuccessTime, loc)
+		nextRunAt := parseBackupTime(nextBkpTime, loc)
+
+		var size *int64
+		if target != nil {
+			v := target.UsedSize
+			size = &v
+		}
+
+		var folders *[]string
+		if detail != nil {
+			var fl []string
+			for _, f := range detail.Source.FolderList {
+				if f.FullPath != "" {
+					fl = append(fl, f.FullPath)
+				}
+			}
+			if len(fl) > 0 {
+				folders = &fl
+			}
+		}
+
 		return &BackupTaskDetail{
 			Device:     device,
 			Id:         compositeID,
 			Name:       t.Name,
 			Status:     mapBackupStatus(t.State),
-			LastResult: mapBackupResult(nil),
+			LastResult: mapBackupResult(status),
 			Type:       mapBackupType(t.Type),
-			NextRunAt:  nil,
-			LastRunAt:  nil,
+			LastRunAt:  lastRunAt,
+			NextRunAt:  nextRunAt,
+			Size:       size,
+			Folders:    folders,
 		}, nil
 	}
 	return nil, nil
-}
-
-// fetchBackupData retrieves backup tasks and scheduled tasks from a backend.
-func (s *Service) fetchBackupData(backend BackupBackend) (*adapters.DSMBackupTaskListResponse, *adapters.DSMTaskSchedulerListResponse, error) {
-	tasks, err := backend.ListBackupTasks()
-	if err != nil {
-		return nil, nil, fmt.Errorf("list backup tasks: %w", err)
-	}
-
-	scheduledTasks, err := backend.ListScheduledTasks()
-	if err != nil {
-		return nil, nil, fmt.Errorf("list scheduled tasks: %w", err)
-	}
-
-	return tasks, scheduledTasks, nil
 }
 
 // parseBackupTime parses a DSM backup timestamp in the format "2006/01/02 15:04"
