@@ -78,14 +78,12 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 		}
 
 		for _, t := range tasks.TaskList {
-			logs, _ := db.backend.ListBackupLogs(t.TaskID)
-			_, lastResult := findLastCompletion(logs)
 			items = append(items, BackupTask{
 				Device:     db.device,
 				Id:         fmt.Sprintf("%s.%d", db.device, t.TaskID),
 				Name:       t.Name,
 				Status:     mapBackupStatus(t.State),
-				LastResult: lastResult,
+				LastResult: mapBackupResult(nil),
 				Type:       mapBackupType(t.Type),
 			})
 		}
@@ -108,7 +106,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		return nil, err
 	}
 
-	tasks, scheduledTasks, err := s.fetchBackupData(backend)
+	tasks, _, err := s.fetchBackupData(backend)
 	if err != nil {
 		return nil, fmt.Errorf("get backup task from %s: %w", device, err)
 	}
@@ -119,20 +117,15 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 			continue
 		}
 
-		nextRunAt := findNextRunAt(t.Name, scheduledTasks)
-
-		logs, _ := backend.ListBackupLogs(t.TaskID)
-		lastRunAt, lastResult := findLastCompletion(logs)
-
 		return &BackupTaskDetail{
 			Device:     device,
 			Id:         compositeID,
 			Name:       t.Name,
 			Status:     mapBackupStatus(t.State),
-			LastResult: lastResult,
+			LastResult: mapBackupResult(nil),
 			Type:       mapBackupType(t.Type),
-			NextRunAt:  nextRunAt,
-			LastRunAt:  lastRunAt,
+			NextRunAt:  nil,
+			LastRunAt:  nil,
 		}, nil
 	}
 	return nil, nil
@@ -153,67 +146,40 @@ func (s *Service) fetchBackupData(backend BackupBackend) (*adapters.DSMBackupTas
 	return tasks, scheduledTasks, nil
 }
 
-// findNextRunAt finds the next scheduled trigger time for a backup task by name.
-// It looks for the primary backup action (not integrity checks).
-func findNextRunAt(taskName string, scheduled *adapters.DSMTaskSchedulerListResponse) *time.Time {
-	for _, st := range scheduled.Tasks {
-		if st.Name != taskName {
-			continue
-		}
-		// Skip integrity check tasks — only use primary backup schedule.
-		if strings.Contains(st.Action, "Integrity Check") {
-			continue
-		}
-		return parseSchedulerTime(st.NextTriggerTime)
+// parseBackupTime parses a DSM backup timestamp in the format "2006/01/02 15:04"
+// using the given location. Returns nil if s is empty or unparseable.
+// The returned time is in UTC.
+func parseBackupTime(s string, loc *time.Location) *time.Time {
+	if s == "" {
+		return nil
 	}
-	return nil
-}
-
-// findLastCompletion scans the log list (newest-first) for the most recent task
-// completion event and returns the run time and result.
-// It detects warnings by checking for warn-level entries between the completion
-// and the preceding "backup task started" entry.
-func findLastCompletion(logs *adapters.DSMBackupLogListResponse) (*time.Time, BackupTaskResult) {
-	if logs == nil {
-		return nil, Unknown
-	}
-	for i, entry := range logs.LogList {
-		lower := strings.ToLower(entry.Event)
-		if strings.Contains(lower, "backup task failed") {
-			return parseLogTime(entry.Time), Failed
-		}
-		if strings.Contains(lower, "backup task finished") {
-			t := parseLogTime(entry.Time)
-			for _, older := range logs.LogList[i+1:] {
-				if strings.Contains(strings.ToLower(older.Event), "backup task started") {
-					break
-				}
-				if older.Level == "warn" {
-					return t, Warning
-				}
-			}
-			return t, Success
-		}
-	}
-	return nil, Unknown
-}
-
-// parseSchedulerTime parses the DSM task scheduler time format "2006-01-02 15:04".
-func parseSchedulerTime(s string) *time.Time {
-	t, err := time.Parse("2006-01-02 15:04", s)
+	t, err := time.ParseInLocation("2006/01/02 15:04", s, loc)
 	if err != nil {
 		return nil
 	}
-	return &t
+	utc := t.UTC()
+	return &utc
 }
 
-// parseLogTime parses the DSM backup log time format "2006/01/02 15:04:05".
-func parseLogTime(s string) *time.Time {
-	t, err := time.Parse("2006/01/02 15:04:05", s)
-	if err != nil {
-		return nil
+// mapBackupResult converts a DSMBackupTaskStatusResponse to a BackupTaskResult.
+// "done" with a non-zero error code indicates a backup that completed with warnings.
+func mapBackupResult(status *adapters.DSMBackupTaskStatusResponse) BackupTaskResult {
+	if status == nil {
+		return Unknown
 	}
-	return &t
+	switch status.LastBkpResult {
+	case "done":
+		if status.LastBkpErrorCode != 0 {
+			return Warning
+		}
+		return Success
+	case "error":
+		return Failed
+	case "skip":
+		return Skipped
+	default:
+		return Unknown
+	}
 }
 
 // parseTaskID splits a composite ID "device.taskId" into its parts.

@@ -3,8 +3,10 @@ package backups
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
@@ -221,38 +223,6 @@ func TestMapBackupStatus(t *testing.T) {
 	}
 }
 
-func TestFindLastCompletion(t *testing.T) {
-	logs := loadFixture[adapters.DSMBackupLogListResponse](t, "testdata/backup_logs.json")
-
-	lastRun, result := findLastCompletion(&logs)
-	if lastRun == nil {
-		t.Error("expected lastRunAt from logs, got nil")
-	}
-	// Fixture has a warn-level entry within the run, so result should be Warning.
-	if result != Warning {
-		t.Errorf("expected Warning, got %s", result)
-	}
-}
-
-func TestFindLastCompletionEmpty(t *testing.T) {
-	lastRun, result := findLastCompletion(&adapters.DSMBackupLogListResponse{})
-	if lastRun != nil {
-		t.Errorf("expected nil time for empty logs, got %v", lastRun)
-	}
-	if result != Unknown {
-		t.Errorf("expected Unknown for empty logs, got %s", result)
-	}
-}
-
-func TestFindLastCompletionNil(t *testing.T) {
-	lastRun, result := findLastCompletion(nil)
-	if lastRun != nil {
-		t.Errorf("expected nil time for nil logs, got %v", lastRun)
-	}
-	if result != Unknown {
-		t.Errorf("expected Unknown for nil logs, got %s", result)
-	}
-}
 
 func TestMapBackupType(t *testing.T) {
 	tests := []struct {
@@ -303,19 +273,65 @@ func TestParseTaskID(t *testing.T) {
 	}
 }
 
-func TestFindNextRunAt(t *testing.T) {
-	scheduled := loadFixture[adapters.DSMTaskSchedulerListResponse](t, "testdata/task_scheduler.json")
-
-	// Task that has a matching scheduler entry
-	nextRun := findNextRunAt("Backup to LOCAL", &scheduled)
-	if nextRun == nil {
-		t.Error("expected nextRunAt for 'Backup to LOCAL', got nil")
+func TestParseBackupTime(t *testing.T) {
+	warsaw, err := time.LoadLocation("Europe/Warsaw")
+	if err != nil {
+		t.Fatalf("load timezone: %v", err)
 	}
 
-	// Task with no matching scheduler entry
-	nextRun = findNextRunAt("Nonexistent Task", &scheduled)
-	if nextRun != nil {
-		t.Errorf("expected nil for unknown task, got %v", nextRun)
+	tests := []struct {
+		input   string
+		loc     *time.Location
+		wantUTC string
+		wantNil bool
+	}{
+		{"2026/04/24 02:30", time.UTC, "2026-04-24T02:30:00Z", false},
+		// Europe/Warsaw in April is CEST = UTC+2; so 02:30 local = 00:30 UTC
+		{"2026/04/24 02:30", warsaw, "2026-04-24T00:30:00Z", false},
+		{"", time.UTC, "", true},
+		{"bad-format", time.UTC, "", true},
+	}
+
+	for _, tt := range tests {
+		result := parseBackupTime(tt.input, tt.loc)
+		if tt.wantNil {
+			if result != nil {
+				t.Errorf("parseBackupTime(%q) = %v, want nil", tt.input, result)
+			}
+			continue
+		}
+		if result == nil {
+			t.Errorf("parseBackupTime(%q, %s) = nil, want %s", tt.input, tt.loc, tt.wantUTC)
+			continue
+		}
+		got := result.UTC().Format(time.RFC3339)
+		if got != tt.wantUTC {
+			t.Errorf("parseBackupTime(%q, %s) = %s, want %s", tt.input, tt.loc, got, tt.wantUTC)
+		}
 	}
 }
 
+func TestMapBackupResult(t *testing.T) {
+	tests := []struct {
+		status *adapters.DSMBackupTaskStatusResponse
+		want   BackupTaskResult
+	}{
+		{nil, Unknown},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "done", LastBkpErrorCode: 0}, Success},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "done", LastBkpErrorCode: 4401}, Warning},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "error"}, Failed},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "skip"}, Skipped},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "other"}, Unknown},
+	}
+
+	for _, tt := range tests {
+		got := mapBackupResult(tt.status)
+		if got != tt.want {
+			label := "<nil>"
+			if tt.status != nil {
+				label = fmt.Sprintf("result=%q code=%d", tt.status.LastBkpResult, tt.status.LastBkpErrorCode)
+			}
+			t.Errorf("mapBackupResult(%s) = %s, want %s", label, got, tt.want)
+		}
+	}
+}
