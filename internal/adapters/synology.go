@@ -43,17 +43,22 @@ type SynologyClient struct {
 	mu              sync.RWMutex
 	supportedAPIs   map[string]bool // nil = not yet called; non-nil = discovery succeeded
 	discoveryFailed bool            // true when DiscoverAPIs was called but failed
+	loc             *time.Location  // timezone for parsing DSM local timestamps
 }
 
 // NewSynologyClient creates a new Synology DSM API client.
 // authVersion is the SYNO.API.Auth version to use for login (default "6"; use "3" for older DSM).
 // Set insecureTLS to true to skip TLS certificate verification (opt-in).
-func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS bool, logger *slog.Logger) *SynologyClient {
+// loc is the timezone location to use for parsing DSM timestamps (defaults to time.Local).
+func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS bool, logger *slog.Logger, loc *time.Location) *SynologyClient {
 	if authVersion == "" {
 		authVersion = "6"
 	}
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if loc == nil {
+		loc = time.Local
 	}
 	return &SynologyClient{
 		name:        name,
@@ -63,10 +68,17 @@ func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS b
 		authVersion: authVersion,
 		insecureTLS: insecureTLS,
 		logger:      logger,
+		loc:         loc,
 		client: &http.Client{
 			Transport: tlsTransport(insecureTLS),
 		},
 	}
+}
+
+// Location returns the timezone location configured for this client,
+// used to parse DSM timestamps that carry no UTC offset.
+func (c *SynologyClient) Location() *time.Location {
+	return c.loc
 }
 
 // SynologyResponse is the generic envelope for all DSM API responses.

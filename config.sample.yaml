@@ -16,6 +16,7 @@ backends:
     host: 192.168.1.10:5001
     username: admin
     password: ${NAS01_PASS}
+    # timezone: Europe/Warsaw  # optional; IANA name — defaults to server local TZ
 
   # Uncomment to add a second NAS:
   # - name: nas-02
