@@ -34,6 +34,19 @@ echo "--- SYNO.Core.TaskScheduler list ---" >&2
 curl -sk "https://${DSM_HOST}/webapi/entry.cgi?api=SYNO.Core.TaskScheduler&method=list&version=2&offset=0&limit=50&_sid=${SID}" \
   | tee scripts/responses/dsm-task-scheduler-raw.json | jq .
 
+FIRST_TASK_ID=$(jq -r '.data.task_list[0].task_id' scripts/responses/dsm-backup-tasks-raw.json)
+echo "--- SYNO.Backup.Task get (task_id=${FIRST_TASK_ID}) ---" >&2
+curl -sk "https://${DSM_HOST}/webapi/entry.cgi?api=SYNO.Backup.Task&method=get&version=1&task_id=${FIRST_TASK_ID}&additional=%5B%22repository%22%2C%22schedule%22%5D&_sid=${SID}" \
+  | tee scripts/responses/dsm-backup-task-get-raw.json | jq . >&2
+
+echo "--- SYNO.Backup.Task status (task_id=${FIRST_TASK_ID}) ---" >&2
+curl -sk "https://${DSM_HOST}/webapi/entry.cgi?api=SYNO.Backup.Task&method=status&version=1&task_id=${FIRST_TASK_ID}&blOnline=false&additional=%5B%22last_bkp_time%22%2C%22next_bkp_time%22%2C%22last_bkp_result%22%2C%22is_modified%22%2C%22last_bkp_progress%22%2C%22last_bkp_success_version%22%5D&_sid=${SID}" \
+  | tee scripts/responses/dsm-backup-task-status-raw.json | jq . >&2
+
+echo "--- SYNO.Backup.Target get (task_id=${FIRST_TASK_ID}) ---" >&2
+curl -sk "https://${DSM_HOST}/webapi/entry.cgi?api=SYNO.Backup.Target&method=get&version=1&task_id=${FIRST_TASK_ID}&additional=%5B%22is_online%22%2C%22used_size%22%2C%22check_task_key%22%2C%22check_auth%22%2C%22account_meta%22%5D&_sid=${SID}" \
+  | tee scripts/responses/dsm-backup-target-get-raw.json | jq . >&2
+
 # Logout
 curl -sk "https://${DSM_HOST}/webapi/entry.cgi?api=SYNO.API.Auth&method=logout&version=6&_sid=${SID}" > /dev/null
 echo "Logged out" >&2
