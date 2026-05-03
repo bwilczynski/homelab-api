@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/config"
@@ -15,7 +16,15 @@ func buildClients(cfg *config.Config, logger *slog.Logger) (map[string]*adapters
 	for _, b := range cfg.Backends {
 		switch b.Type {
 		case config.BackendTypeSynology:
-			synologyClients[b.Name] = adapters.NewSynologyClient(b.Name, b.Host, b.Username, b.Password, b.AuthVersion, b.InsecureTLS, logger)
+			loc := time.Local
+			if b.Timezone != "" {
+				if l, err := time.LoadLocation(b.Timezone); err != nil {
+					logger.Warn("invalid timezone, falling back to server local TZ", "backend", b.Name, "timezone", b.Timezone, "error", err)
+				} else {
+					loc = l
+				}
+			}
+			synologyClients[b.Name] = adapters.NewSynologyClient(b.Name, b.Host, b.Username, b.Password, b.AuthVersion, b.InsecureTLS, logger, loc)
 		case config.BackendTypeUniFi:
 			unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password, b.InsecureTLS)
 		}

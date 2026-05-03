@@ -43,17 +43,22 @@ type SynologyClient struct {
 	mu              sync.RWMutex
 	supportedAPIs   map[string]bool // nil = not yet called; non-nil = discovery succeeded
 	discoveryFailed bool            // true when DiscoverAPIs was called but failed
+	loc             *time.Location  // timezone for parsing DSM local timestamps
 }
 
 // NewSynologyClient creates a new Synology DSM API client.
 // authVersion is the SYNO.API.Auth version to use for login (default "6"; use "3" for older DSM).
 // Set insecureTLS to true to skip TLS certificate verification (opt-in).
-func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS bool, logger *slog.Logger) *SynologyClient {
+// loc is the timezone location to use for parsing DSM timestamps (defaults to time.Local).
+func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS bool, logger *slog.Logger, loc *time.Location) *SynologyClient {
 	if authVersion == "" {
 		authVersion = "6"
 	}
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if loc == nil {
+		loc = time.Local
 	}
 	return &SynologyClient{
 		name:        name,
@@ -63,10 +68,17 @@ func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS b
 		authVersion: authVersion,
 		insecureTLS: insecureTLS,
 		logger:      logger,
+		loc:         loc,
 		client: &http.Client{
 			Transport: tlsTransport(insecureTLS),
 		},
 	}
+}
+
+// Location returns the timezone location configured for this client,
+// used to parse DSM timestamps that carry no UTC offset.
+func (c *SynologyClient) Location() *time.Location {
+	return c.loc
 }
 
 // SynologyResponse is the generic envelope for all DSM API responses.
@@ -766,6 +778,47 @@ type DSMBackupLogEntry struct {
 	User  string `json:"user"`
 }
 
+// DSMBackupTaskDetailResponse is the data payload from SYNO.Backup.Task get
+// with additional=["repository","schedule"]. Used to retrieve source folders.
+type DSMBackupTaskDetailResponse struct {
+	TaskID int             `json:"task_id"`
+	Name   string          `json:"name"`
+	State  string          `json:"state"`
+	Source DSMBackupSource `json:"source"`
+}
+
+// DSMBackupSource holds source folder information for a backup task.
+type DSMBackupSource struct {
+	FolderList []DSMBackupFolderEntry `json:"folder_list"`
+}
+
+// DSMBackupFolderEntry is a single source folder entry in a backup task.
+type DSMBackupFolderEntry struct {
+	FullPath string `json:"fullPath"`
+}
+
+// DSMBackupTaskStatusResponse is the data payload from SYNO.Backup.Task status
+// with additional=["last_bkp_time","next_bkp_time","last_bkp_result","is_modified","last_bkp_progress","last_bkp_success_version"].
+// Provides timing and result for the most recent backup run.
+type DSMBackupTaskStatusResponse struct {
+	TaskID             int    `json:"task_id"`
+	State              string `json:"state"`
+	Status             string `json:"status"`
+	LastBkpResult      string `json:"last_bkp_result"`
+	LastBkpErrorCode   int    `json:"last_bkp_error_code"`
+	LastBkpSuccessTime string `json:"last_bkp_success_time"` // format: "2006/01/02 15:04", NAS local TZ
+	LastBkpTime        string `json:"last_bkp_time"`         // format: "2006/01/02 15:04", NAS local TZ
+	NextBkpTime        string `json:"next_bkp_time"`         // format: "2006/01/02 15:04", NAS local TZ
+	IsModified         bool   `json:"is_modified"`
+}
+
+// DSMBackupTargetResponse is the data payload from SYNO.Backup.Target get
+// with additional=["is_online","used_size","check_task_key","check_auth","account_meta"].
+type DSMBackupTargetResponse struct {
+	UsedSize int64 `json:"used_size"`
+	IsOnline bool  `json:"is_online"`
+}
+
 // ListBackupTasks retrieves all backup tasks from the Hyper Backup service.
 func (c *SynologyClient) ListBackupTasks() (*DSMBackupTaskListResponse, error) {
 	data, err := c.Call("SYNO.Backup.Task", "list", "1", nil)
@@ -808,6 +861,55 @@ func (c *SynologyClient) ListBackupLogs(taskID int) (*DSMBackupLogListResponse, 
 	var result DSMBackupLogListResponse
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("parse backup logs: %w", err)
+	}
+	return &result, nil
+}
+
+// GetBackupTaskDetail retrieves detailed task info (source folders, schedule) from SYNO.Backup.Task get.
+func (c *SynologyClient) GetBackupTaskDetail(taskID int) (*DSMBackupTaskDetailResponse, error) {
+	data, err := c.Call("SYNO.Backup.Task", "get", "1", url.Values{
+		"task_id":    {fmt.Sprintf("%d", taskID)},
+		"additional": {`["repository","schedule"]`},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result DSMBackupTaskDetailResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse backup task detail: %w", err)
+	}
+	return &result, nil
+}
+
+// GetBackupTaskStatus retrieves last/next run times and result from SYNO.Backup.Task status.
+func (c *SynologyClient) GetBackupTaskStatus(taskID int) (*DSMBackupTaskStatusResponse, error) {
+	data, err := c.Call("SYNO.Backup.Task", "status", "1", url.Values{
+		"task_id":    {fmt.Sprintf("%d", taskID)},
+		"blOnline":   {"false"},
+		"additional": {`["last_bkp_time","next_bkp_time","last_bkp_result","is_modified","last_bkp_progress","last_bkp_success_version"]`},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result DSMBackupTaskStatusResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse backup task status: %w", err)
+	}
+	return &result, nil
+}
+
+// GetBackupTarget retrieves backup target info (used size, online status) from SYNO.Backup.Target get.
+func (c *SynologyClient) GetBackupTarget(taskID int) (*DSMBackupTargetResponse, error) {
+	data, err := c.Call("SYNO.Backup.Target", "get", "1", url.Values{
+		"task_id":    {fmt.Sprintf("%d", taskID)},
+		"additional": {`["is_online","used_size","check_task_key","check_auth","account_meta"]`},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result DSMBackupTargetResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse backup target: %w", err)
 	}
 	return &result, nil
 }
