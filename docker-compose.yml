@@ -8,9 +8,7 @@ services:
     build: .
     ports:
       - "8080:8080"
-    env_file:
-      - path: .env
-        required: false
+    env_file: .env
     environment:
       - CONFIG_FILE=/config.yaml
     volumes:
