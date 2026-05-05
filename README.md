@@ -37,6 +37,21 @@ backends:
 
 Supported backend types: `synology`, `unifi`.
 
+### Authorization
+
+JWT-based authorization is optional. Set `auth.enabled: true` and point it at your OIDC provider:
+
+```yaml
+auth:
+  enabled: true
+  scopes_enabled: false   # enable when your IdP populates resource scopes
+  issuer: https://dex.homelab.local/dex
+  jwks_url: https://dex.homelab.local/dex/keys
+  audience: homelab-api   # optional
+```
+
+With `enabled: false` (default) all requests pass through without a token.
+
 ## Commands
 
 | Command | Description |
@@ -46,6 +61,17 @@ Supported backend types: `synology`, `unifi`.
 | `make run` | Run the server locally on `:8080` |
 | `make test` | Run tests |
 | `make lint` | Run `go vet` |
+
+## Local dev with Dex
+
+A Docker Compose file brings up the API and [Dex](https://dexidp.io/) together for testing the full auth flow:
+
+```sh
+# 1. Set auth settings in config.yaml (see Authorization section above — use jwks_url: http://dex:5556/dex/keys)
+docker compose up
+```
+
+Dex starts with a static password connector. Test user: `admin@homelab.local` / `password`.
 
 ## Project structure
 

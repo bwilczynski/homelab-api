@@ -52,6 +52,7 @@ internal/
   backups/            tag: backups  (backup tasks)
   network/            tag: network  (clients, devices)
   adapters/           Backend clients (Synology, UniFi)
+  auth/               JWT validation middleware + scope enforcement middleware
   apierrors/          Shared error sentinels and RFC 9457 problem+json constants
   health/             Background health monitor — probes backends periodically, services skip unreachable ones
   config/             YAML config loader with env-var expansion
@@ -65,6 +66,14 @@ internal/
 - Each backend service gets its own file under `internal/adapters/` (`synology.go`, `unifi.go`).
 - Adapters handle auth/credential exchange; handlers and service layer never see raw credentials.
 - Tests use JSON fixtures in `testdata/` directories, loaded via a generic `loadFixture[T]` helper that extracts the `.data` field from the Synology response envelope.
+
+## Authorization
+
+Auth is split across two chi middleware layers (see `internal/auth/middleware.go`):
+- `JWTMiddleware` — validates Bearer tokens via JWKS; registered via `r.Use(...)` before routing.
+- `ScopeMiddleware` — checks per-operation scopes from context; registered via `ChiServerOptions.Middlewares`.
+
+Both short-circuit to no-ops when `auth.enabled: false`. `ScopeMiddleware` additionally short-circuits when `auth.scopes_enabled: false` (used when the IdP doesn't populate resource scopes — e.g. Dex without custom scope config).
 
 ## Code generation
 
