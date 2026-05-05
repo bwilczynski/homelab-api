@@ -73,6 +73,10 @@ func ScopeMiddleware(cfg config.Auth) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+			if !cfg.ScopesEnabled {
+				next.ServeHTTP(w, r)
+				return
+			}
 
 			requiredScopes, ok := r.Context().Value("bearerAuth.Scopes").([]string)
 			if !ok || len(requiredScopes) == 0 {
