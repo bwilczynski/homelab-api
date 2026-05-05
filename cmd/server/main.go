@@ -89,7 +89,8 @@ func main() {
 		})
 	})
 
-	r.Use(jwtMw)
+	// Protected router — all domain routes require a valid JWT.
+	protected := r.With(jwtMw)
 
 	// System: all DSM + all UniFi backends.
 	dsmBackends := make(map[string]system.DSMBackendConfig, len(synologyClients))
@@ -105,7 +106,7 @@ func main() {
 	}
 	systemSvc := system.NewService(dsmBackends, unifiBackends, cfg.Updates, logger, monitor)
 	system.HandlerWithOptions(system.NewStrictHandler(system.NewHandler(systemSvc), nil), system.ChiServerOptions{
-		BaseRouter:       r,
+		BaseRouter:       protected,
 		Middlewares:      []system.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
@@ -117,7 +118,7 @@ func main() {
 	}
 	containersSvc := containers.NewService(containerBackends, monitor)
 	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
-		BaseRouter:       r,
+		BaseRouter:       protected,
 		Middlewares:      []containers.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
@@ -129,7 +130,7 @@ func main() {
 	}
 	storageSvc := storage.NewService(storageBackends, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
-		BaseRouter:       r,
+		BaseRouter:       protected,
 		Middlewares:      []storage.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
@@ -141,7 +142,7 @@ func main() {
 	}
 	backupsSvc := backups.NewService(backupBackends, monitor)
 	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
-		BaseRouter:       r,
+		BaseRouter:       protected,
 		Middlewares:      []backups.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
@@ -153,7 +154,7 @@ func main() {
 	}
 	networkSvc := network.NewService(networkBackends, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
-		BaseRouter:       r,
+		BaseRouter:       protected,
 		Middlewares:      []network.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
