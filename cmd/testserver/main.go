@@ -40,8 +40,6 @@ func loadFixture[T any](path string) T {
 	return envelope.Data
 }
 
-func ptr[T any](v T) *T { return &v }
-
 // containers.ContainerBackend
 type mockContainerBackend struct {
 	list      *adapters.DSMContainerListResponse
@@ -61,12 +59,14 @@ func (m *mockContainerBackend) checkContainer(name string) error {
 func (m *mockContainerBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
 	return m.list, nil
 }
+
 func (m *mockContainerBackend) GetContainer(name string) (*adapters.DSMContainerDetailResponse, error) {
 	if err := m.checkContainer(name); err != nil {
 		return nil, err
 	}
 	return m.detail, nil
 }
+
 func (m *mockContainerBackend) GetContainerResources() (*adapters.DSMContainerResourceResponse, error) {
 	return m.resources, nil
 }
@@ -86,12 +86,15 @@ type mockDSMBackend struct {
 func (m *mockDSMBackend) GetSystemInfo() (*adapters.DSMSystemInfoResponse, error) {
 	return m.info, nil
 }
+
 func (m *mockDSMBackend) GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error) {
 	return m.util, nil
 }
+
 func (m *mockDSMBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
 	return m.volumes, nil
 }
+
 func (m *mockDSMBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
 	return m.containers, nil
 }
@@ -122,18 +125,21 @@ type mockBackupBackend struct {
 	target     *adapters.DSMBackupTargetResponse
 }
 
-func (m *mockBackupBackend) SupportsBackups() bool        { return true }
-func (m *mockBackupBackend) Location() *time.Location     { return time.UTC }
+func (m *mockBackupBackend) SupportsBackups() bool    { return true }
+func (m *mockBackupBackend) Location() *time.Location { return time.UTC }
 
 func (m *mockBackupBackend) ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error) {
 	return m.tasks, nil
 }
+
 func (m *mockBackupBackend) GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error) {
 	return m.taskDetail, nil
 }
+
 func (m *mockBackupBackend) GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error) {
 	return m.taskStatus, nil
 }
+
 func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error) {
 	return m.target, nil
 }
@@ -147,6 +153,7 @@ type mockNetworkBackend struct {
 func (m *mockNetworkBackend) GetDevices() ([]adapters.UniFiDevice, error) {
 	return m.devices, nil
 }
+
 func (m *mockNetworkBackend) GetClients() ([]adapters.UniFiSta, error) {
 	return m.clients, nil
 }
@@ -163,11 +170,11 @@ func main() {
 	r := chi.NewRouter()
 
 	// Containers
-	containerList := ptr(loadFixture[adapters.DSMContainerListResponse](base + "/containers/testdata/container_list.json"))
+	containerList := new(loadFixture[adapters.DSMContainerListResponse](base + "/containers/testdata/container_list.json"))
 	cb := &mockContainerBackend{
 		list:      containerList,
-		detail:    ptr(loadFixture[adapters.DSMContainerDetailResponse](base + "/containers/testdata/container_detail.json")),
-		resources: ptr(loadFixture[adapters.DSMContainerResourceResponse](base + "/containers/testdata/container_resources.json")),
+		detail:    new(loadFixture[adapters.DSMContainerDetailResponse](base + "/containers/testdata/container_detail.json")),
+		resources: new(loadFixture[adapters.DSMContainerResourceResponse](base + "/containers/testdata/container_resources.json")),
 	}
 	containersSvc := containers.NewService(map[string]containers.ContainerBackend{"nas-01": cb})
 	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
@@ -177,9 +184,9 @@ func main() {
 
 	// System
 	dsm := &mockDSMBackend{
-		info:       ptr(loadFixture[adapters.DSMSystemInfoResponse](base + "/system/testdata/dsm-system-info.json")),
-		util:       ptr(loadFixture[adapters.DSMSystemUtilizationResponse](base + "/system/testdata/dsm-system-utilization.json")),
-		volumes:    ptr(loadFixture[adapters.DSMStorageVolumeResponse](base + "/system/testdata/dsm-storage-volumes.json")),
+		info:       new(loadFixture[adapters.DSMSystemInfoResponse](base + "/system/testdata/dsm-system-info.json")),
+		util:       new(loadFixture[adapters.DSMSystemUtilizationResponse](base + "/system/testdata/dsm-system-utilization.json")),
+		volumes:    new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/system/testdata/dsm-storage-volumes.json")),
 		containers: containerList,
 	}
 	unifiHealth := &mockUniFiHealthBackend{
@@ -197,7 +204,7 @@ func main() {
 	)
 	now := time.Now().UTC()
 	systemSvc.SeedGitHubReleases(map[string]*system.GitHubRelease{
-		"immich-app/immich-server":          {TagName: "v2.7.0", HTMLURL: "https://github.com/immich-app/immich/releases/tag/v2.7.0", PublishedAt: now},
+		"immich-app/immich-server":           {TagName: "v2.7.0", HTMLURL: "https://github.com/immich-app/immich/releases/tag/v2.7.0", PublishedAt: now},
 		"immich-app/immich-machine-learning": {TagName: "v2.6.3", HTMLURL: "https://github.com/immich-app/immich/releases/tag/v2.6.3", PublishedAt: now},
 		"prometheus/prometheus":              {TagName: "v3.2.1", HTMLURL: "https://github.com/prometheus/prometheus/releases/tag/v3.2.1", PublishedAt: now},
 	})
@@ -208,7 +215,7 @@ func main() {
 
 	// Storage
 	sb := &mockStorageBackend{
-		volumes: ptr(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
+		volumes: new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
 	}
 	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb})
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
@@ -218,10 +225,10 @@ func main() {
 
 	// Backups
 	bb := &mockBackupBackend{
-		tasks:      ptr(loadFixture[adapters.DSMBackupTaskListResponse](base + "/backups/testdata/backup_tasks.json")),
-		taskDetail: ptr(loadFixture[adapters.DSMBackupTaskDetailResponse](base + "/backups/testdata/backup_task_detail.json")),
-		taskStatus: ptr(loadFixture[adapters.DSMBackupTaskStatusResponse](base + "/backups/testdata/backup_task_status.json")),
-		target:     ptr(loadFixture[adapters.DSMBackupTargetResponse](base + "/backups/testdata/backup_target.json")),
+		tasks:      new(loadFixture[adapters.DSMBackupTaskListResponse](base + "/backups/testdata/backup_tasks.json")),
+		taskDetail: new(loadFixture[adapters.DSMBackupTaskDetailResponse](base + "/backups/testdata/backup_task_detail.json")),
+		taskStatus: new(loadFixture[adapters.DSMBackupTaskStatusResponse](base + "/backups/testdata/backup_task_status.json")),
+		target:     new(loadFixture[adapters.DSMBackupTargetResponse](base + "/backups/testdata/backup_target.json")),
 	}
 	backupsSvc := backups.NewService(map[string]backups.BackupBackend{"nas-01": bb})
 	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{

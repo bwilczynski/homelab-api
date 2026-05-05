@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"sync"
@@ -24,22 +25,22 @@ const dsmErrContainerNotFound = 117
 
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
 type dsmAPIInfo struct {
-	path    string
-	maxVer  int
+	path   string
+	maxVer int
 }
 
 // SynologyClient handles authentication and API calls to the Synology DSM.
 type SynologyClient struct {
-	name          string
-	host          string
-	user          string
-	pass          string
-	authVersion   string // SYNO.API.Auth version to use for login (default "6")
-	insecureTLS   bool
-	authInfo      *dsmAPIInfo
-	sid           string
-	client        *http.Client
-	logger        *slog.Logger
+	name            string
+	host            string
+	user            string
+	pass            string
+	authVersion     string // SYNO.API.Auth version to use for login (default "6")
+	insecureTLS     bool
+	authInfo        *dsmAPIInfo
+	sid             string
+	client          *http.Client
+	logger          *slog.Logger
 	mu              sync.RWMutex
 	supportedAPIs   map[string]bool // nil = not yet called; non-nil = discovery succeeded
 	discoveryFailed bool            // true when DiscoverAPIs was called but failed
@@ -295,9 +296,7 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 		"version": {version},
 		"_sid":    {c.sid},
 	}
-	for k, v := range extra {
-		params[k] = v
-	}
+	maps.Copy(params, extra)
 
 	resp, err := c.rawGet("entry.cgi", params)
 	if err != nil {
@@ -371,16 +370,16 @@ type DSMContainerDetailResponse struct {
 
 // DSMContainerDetailProfile holds the container profile from the DSM get response.
 type DSMContainerDetailProfile struct {
-	Name           string             `json:"name"`
-	Image          string             `json:"image"`
-	EnvVariables   []DSMEnvVariable   `json:"env_variables"`
-	Networks       []DSMNetwork       `json:"network"`
+	Name           string                  `json:"name"`
+	Image          string                  `json:"image"`
+	EnvVariables   []DSMEnvVariable        `json:"env_variables"`
+	Networks       []DSMNetwork            `json:"network"`
 	PortBindings   []DSMProfilePortBinding `json:"port_bindings"`
-	VolumeBindings []DSMVolumeBinding `json:"volume_bindings"`
-	Privileged     bool               `json:"privileged"`
-	MemoryLimit    int                `json:"memory_limit"`
-	Cmd            string             `json:"cmd"`
-	RestartPolicy  DSMRestartPolicy   `json:"enable_restart_policy"`
+	VolumeBindings []DSMVolumeBinding      `json:"volume_bindings"`
+	Privileged     bool                    `json:"privileged"`
+	MemoryLimit    int                     `json:"memory_limit"`
+	Cmd            string                  `json:"cmd"`
+	RestartPolicy  DSMRestartPolicy        `json:"enable_restart_policy"`
 }
 
 // DSMEnvVariable represents an environment variable.
@@ -436,14 +435,14 @@ type DSMContainerDetail struct {
 
 // DSMContainerConfig holds container configuration.
 type DSMContainerConfig struct {
-	Image      string                 `json:"Image"`
-	Env        []string               `json:"Env"`
-	Cmd        []string               `json:"Cmd"`
-	Entrypoint []string               `json:"Entrypoint"`
-	Labels     map[string]string      `json:"Labels"`
-	Volumes    map[string]interface{} `json:"Volumes"`
-	WorkingDir string                 `json:"WorkingDir"`
-	Hostname   string                 `json:"Hostname"`
+	Image      string            `json:"Image"`
+	Env        []string          `json:"Env"`
+	Cmd        []string          `json:"Cmd"`
+	Entrypoint []string          `json:"Entrypoint"`
+	Labels     map[string]string `json:"Labels"`
+	Volumes    map[string]any    `json:"Volumes"`
+	WorkingDir string            `json:"WorkingDir"`
+	Hostname   string            `json:"Hostname"`
 }
 
 // DSMHostConfig holds host configuration.
@@ -632,9 +631,9 @@ func (c *SynologyClient) GetSystemUtilization() (*DSMSystemUtilizationResponse, 
 
 // DSMStorageVolumeResponse is the data payload from SYNO.Storage.CGI.Storage load_info.
 type DSMStorageVolumeResponse struct {
-	Volumes      []DSMStorageVolume      `json:"volumes"`
-	Disks        []DSMStorageDisk        `json:"disks"`
-	StoragePools []DSMStoragePool        `json:"storagePools"`
+	Volumes      []DSMStorageVolume `json:"volumes"`
+	Disks        []DSMStorageDisk   `json:"disks"`
+	StoragePools []DSMStoragePool   `json:"storagePools"`
 }
 
 // DSMStorageVolume represents a single storage volume reported by DSM.
@@ -752,14 +751,14 @@ type DSMTaskSchedulerListResponse struct {
 
 // DSMScheduledTask represents a single task in the DSM task scheduler.
 type DSMScheduledTask struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	Action         string `json:"action"`
-	AppName        string `json:"app_name"`
-	Enable         bool   `json:"enable"`
+	ID              int    `json:"id"`
+	Name            string `json:"name"`
+	Action          string `json:"action"`
+	AppName         string `json:"app_name"`
+	Enable          bool   `json:"enable"`
 	NextTriggerTime string `json:"next_trigger_time"`
-	Owner          string `json:"owner"`
-	Type           string `json:"type"`
+	Owner           string `json:"owner"`
+	Type            string `json:"type"`
 }
 
 // DSMBackupLogListResponse is the data payload from SYNO.SDS.Backup.Client.Common.Log list.

@@ -43,7 +43,7 @@ func makeToken(t *testing.T, priv *rsa.PrivateKey, claims jwt.MapClaims) string 
 
 // staticKeyFunc returns a jwt.Keyfunc that always uses the given public key.
 func staticKeyFunc(pub *rsa.PublicKey) jwt.Keyfunc {
-	return func(token *jwt.Token) (interface{}, error) {
+	return func(token *jwt.Token) (any, error) {
 		return pub, nil
 	}
 }

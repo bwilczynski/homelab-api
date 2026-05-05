@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -574,13 +575,10 @@ func (s *Service) getOrFetchReleases(repos map[string]struct{}, forceGitHub bool
 	}
 	merged := make(map[string]*GitHubRelease, max(len(fresh), prevLen))
 	if s.ghCache != nil {
-		for k, v := range s.ghCache.releases {
-			merged[k] = v
-		}
+		maps.Copy(merged, s.ghCache.releases)
 	}
-	for k, v := range fresh {
-		merged[k] = v // overwrite with successfully fetched releases
-	}
+	// overwrite with successfully fetched releases
+	maps.Copy(merged, fresh)
 	s.ghCache = &githubReleasesCache{releases: merged, fetchedAt: time.Now().UTC()}
 	s.mu.Unlock()
 

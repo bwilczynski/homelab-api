@@ -83,7 +83,7 @@ func (c *UniFiClient) login() error {
 }
 
 // get performs an authenticated GET request against the UniFi API and decodes the response.
-func (c *UniFiClient) get(path string, out interface{}) error {
+func (c *UniFiClient) get(path string, out any) error {
 	resp, err := c.client.Get(fmt.Sprintf("https://%s%s", c.host, path))
 	if err != nil {
 		return fmt.Errorf("unifi request: %w", err)
@@ -104,17 +104,17 @@ func (c *UniFiClient) get(path string, out interface{}) error {
 
 // UniFiDevice represents a managed network device from the UniFi Controller.
 type UniFiDevice struct {
-	ID         string `json:"_id"`
-	MAC        string `json:"mac"`
-	Name       string `json:"name"`
-	Model      string `json:"model"`
-	Type       string `json:"type"` // uap, usw, ugw, udm, udm-pro
-	State      int    `json:"state"`
-	IP         string `json:"ip"`
-	Version    string `json:"version"`
-	Uptime     int    `json:"uptime"`
-	UserNumSta int    `json:"user-num_sta"` // connected user clients
-	GuestNumSta int   `json:"guest-num_sta"` // connected guest clients
+	ID          string `json:"_id"`
+	MAC         string `json:"mac"`
+	Name        string `json:"name"`
+	Model       string `json:"model"`
+	Type        string `json:"type"` // uap, usw, ugw, udm, udm-pro
+	State       int    `json:"state"`
+	IP          string `json:"ip"`
+	Version     string `json:"version"`
+	Uptime      int    `json:"uptime"`
+	UserNumSta  int    `json:"user-num_sta"`  // connected user clients
+	GuestNumSta int    `json:"guest-num_sta"` // connected guest clients
 }
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
@@ -142,7 +142,7 @@ type UniFiSta struct {
 	Signal         *int    `json:"signal"`
 	Uptime         int     `json:"uptime"`
 	SwMAC          string  `json:"sw_mac"`           // MAC of the switch this client is connected to (wired)
-	SwPort         int     `json:"sw_port"`           // Switch port number (wired)
+	SwPort         int     `json:"sw_port"`          // Switch port number (wired)
 	LastUplinkName string  `json:"last_uplink_name"` // Switch display name (wired)
 }
 
