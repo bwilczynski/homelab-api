@@ -30,10 +30,11 @@ type Backend struct {
 
 // Auth holds JWT/JWKS authorization settings.
 type Auth struct {
-	Enabled  bool   `yaml:"enabled"`
-	Issuer   string `yaml:"issuer"`
-	JWKSURL  string `yaml:"jwks_url"`
-	Audience string `yaml:"audience"`
+	Enabled       bool   `yaml:"enabled"`
+	ScopesEnabled bool   `yaml:"scopes_enabled"`
+	Issuer        string `yaml:"issuer"`
+	JWKSURL       string `yaml:"jwks_url"`
+	Audience      string `yaml:"audience"`
 }
 
 // ImageSourceConfig maps a container image (without tag) to its GitHub release source.

@@ -6,6 +6,7 @@
 # Set enabled: true and fill in issuer/jwks_url when you have an IdP deployed.
 auth:
   enabled: false
+  scopes_enabled: false  # set true when IdP supports resource scopes (e.g. read:containers)
   issuer: https://idp.homelab.local
   jwks_url: https://idp.homelab.local/.well-known/jwks.json
   audience: homelab-api  # optional; omit or leave empty to skip audience validation

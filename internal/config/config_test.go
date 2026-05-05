@@ -142,6 +142,29 @@ func TestByType(t *testing.T) {
 	}
 }
 
+func TestLoadAuthScopesEnabled(t *testing.T) {
+	cfg := writeTemp(t, `
+auth:
+  enabled: true
+  scopes_enabled: true
+  issuer: https://test-issuer
+  jwks_url: https://test-issuer/keys
+backends:
+  - name: nas
+    type: synology
+    host: a
+    username: u
+    password: p
+`)
+	c, err := Load(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !c.Auth.ScopesEnabled {
+		t.Error("expected ScopesEnabled to be true")
+	}
+}
+
 func writeTemp(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
