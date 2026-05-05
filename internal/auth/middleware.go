@@ -33,6 +33,10 @@ func JWTMiddleware(cfg config.Auth, keyFunc jwt.Keyfunc) func(http.Handler) http
 				next.ServeHTTP(w, r)
 				return
 			}
+			if strings.HasPrefix(r.URL.Path, "/.well-known/") {
+				next.ServeHTTP(w, r)
+				return
+			}
 
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"os"
@@ -75,6 +76,19 @@ func main() {
 		Schema:        httplog.SchemaECS,
 		RecoverPanics: true,
 	}))
+
+	r.Get("/.well-known/homelab", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		type response struct {
+			Enabled bool   `json:"enabled"`
+			Issuer  string `json:"issuer,omitempty"`
+		}
+		_ = json.NewEncoder(w).Encode(response{
+			Enabled: cfg.Auth.Enabled,
+			Issuer:  cfg.Auth.Issuer,
+		})
+	})
+
 	r.Use(jwtMw)
 
 	// System: all DSM + all UniFi backends.
