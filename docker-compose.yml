@@ -1,0 +1,24 @@
+# Run: docker compose up
+# Requires config.yaml with:
+#   auth.jwks_url: http://dex:5556/dex/keys  (Docker service DNS, not localhost)
+#   auth.issuer:   http://localhost:5556/dex  (must match Dex iss claim)
+
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - CONFIG_FILE=/config.yaml
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+    depends_on:
+      - dex
+
+  dex:
+    image: ghcr.io/dexidp/dex:latest
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
