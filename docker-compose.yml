@@ -1,0 +1,21 @@
+# Run: docker compose up
+# Dex runs internally on port 5556; all OIDC traffic routes through the API proxy at port 8080.
+
+services:
+  api:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    environment:
+      - CONFIG_FILE=/config.yaml
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+    depends_on:
+      - dex
+
+  dex:
+    image: ghcr.io/dexidp/dex:latest
+    volumes:
+      - ./dex/config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]

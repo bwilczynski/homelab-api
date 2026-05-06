@@ -50,8 +50,9 @@ func staticKeyFunc(pub *rsa.PublicKey) jwt.Keyfunc {
 
 func authCfg() config.Auth {
 	return config.Auth{
-		Enabled: true,
-		Issuer:  "https://test-issuer",
+		Enabled:       true,
+		ScopesEnabled: true,
+		Issuer:        "https://test-issuer",
 	}
 }
 
@@ -282,5 +283,25 @@ func TestScopeMiddleware_MultipleScopes_OneMissing(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", rec.Code)
+	}
+}
+
+func TestScopeMiddleware_ScopesDisabled(t *testing.T) {
+	priv, pub := testKeyPair(t)
+	token := makeToken(t, priv, jwt.MapClaims{
+		"iss": "https://test-issuer",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	cfg := config.Auth{Enabled: true, ScopesEnabled: false, Issuer: "https://test-issuer"}
+	// nil required scopes — without the short-circuit this returns 403 (deny by default).
+	handler := scopeTestHandler(cfg, staticKeyFunc(pub), nil)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
 	}
 }

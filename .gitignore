@@ -1,6 +1,7 @@
 bin/
 *.env
 config.yaml
+!dex/config.yaml
 
 # Generated server stubs (regenerated via make generate)
 internal/*/api.gen.go
