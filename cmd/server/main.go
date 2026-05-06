@@ -90,6 +90,12 @@ func main() {
 		})
 	})
 
+	if cfg.Dex.URL != "" {
+		dexProxy := auth.DexProxy(cfg.Dex.URL)
+		r.Handle("/dex", dexProxy)
+		r.Handle("/dex/*", dexProxy)
+	}
+
 	// Protected router — all domain routes require a valid JWT.
 	protected := r.With(jwtMw)
 
