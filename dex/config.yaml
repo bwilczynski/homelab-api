@@ -32,6 +32,10 @@ staticClients:
     name: Homelab CLI
     # Public client — no secret required; used for device authorization flow.
     public: true
+    # Dex validates the device callback redirect_uri against this list internally.
+    # Must match {issuer}/device/callback — update if the API host changes.
+    redirectURIs:
+      - 'http://localhost:8080/dex/device/callback'
     grantTypes:
       - urn:ietf:params:oauth:grant-type:device_code
       - refresh_token
