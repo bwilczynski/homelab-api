@@ -12,7 +12,8 @@ auth:
 
 # Dex OIDC sidecar settings.
 # dex.url is the internal address of the Dex container (Docker network DNS).
-# The API proxies /dex/* to this address and derives the JWKS URL as {url}/dex/keys.
+# The API proxies /dex/* requests to this address for external clients (e.g. homelab-cli).
+# The API also fetches JWKS directly from this address (not via the proxy): {url}/dex/keys.
 dex:
   url: http://dex:5556
 
