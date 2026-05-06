@@ -2,7 +2,7 @@
 # Uses an in-memory store and a static password connector.
 # For production: replace staticPasswords with a real connector (GitHub, Google, LDAP).
 
-issuer: http://localhost:5556/dex
+issuer: http://localhost:8080/dex
 
 storage:
   type: memory

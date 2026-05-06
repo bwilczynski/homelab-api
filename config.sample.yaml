@@ -3,13 +3,18 @@
 # Values can reference environment variables: ${VAR_NAME}
 
 # Authorization settings.
-# Set enabled: true and fill in issuer/jwks_url when you have an IdP deployed.
+# Set enabled: true and configure dex.url when Dex is running as a sidecar.
 auth:
   enabled: false
   scopes_enabled: false  # set true when IdP supports resource scopes (e.g. read:containers)
-  issuer: https://idp.homelab.local
-  jwks_url: https://idp.homelab.local/.well-known/jwks.json
-  audience: homelab-api  # optional; omit or leave empty to skip audience validation
+  issuer: http://localhost:8080/dex  # must match dex/config.yaml issuer exactly
+  audience: homelab-api              # optional; omit or leave empty to skip audience validation
+
+# Dex OIDC sidecar settings.
+# dex.url is the internal address of the Dex container (Docker network DNS).
+# The API proxies /dex/* to this address and derives the JWKS URL as {url}/dex/keys.
+dex:
+  url: http://dex:5556
 
 backends:
   - name: nas-01

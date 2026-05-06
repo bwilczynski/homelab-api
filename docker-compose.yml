@@ -1,7 +1,5 @@
 # Run: docker compose up
-# Requires config.yaml with:
-#   auth.jwks_url: http://dex:5556/dex/keys  (Docker service DNS, not localhost)
-#   auth.issuer:   http://localhost:5556/dex  (must match Dex iss claim)
+# Dex runs internally on port 5556; all OIDC traffic routes through the API proxy at port 8080.
 
 services:
   api:
@@ -18,8 +16,6 @@ services:
 
   dex:
     image: ghcr.io/dexidp/dex:latest
-    ports:
-      - "5556:5556"
     volumes:
       - ./dex/config.yaml:/etc/dex/config.yaml:ro
     command: ["dex", "serve", "/etc/dex/config.yaml"]
