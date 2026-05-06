@@ -8,7 +8,7 @@ auth:
   enabled: false
   scopes_enabled: false  # set true when IdP supports resource scopes (e.g. read:containers)
   issuer: http://localhost:8080/dex  # must match dex/config.yaml issuer exactly
-  audience: homelab-api              # optional; omit or leave empty to skip audience validation
+  audience: homelab-cli              # optional; Dex device flow sets aud = client ID; omit to skip validation
 
 # Dex OIDC sidecar settings.
 # dex.url is the internal address of the Dex container (Docker network DNS).
