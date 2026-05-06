@@ -35,7 +35,7 @@ staticClients:
     # Dex validates the device callback redirect_uri against this list internally.
     # Must match {issuer}/device/callback — update if the API host changes.
     redirectURIs:
-      - 'http://localhost:8080/dex/device/callback'
+      - '/dex/device/callback'
     grantTypes:
       - urn:ietf:params:oauth:grant-type:device_code
       - refresh_token
