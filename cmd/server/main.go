@@ -47,7 +47,8 @@ func main() {
 
 	var jwkKeyFunc jwt.Keyfunc
 	if cfg.Auth.Enabled {
-		k, err := keyfunc.NewDefault([]string{cfg.Auth.JWKSURL})
+		jwksURL := cfg.Dex.URL + "/dex/keys"
+		k, err := keyfunc.NewDefault([]string{jwksURL})
 		if err != nil {
 			logger.Error("failed to initialize JWKS", "err", err)
 			os.Exit(1)

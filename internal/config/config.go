@@ -33,8 +33,12 @@ type Auth struct {
 	Enabled       bool   `yaml:"enabled"`
 	ScopesEnabled bool   `yaml:"scopes_enabled"`
 	Issuer        string `yaml:"issuer"`
-	JWKSURL       string `yaml:"jwks_url"`
 	Audience      string `yaml:"audience"`
+}
+
+// Dex holds configuration for the embedded Dex OIDC proxy.
+type Dex struct {
+	URL string `yaml:"url"` // internal Dex address, e.g. http://dex:5556
 }
 
 // ImageSourceConfig maps a container image (without tag) to its GitHub release source.
@@ -72,6 +76,7 @@ func (d *Duration) UnmarshalYAML(unmarshal func(any) error) error {
 // Config is the top-level configuration.
 type Config struct {
 	Auth     Auth          `yaml:"auth"`
+	Dex      Dex           `yaml:"dex"`
 	Backends []Backend     `yaml:"backends"`
 	Updates  UpdatesConfig `yaml:"updates"`
 }
@@ -103,8 +108,8 @@ func (c *Config) validate() error {
 		if c.Auth.Issuer == "" {
 			return fmt.Errorf("auth.issuer is required when auth is enabled")
 		}
-		if c.Auth.JWKSURL == "" {
-			return fmt.Errorf("auth.jwks_url is required when auth is enabled")
+		if c.Dex.URL == "" {
+			return fmt.Errorf("dex.url is required when auth is enabled")
 		}
 	}
 

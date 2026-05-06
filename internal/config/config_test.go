@@ -148,7 +148,8 @@ auth:
   enabled: true
   scopes_enabled: true
   issuer: https://test-issuer
-  jwks_url: https://test-issuer/keys
+dex:
+  url: http://dex:5556
 backends:
   - name: nas
     type: synology
@@ -162,6 +163,47 @@ backends:
 	}
 	if !c.Auth.ScopesEnabled {
 		t.Error("expected ScopesEnabled to be true")
+	}
+}
+
+func TestLoadDexURL(t *testing.T) {
+	cfg := writeTemp(t, `
+auth:
+  enabled: true
+  issuer: http://localhost:8080/dex
+dex:
+  url: http://dex:5556
+backends:
+  - name: nas
+    type: synology
+    host: a
+    username: u
+    password: p
+`)
+	c, err := Load(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Dex.URL != "http://dex:5556" {
+		t.Errorf("expected dex.url http://dex:5556, got %s", c.Dex.URL)
+	}
+}
+
+func TestLoadAuthEnabled_RequiresDexURL(t *testing.T) {
+	cfg := writeTemp(t, `
+auth:
+  enabled: true
+  issuer: http://localhost:8080/dex
+backends:
+  - name: nas
+    type: synology
+    host: a
+    username: u
+    password: p
+`)
+	_, err := Load(cfg)
+	if err == nil {
+		t.Fatal("expected error when auth enabled but dex.url missing")
 	}
 }
 
