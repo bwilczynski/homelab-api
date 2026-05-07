@@ -213,16 +213,6 @@ func main() {
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
-	// Storage
-	sb := &mockStorageBackend{
-		volumes: new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
-	}
-	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb})
-	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
-		BaseRouter:       r,
-		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
-	})
-
 	// Backups
 	bb := &mockBackupBackend{
 		tasks:      new(loadFixture[adapters.DSMBackupTaskListResponse](base + "/backups/testdata/backup_tasks.json")),
@@ -232,6 +222,16 @@ func main() {
 	}
 	backupsSvc := backups.NewService(map[string]backups.BackupBackend{"nas-01": bb})
 	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+	})
+
+	// Storage
+	sb := &mockStorageBackend{
+		volumes: new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
+	}
+	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb})
+	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})

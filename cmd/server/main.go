@@ -130,12 +130,16 @@ func main() {
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
-	// Storage: all Synology backends.
+	// Storage: all Synology backends (volumes + backups).
 	storageBackends := make(map[string]storage.StorageBackend, len(synologyClients))
 	for name, client := range synologyClients {
 		storageBackends[name] = client
 	}
-	storageSvc := storage.NewService(storageBackends, monitor)
+	storageBackupBackends := make(map[string]storage.BackupBackend, len(synologyClients))
+	for name, client := range synologyClients {
+		storageBackupBackends[name] = client
+	}
+	storageSvc := storage.NewService(storageBackends, storageBackupBackends, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []storage.MiddlewareFunc{scopeMw},
