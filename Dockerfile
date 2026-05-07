@@ -7,16 +7,13 @@ RUN npx --yes @redocly/cli@1.25.15 bundle spec/openapi/openapi.yaml -o spec/dist
 
 FROM golang:1.26-alpine AS builder
 WORKDIR /build
+RUN apk add --no-cache make
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=spec /build/spec/dist/openapi.bundled.yaml spec/dist/openapi.bundled.yaml
-RUN go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest --config oapi-codegen-system.yaml spec/dist/openapi.bundled.yaml \
- && go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest --config oapi-codegen-containers.yaml spec/dist/openapi.bundled.yaml \
- && go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest --config oapi-codegen-storage.yaml spec/dist/openapi.bundled.yaml \
- && go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest --config oapi-codegen-backups.yaml spec/dist/openapi.bundled.yaml \
- && go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest --config oapi-codegen-network.yaml spec/dist/openapi.bundled.yaml
-RUN CGO_ENABLED=0 go build -o /build/server ./cmd/server
+RUN SKIP_BUNDLE=true make generate
+RUN make build
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /build/server /server
