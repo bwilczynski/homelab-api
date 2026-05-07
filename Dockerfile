@@ -16,7 +16,7 @@ RUN SKIP_BUNDLE=true make generate
 RUN make build
 
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=builder /build/server /server
+COPY --from=builder /build/bin/server /server
 ENV LOG_FORMAT=json
 EXPOSE 8080
 ENTRYPOINT ["/server"]
