@@ -20,7 +20,7 @@ make tidy       # go mod tidy
 Run a single test:
 
 ```sh
-go test ./internal/containers/ -run TestListContainers
+go test ./internal/docker/ -run TestListContainers
 ```
 
 ### First time after cloning
@@ -47,9 +47,8 @@ internal/
     handler.go        Implements StrictServerInterface, calls service layer
     service.go        Business logic
     testdata/         JSON fixtures for tests
-  containers/         tag: containers  (list, get, start, stop, restart)
-  storage/            tag: storage  (volumes)
-  backups/            tag: backups  (backup tasks)
+  docker/             tag: docker  (containers — list, get, start, stop, restart)
+  storage/            tag: storage  (volumes + backups)
   network/            tag: network  (clients, devices)
   adapters/           Backend clients (Synology, UniFi)
   auth/               JWT validation middleware + scope enforcement middleware

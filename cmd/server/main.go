@@ -131,11 +131,9 @@ func main() {
 
 	// Storage: all Synology backends (volumes + backups).
 	storageBackends := make(map[string]storage.StorageBackend, len(synologyClients))
-	for name, client := range synologyClients {
-		storageBackends[name] = client
-	}
 	storageBackupBackends := make(map[string]storage.BackupBackend, len(synologyClients))
 	for name, client := range synologyClients {
+		storageBackends[name] = client
 		storageBackupBackends[name] = client
 	}
 	storageSvc := storage.NewService(storageBackends, storageBackupBackends, monitor)
