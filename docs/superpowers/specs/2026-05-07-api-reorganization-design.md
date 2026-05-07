@@ -52,7 +52,15 @@ All scopes change from `<access>:<resource>` to `<access>:<group>`:
 
 ### Code generation
 
-The Makefile already reflects the new structure (four codegen configs: system, docker, storage, network). `oapi-codegen-docker.yaml` targets `internal/docker/`, `oapi-codegen-storage.yaml` generates both volumes and backups into `internal/storage/`. The two deleted configs (`oapi-codegen-containers.yaml`, `oapi-codegen-backups.yaml`) are already removed from the working tree.
+The Makefile and codegen configs must be updated as part of this work:
+
+- Create `oapi-codegen-docker.yaml` targeting `internal/docker/` (package `docker`, docker tag)
+- Delete `oapi-codegen-containers.yaml`
+- Delete `oapi-codegen-backups.yaml`
+- Update `oapi-codegen-storage.yaml` to include the `storage` tag (which now covers both volumes and backups)
+- Update `Makefile` `generate` target: replace `oapi-codegen-containers.yaml` and `oapi-codegen-backups.yaml` with `oapi-codegen-docker.yaml`; update the `mkdir -p` list to include `internal/docker` and remove `internal/backups`
+
+After these changes the four codegen configs are: system, docker, storage, network.
 
 ## Domain File Layout
 
