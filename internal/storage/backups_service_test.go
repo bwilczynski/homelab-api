@@ -309,6 +309,69 @@ func TestParseBackupTime(t *testing.T) {
 	}
 }
 
+func TestListBackupTasksStatusError(t *testing.T) {
+	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{
+			"nas-01": &mockBackupBackend{
+				tasks:     &tasks,
+				statusErr: fmt.Errorf("connection refused"),
+			},
+		},
+	)
+
+	result, err := svc.ListBackupTasks(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 tasks even with status error, got %d", len(result.Items))
+	}
+	for _, item := range result.Items {
+		if item.LastResult != BackupTaskResultUnknown {
+			t.Errorf("expected LastResult Unknown when status unavailable, got %v", item.LastResult)
+		}
+	}
+}
+
+func TestGetBackupTaskEnrichmentErrors(t *testing.T) {
+	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{
+			"nas-01": &mockBackupBackend{
+				tasks:     &tasks,
+				statusErr: fmt.Errorf("connection refused"),
+				detailErr: fmt.Errorf("connection refused"),
+				targetErr: fmt.Errorf("connection refused"),
+			},
+		},
+	)
+
+	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if detail == nil {
+		t.Fatal("expected task detail even with enrichment errors, got nil")
+	}
+	if detail.LastResult != BackupTaskResultUnknown {
+		t.Errorf("expected LastResult Unknown when status unavailable, got %v", detail.LastResult)
+	}
+	if detail.LastRunAt != nil {
+		t.Errorf("expected LastRunAt nil when status unavailable, got %v", detail.LastRunAt)
+	}
+	if detail.NextRunAt != nil {
+		t.Errorf("expected NextRunAt nil when status unavailable, got %v", detail.NextRunAt)
+	}
+	if detail.Size != nil {
+		t.Errorf("expected Size nil when target unavailable, got %v", detail.Size)
+	}
+}
+
 func TestMapBackupResult(t *testing.T) {
 	tests := []struct {
 		status *adapters.DSMBackupTaskStatusResponse

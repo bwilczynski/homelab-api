@@ -85,7 +85,7 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 
 // GetBackupTask returns a single backup task by composite ID (device.taskId).
 func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTaskDetail, error) {
-	device, rawID, err := parseTaskID(taskID)
+	device, _, err := parseTaskID(taskID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 
 	for _, t := range tasks.TaskList {
 		compositeID := fmt.Sprintf("%s.%d", device, t.TaskID)
-		if compositeID != taskID && fmt.Sprintf("%d", t.TaskID) != rawID {
+		if compositeID != taskID {
 			continue
 		}
 
