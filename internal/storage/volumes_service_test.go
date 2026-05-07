@@ -38,7 +38,7 @@ func loadFixture[T any](t *testing.T, path string) T {
 func TestListStorageVolumes(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{})
 
 	result, err := svc.ListStorageVolumes(context.Background(), nil)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestListStorageVolumes(t *testing.T) {
 	if v.RaidType != "single" {
 		t.Errorf("expected raidType single, got %s", v.RaidType)
 	}
-	if v.Status != VolumeStatusNormal {
+	if v.Status != Normal {
 		t.Errorf("expected status normal, got %s", v.Status)
 	}
 	if v.TotalBytes != 11508017246208 {
@@ -79,7 +79,7 @@ func TestListStorageVolumes(t *testing.T) {
 func TestGetStorageVolumeDiskMapping(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
@@ -114,7 +114,7 @@ func TestGetStorageVolumeDiskMapping(t *testing.T) {
 func TestListStorageVolumesWithDeviceFilter(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{})
 
 	// Matching device
 	device := "nas-01"
@@ -140,7 +140,7 @@ func TestListStorageVolumesWithDeviceFilter(t *testing.T) {
 func TestGetStorageVolume(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
@@ -155,7 +155,7 @@ func TestGetStorageVolume(t *testing.T) {
 	if v.MountPath != "/volume1" {
 		t.Errorf("expected mountPath /volume1, got %s", v.MountPath)
 	}
-	if v.PoolStatus != VolumeStatusNormal {
+	if v.PoolStatus != Normal {
 		t.Errorf("expected poolStatus normal, got %s", v.PoolStatus)
 	}
 }
@@ -171,7 +171,7 @@ func TestGetStorageVolumePoolStatus(t *testing.T) {
 		},
 	}
 
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.volume_1")
 	if err != nil {
@@ -180,7 +180,7 @@ func TestGetStorageVolumePoolStatus(t *testing.T) {
 	if v == nil {
 		t.Fatal("expected volume, got nil")
 	}
-	if v.PoolStatus != VolumeStatusDegraded {
+	if v.PoolStatus != Degraded {
 		t.Errorf("expected poolStatus degraded, got %s", v.PoolStatus)
 	}
 }
@@ -188,7 +188,7 @@ func TestGetStorageVolumePoolStatus(t *testing.T) {
 func TestGetStorageVolumeNotFound(t *testing.T) {
 	resp := loadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
 
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{})
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.nonexistent")
 	if err != nil {
@@ -200,7 +200,7 @@ func TestGetStorageVolumeNotFound(t *testing.T) {
 }
 
 func TestGetStorageVolumeInvalidID(t *testing.T) {
-	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{}})
+	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{}}, map[string]BackupBackend{})
 
 	_, err := svc.GetStorageVolume(context.Background(), "invalid-id")
 	if err == nil {
@@ -215,7 +215,7 @@ func TestListStorageVolumesEmpty(t *testing.T) {
 			Disks:        []adapters.DSMStorageDisk{},
 			StoragePools: []adapters.DSMStoragePool{},
 		},
-	}})
+	}}, map[string]BackupBackend{})
 
 	result, err := svc.ListStorageVolumes(context.Background(), nil)
 	if err != nil {
@@ -231,11 +231,11 @@ func TestMapVolumeStatus(t *testing.T) {
 		status string
 		want   VolumeStatus
 	}{
-		{"normal", VolumeStatusNormal},
-		{"degraded", VolumeStatusDegraded},
-		{"repairing", VolumeStatusRepairing},
-		{"crashed", VolumeStatusCrashed},
-		{"unknown", VolumeStatusCrashed},
+		{"normal", Normal},
+		{"degraded", Degraded},
+		{"repairing", Repairing},
+		{"crashed", Crashed},
+		{"unknown", Crashed},
 	}
 
 	for _, tt := range tests {

@@ -16,9 +16,8 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
-	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
-	"github.com/bwilczynski/homelab-api/internal/containers"
+	"github.com/bwilczynski/homelab-api/internal/docker"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
@@ -40,7 +39,7 @@ func loadFixture[T any](path string) T {
 	return envelope.Data
 }
 
-// containers.ContainerBackend
+// docker.ContainerBackend
 type mockContainerBackend struct {
 	list      *adapters.DSMContainerListResponse
 	detail    *adapters.DSMContainerDetailResponse
@@ -117,7 +116,7 @@ func (m *mockStorageBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResp
 	return m.volumes, nil
 }
 
-// backups.BackupBackend
+// storage.BackupBackend
 type mockBackupBackend struct {
 	tasks      *adapters.DSMBackupTaskListResponse
 	taskDetail *adapters.DSMBackupTaskDetailResponse
@@ -169,15 +168,15 @@ func main() {
 
 	r := chi.NewRouter()
 
-	// Containers
-	containerList := new(loadFixture[adapters.DSMContainerListResponse](base + "/containers/testdata/container_list.json"))
+	// Docker containers
+	containerList := new(loadFixture[adapters.DSMContainerListResponse](base + "/docker/testdata/container_list.json"))
 	cb := &mockContainerBackend{
 		list:      containerList,
-		detail:    new(loadFixture[adapters.DSMContainerDetailResponse](base + "/containers/testdata/container_detail.json")),
-		resources: new(loadFixture[adapters.DSMContainerResourceResponse](base + "/containers/testdata/container_resources.json")),
+		detail:    new(loadFixture[adapters.DSMContainerDetailResponse](base + "/docker/testdata/container_detail.json")),
+		resources: new(loadFixture[adapters.DSMContainerResourceResponse](base + "/docker/testdata/container_resources.json")),
 	}
-	containersSvc := containers.NewService(map[string]containers.ContainerBackend{"nas-01": cb})
-	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
+	dockerSvc := docker.NewService(map[string]docker.ContainerBackend{"nas-01": cb})
+	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
@@ -213,25 +212,18 @@ func main() {
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
-	// Storage
+	// Storage (volumes + backups)
 	sb := &mockStorageBackend{
 		volumes: new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
 	}
-	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb})
-	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
-		BaseRouter:       r,
-		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
-	})
-
-	// Backups
 	bb := &mockBackupBackend{
-		tasks:      new(loadFixture[adapters.DSMBackupTaskListResponse](base + "/backups/testdata/backup_tasks.json")),
-		taskDetail: new(loadFixture[adapters.DSMBackupTaskDetailResponse](base + "/backups/testdata/backup_task_detail.json")),
-		taskStatus: new(loadFixture[adapters.DSMBackupTaskStatusResponse](base + "/backups/testdata/backup_task_status.json")),
-		target:     new(loadFixture[adapters.DSMBackupTargetResponse](base + "/backups/testdata/backup_target.json")),
+		tasks:      new(loadFixture[adapters.DSMBackupTaskListResponse](base + "/storage/testdata/backup_tasks.json")),
+		taskDetail: new(loadFixture[adapters.DSMBackupTaskDetailResponse](base + "/storage/testdata/backup_task_detail.json")),
+		taskStatus: new(loadFixture[adapters.DSMBackupTaskStatusResponse](base + "/storage/testdata/backup_task_status.json")),
+		target:     new(loadFixture[adapters.DSMBackupTargetResponse](base + "/storage/testdata/backup_target.json")),
 	}
-	backupsSvc := backups.NewService(map[string]backups.BackupBackend{"nas-01": bb})
-	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
+	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb})
+	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})

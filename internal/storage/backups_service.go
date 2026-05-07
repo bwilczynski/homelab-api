@@ -1,4 +1,4 @@
-package backups
+package storage
 
 import (
 	"context"
@@ -21,35 +21,22 @@ type BackupBackend interface {
 	GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error)
 }
 
-type deviceBackend struct {
+type backupDeviceBackend struct {
 	device  string
 	backend BackupBackend
 }
 
-// Service implements backup business logic.
-type Service struct {
-	backends []deviceBackend
-	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
-}
-
-// NewService creates a new backup service with zero or more backends.
-// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
-// backends that are currently unreachable.
-func NewService(backends map[string]BackupBackend, monitor ...adapters.AvailabilityChecker) *Service {
-	dbs := make([]deviceBackend, 0, len(backends))
+func newBackupDeviceBackends(backends map[string]BackupBackend) []backupDeviceBackend {
+	dbs := make([]backupDeviceBackend, 0, len(backends))
 	for device, backend := range backends {
-		dbs = append(dbs, deviceBackend{device: device, backend: backend})
+		dbs = append(dbs, backupDeviceBackend{device: device, backend: backend})
 	}
 	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
-	svc := &Service{backends: dbs}
-	if len(monitor) > 0 {
-		svc.monitor = monitor[0]
-	}
-	return svc
+	return dbs
 }
 
-func (s *Service) findBackend(device string) (BackupBackend, error) {
-	for _, db := range s.backends {
+func (s *Service) findBackupBackend(device string) (BackupBackend, error) {
+	for _, db := range s.backupBackends {
 		if db.device == device {
 			if !db.backend.SupportsBackups() {
 				return nil, fmt.Errorf("device %q does not support backups: %w", device, apierrors.ErrNotFound)
@@ -63,7 +50,7 @@ func (s *Service) findBackend(device string) (BackupBackend, error) {
 // ListBackupTasks returns backup tasks from all (or a filtered) backends.
 func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTaskList, error) {
 	var items []BackupTask
-	for _, db := range s.backends {
+	for _, db := range s.backupBackends {
 		if device != nil && *device != db.device {
 			continue
 		}
@@ -78,7 +65,6 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 		if err != nil {
 			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
 		}
-
 		for _, t := range tasks.TaskList {
 			status, _ := db.backend.GetBackupTaskStatus(t.TaskID)
 			items = append(items, BackupTask{
@@ -99,12 +85,12 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 
 // GetBackupTask returns a single backup task by composite ID (device.taskId).
 func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTaskDetail, error) {
-	device, rawID, err := parseTaskID(taskID)
+	device, _, err := parseTaskID(taskID)
 	if err != nil {
 		return nil, err
 	}
 
-	backend, err := s.findBackend(device)
+	backend, err := s.findBackupBackend(device)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +102,11 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 
 	for _, t := range tasks.TaskList {
 		compositeID := fmt.Sprintf("%s.%d", device, t.TaskID)
-		if compositeID != taskID && fmt.Sprintf("%d", t.TaskID) != rawID {
+		if compositeID != taskID {
 			continue
 		}
 
 		loc := backend.Location()
-
 		status, _ := backend.GetBackupTaskStatus(t.TaskID)
 		detail, _ := backend.GetBackupTaskDetail(t.TaskID)
 		target, _ := backend.GetBackupTarget(t.TaskID)
@@ -188,20 +173,20 @@ func parseBackupTime(s string, loc *time.Location) *time.Time {
 // "done" with a non-zero error code indicates a backup that completed with warnings.
 func mapBackupResult(status *adapters.DSMBackupTaskStatusResponse) BackupTaskResult {
 	if status == nil {
-		return Unknown
+		return BackupTaskResultUnknown
 	}
 	switch status.LastBkpResult {
 	case "done":
 		if status.LastBkpErrorCode != 0 {
-			return Warning
+			return BackupTaskResultWarning
 		}
-		return Success
+		return BackupTaskResultSuccess
 	case "error":
-		return Failed
+		return BackupTaskResultFailed
 	case "skip":
-		return Skipped
+		return BackupTaskResultSkipped
 	default:
-		return Unknown
+		return BackupTaskResultUnknown
 	}
 }
 
@@ -215,7 +200,6 @@ func parseTaskID(id string) (device, taskID string, err error) {
 }
 
 // mapBackupStatus converts a DSM backup task state string to BackupTaskStatus.
-// The "state" field from SYNO.Backup.Task represents whether the task can run.
 func mapBackupStatus(state string) BackupTaskStatus {
 	switch state {
 	case "backupable":
@@ -232,7 +216,6 @@ func mapBackupStatus(state string) BackupTaskStatus {
 }
 
 // mapBackupType converts a DSM backup type string to a human-readable type.
-// Examples: "image:image_local" → "hyperBackup", "glacier" → "glacierBackup".
 func mapBackupType(t string) string {
 	switch {
 	case strings.HasPrefix(t, "image:"):

@@ -1,17 +1,14 @@
-package backups
+package storage
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
 
-// mockBackupBackend implements BackupBackend for testing.
 type mockBackupBackend struct {
 	tasks      *adapters.DSMBackupTaskListResponse
 	taskDetail *adapters.DSMBackupTaskDetailResponse
@@ -39,38 +36,22 @@ func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTarg
 	return m.target, m.targetErr
 }
 
-func loadFixture[T any](t *testing.T, path string) T {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", path, err)
-	}
-	var envelope struct {
-		Data T `json:"data"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		t.Fatalf("parse fixture %s: %v", path, err)
-	}
-	return envelope.Data
-}
-
 func TestListBackupTasks(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 	taskStatus := loadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
 
-	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks, taskStatus: &taskStatus},
-	})
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks, taskStatus: &taskStatus}},
+	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if len(result.Items) != 2 {
 		t.Fatalf("expected 2 tasks, got %d", len(result.Items))
 	}
-
 	task := result.Items[0]
 	if task.Device != "nas-01" {
 		t.Errorf("expected device nas-01, got %s", task.Device)
@@ -82,10 +63,10 @@ func TestListBackupTasks(t *testing.T) {
 		t.Errorf("expected name 'Backup to LOCAL', got %s", task.Name)
 	}
 	if task.Status != Idle {
-		t.Errorf("expected status idle, got %s", task.Status)
+		t.Errorf("expected status idle, got %v", task.Status)
 	}
-	if task.LastResult != Warning {
-		t.Errorf("expected lastResult Warning, got %s", task.LastResult)
+	if task.LastResult != BackupTaskResultWarning {
+		t.Errorf("expected lastResult Warning, got %v", task.LastResult)
 	}
 	if task.Type != "hyperBackup" {
 		t.Errorf("expected type hyperBackup, got %s", task.Type)
@@ -95,11 +76,11 @@ func TestListBackupTasks(t *testing.T) {
 func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 
-	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks},
-	})
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks}},
+	)
 
-	// Matching device
 	device := "nas-01"
 	result, err := svc.ListBackupTasks(context.Background(), &device)
 	if err != nil {
@@ -109,7 +90,6 @@ func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 		t.Fatalf("expected 2 tasks for matching device, got %d", len(result.Items))
 	}
 
-	// Non-matching device
 	other := "nas-02"
 	result, err = svc.ListBackupTasks(context.Background(), &other)
 	if err != nil {
@@ -121,11 +101,14 @@ func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 }
 
 func TestListBackupTasksEmpty(t *testing.T) {
-	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{
-			tasks: &adapters.DSMBackupTaskListResponse{TaskList: []adapters.DSMBackupTask{}},
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{
+			"nas-01": &mockBackupBackend{
+				tasks: &adapters.DSMBackupTaskListResponse{TaskList: []adapters.DSMBackupTask{}},
+			},
 		},
-	})
+	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
 	if err != nil {
@@ -142,14 +125,17 @@ func TestGetBackupTask(t *testing.T) {
 	taskStatus := loadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
 	target := loadFixture[adapters.DSMBackupTargetResponse](t, "testdata/backup_target.json")
 
-	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{
-			tasks:      &tasks,
-			taskDetail: &taskDetail,
-			taskStatus: &taskStatus,
-			target:     &target,
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{
+			"nas-01": &mockBackupBackend{
+				tasks:      &tasks,
+				taskDetail: &taskDetail,
+				taskStatus: &taskStatus,
+				target:     &target,
+			},
 		},
-	})
+	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")
 	if err != nil {
@@ -168,10 +154,10 @@ func TestGetBackupTask(t *testing.T) {
 		t.Errorf("expected name 'Backup to LOCAL', got %s", detail.Name)
 	}
 	if detail.Status != Idle {
-		t.Errorf("expected status idle, got %s", detail.Status)
+		t.Errorf("expected status idle, got %v", detail.Status)
 	}
-	if detail.LastResult != Warning {
-		t.Errorf("expected lastResult Warning, got %s", detail.LastResult)
+	if detail.LastResult != BackupTaskResultWarning {
+		t.Errorf("expected lastResult Warning, got %v", detail.LastResult)
 	}
 	if detail.Type != "hyperBackup" {
 		t.Errorf("expected type hyperBackup, got %s", detail.Type)
@@ -188,7 +174,6 @@ func TestGetBackupTask(t *testing.T) {
 	if detail.Size != nil && *detail.Size != 3206674163 {
 		t.Errorf("expected size 3206674163, got %d", *detail.Size)
 	}
-	// Folders is *[]string — check the pointer and dereference
 	if detail.Folders == nil || len(*detail.Folders) == 0 {
 		t.Error("expected folders to be non-empty")
 	}
@@ -200,9 +185,10 @@ func TestGetBackupTask(t *testing.T) {
 func TestGetBackupTaskNotFound(t *testing.T) {
 	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 
-	svc := NewService(map[string]BackupBackend{
-		"nas-01": &mockBackupBackend{tasks: &tasks},
-	})
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks}},
+	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.999")
 	if err != nil {
@@ -214,7 +200,7 @@ func TestGetBackupTaskNotFound(t *testing.T) {
 }
 
 func TestGetBackupTaskInvalidID(t *testing.T) {
-	svc := NewService(map[string]BackupBackend{})
+	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{})
 
 	_, err := svc.GetBackupTask(context.Background(), "invalid-id")
 	if err == nil {
@@ -233,11 +219,10 @@ func TestMapBackupStatus(t *testing.T) {
 		{"error", Error},
 		{"unknown_state", Idle},
 	}
-
 	for _, tt := range tests {
 		got := mapBackupStatus(tt.state)
 		if got != tt.want {
-			t.Errorf("mapBackupStatus(%q) = %s, want %s", tt.state, got, tt.want)
+			t.Errorf("mapBackupStatus(%q) = %v, want %v", tt.state, got, tt.want)
 		}
 	}
 }
@@ -252,7 +237,6 @@ func TestMapBackupType(t *testing.T) {
 		{"glacier_backup", "glacierBackup"},
 		{"custom_type", "custom_type"},
 	}
-
 	for _, tt := range tests {
 		got := mapBackupType(tt.input)
 		if got != tt.want {
@@ -275,7 +259,6 @@ func TestParseTaskID(t *testing.T) {
 		{"device.", "", "", true},
 		{"", "", "", true},
 	}
-
 	for _, tt := range tests {
 		device, taskID, err := parseTaskID(tt.id)
 		if (err != nil) != tt.wantErr {
@@ -296,7 +279,6 @@ func TestParseBackupTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load timezone: %v", err)
 	}
-
 	tests := []struct {
 		input   string
 		loc     *time.Location
@@ -304,12 +286,10 @@ func TestParseBackupTime(t *testing.T) {
 		wantNil bool
 	}{
 		{"2026/04/24 02:30", time.UTC, "2026-04-24T02:30:00Z", false},
-		// Europe/Warsaw in April is CEST = UTC+2; so 02:30 local = 00:30 UTC
 		{"2026/04/24 02:30", warsaw, "2026-04-24T00:30:00Z", false},
 		{"", time.UTC, "", true},
 		{"bad-format", time.UTC, "", true},
 	}
-
 	for _, tt := range tests {
 		result := parseBackupTime(tt.input, tt.loc)
 		if tt.wantNil {
@@ -329,19 +309,81 @@ func TestParseBackupTime(t *testing.T) {
 	}
 }
 
+func TestListBackupTasksStatusError(t *testing.T) {
+	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{
+			"nas-01": &mockBackupBackend{
+				tasks:     &tasks,
+				statusErr: fmt.Errorf("connection refused"),
+			},
+		},
+	)
+
+	result, err := svc.ListBackupTasks(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 tasks even with status error, got %d", len(result.Items))
+	}
+	for _, item := range result.Items {
+		if item.LastResult != BackupTaskResultUnknown {
+			t.Errorf("expected LastResult Unknown when status unavailable, got %v", item.LastResult)
+		}
+	}
+}
+
+func TestGetBackupTaskEnrichmentErrors(t *testing.T) {
+	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+
+	svc := NewService(
+		map[string]StorageBackend{},
+		map[string]BackupBackend{
+			"nas-01": &mockBackupBackend{
+				tasks:     &tasks,
+				statusErr: fmt.Errorf("connection refused"),
+				detailErr: fmt.Errorf("connection refused"),
+				targetErr: fmt.Errorf("connection refused"),
+			},
+		},
+	)
+
+	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if detail == nil {
+		t.Fatal("expected task detail even with enrichment errors, got nil")
+	}
+	if detail.LastResult != BackupTaskResultUnknown {
+		t.Errorf("expected LastResult Unknown when status unavailable, got %v", detail.LastResult)
+	}
+	if detail.LastRunAt != nil {
+		t.Errorf("expected LastRunAt nil when status unavailable, got %v", detail.LastRunAt)
+	}
+	if detail.NextRunAt != nil {
+		t.Errorf("expected NextRunAt nil when status unavailable, got %v", detail.NextRunAt)
+	}
+	if detail.Size != nil {
+		t.Errorf("expected Size nil when target unavailable, got %v", detail.Size)
+	}
+}
+
 func TestMapBackupResult(t *testing.T) {
 	tests := []struct {
 		status *adapters.DSMBackupTaskStatusResponse
 		want   BackupTaskResult
 	}{
-		{nil, Unknown},
-		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "done", LastBkpErrorCode: 0}, Success},
-		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "done", LastBkpErrorCode: 4401}, Warning},
-		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "error"}, Failed},
-		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "skip"}, Skipped},
-		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "other"}, Unknown},
+		{nil, BackupTaskResultUnknown},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "done", LastBkpErrorCode: 0}, BackupTaskResultSuccess},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "done", LastBkpErrorCode: 4401}, BackupTaskResultWarning},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "error"}, BackupTaskResultFailed},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "skip"}, BackupTaskResultSkipped},
+		{&adapters.DSMBackupTaskStatusResponse{LastBkpResult: "other"}, BackupTaskResultUnknown},
 	}
-
 	for _, tt := range tests {
 		got := mapBackupResult(tt.status)
 		if got != tt.want {
@@ -349,7 +391,7 @@ func TestMapBackupResult(t *testing.T) {
 			if tt.status != nil {
 				label = fmt.Sprintf("result=%q code=%d", tt.status.LastBkpResult, tt.status.LastBkpErrorCode)
 			}
-			t.Errorf("mapBackupResult(%s) = %s, want %s", label, got, tt.want)
+			t.Errorf("mapBackupResult(%s) = %v, want %v", label, got, tt.want)
 		}
 	}
 }

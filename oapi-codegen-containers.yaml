@@ -1,9 +1,0 @@
-package: containers
-generate:
-  chi-server: true
-  strict-server: true
-  models: true
-output: internal/containers/api.gen.go
-output-options:
-  include-tags:
-    - containers

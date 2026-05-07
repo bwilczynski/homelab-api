@@ -15,9 +15,8 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/auth"
-	"github.com/bwilczynski/homelab-api/internal/backups"
 	"github.com/bwilczynski/homelab-api/internal/config"
-	"github.com/bwilczynski/homelab-api/internal/containers"
+	"github.com/bwilczynski/homelab-api/internal/docker"
 	"github.com/bwilczynski/homelab-api/internal/health"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
@@ -118,39 +117,29 @@ func main() {
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
-	// Containers: all Synology backends; capability checked per-request via SupportsContainers.
-	containerBackends := make(map[string]containers.ContainerBackend, len(synologyClients))
+	// Docker: all Synology backends; capability checked per-request via SupportsContainers.
+	dockerBackends := make(map[string]docker.ContainerBackend, len(synologyClients))
 	for name, client := range synologyClients {
-		containerBackends[name] = client
+		dockerBackends[name] = client
 	}
-	containersSvc := containers.NewService(containerBackends, monitor)
-	containers.HandlerWithOptions(containers.NewStrictHandler(containers.NewHandler(containersSvc), nil), containers.ChiServerOptions{
+	dockerSvc := docker.NewService(dockerBackends, monitor)
+	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
 		BaseRouter:       protected,
-		Middlewares:      []containers.MiddlewareFunc{scopeMw},
+		Middlewares:      []docker.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
-	// Storage: all Synology backends.
+	// Storage: all Synology backends (volumes + backups).
 	storageBackends := make(map[string]storage.StorageBackend, len(synologyClients))
+	storageBackupBackends := make(map[string]storage.BackupBackend, len(synologyClients))
 	for name, client := range synologyClients {
 		storageBackends[name] = client
+		storageBackupBackends[name] = client
 	}
-	storageSvc := storage.NewService(storageBackends, monitor)
+	storageSvc := storage.NewService(storageBackends, storageBackupBackends, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []storage.MiddlewareFunc{scopeMw},
-		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
-	})
-
-	// Backups: all Synology backends; capability checked per-request via SupportsBackups.
-	backupBackends := make(map[string]backups.BackupBackend, len(synologyClients))
-	for name, client := range synologyClients {
-		backupBackends[name] = client
-	}
-	backupsSvc := backups.NewService(backupBackends, monitor)
-	backups.HandlerWithOptions(backups.NewStrictHandler(backups.NewHandler(backupsSvc), nil), backups.ChiServerOptions{
-		BaseRouter:       protected,
-		Middlewares:      []backups.MiddlewareFunc{scopeMw},
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
