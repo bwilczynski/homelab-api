@@ -503,6 +503,39 @@ type DSMContainerResource struct {
 	MemoryPercent float64 `json:"memoryPercent"`
 }
 
+// DSMDockerNetworkListResponse is the data payload from SYNO.Docker.Network list.
+type DSMDockerNetworkListResponse struct {
+	Networks []DSMDockerNetworkItem `json:"network"`
+}
+
+// DSMDockerNetworkItem represents a Docker network from the DSM API.
+// Named DSMDockerNetworkItem to avoid collision with DSMNetwork (container profile network).
+type DSMDockerNetworkItem struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Driver     string   `json:"driver"`
+	Gateway    string   `json:"gateway"`
+	Subnet     string   `json:"subnet"`
+	IPRange    string   `json:"iprange"`
+	Containers []string `json:"containers"`
+}
+
+// DSMDockerImageListResponse is the data payload from SYNO.Docker.Image list.
+type DSMDockerImageListResponse struct {
+	Images []DSMDockerImageItem `json:"images"`
+}
+
+// DSMDockerImageItem represents a Docker image from the DSM API.
+type DSMDockerImageItem struct {
+	ID          string   `json:"id"`
+	Repository  string   `json:"repository"`
+	Tags        []string `json:"tags"`
+	Size        int64    `json:"size"`
+	VirtualSize int64    `json:"virtual_size"`
+	Created     int64    `json:"created"`
+	Description string   `json:"description"`
+}
+
 // ListContainers retrieves all containers from the DSM Docker API.
 func (c *SynologyClient) ListContainers() (*DSMContainerListResponse, error) {
 	data, err := c.Call("SYNO.Docker.Container", "list", "1", url.Values{
@@ -705,6 +738,32 @@ func (c *SynologyClient) RestartContainer(name string) error {
 		"name": {name},
 	})
 	return mapContainerNotFound(name, err)
+}
+
+// ListDockerNetworks retrieves all Docker networks from the DSM API.
+func (c *SynologyClient) ListDockerNetworks() (*DSMDockerNetworkListResponse, error) {
+	data, err := c.Call("SYNO.Docker.Network", "list", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMDockerNetworkListResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse docker network list: %w", err)
+	}
+	return &result, nil
+}
+
+// ListDockerImages retrieves all Docker images from the DSM API.
+func (c *SynologyClient) ListDockerImages() (*DSMDockerImageListResponse, error) {
+	data, err := c.Call("SYNO.Docker.Image", "list", "1", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result DSMDockerImageListResponse
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse docker image list: %w", err)
+	}
+	return &result, nil
 }
 
 func mapContainerNotFound(name string, err error) error {
