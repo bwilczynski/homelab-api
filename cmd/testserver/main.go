@@ -39,7 +39,7 @@ func loadFixture[T any](path string) T {
 	return envelope.Data
 }
 
-// docker.ContainerBackend
+// docker.DockerBackend
 type mockContainerBackend struct {
 	list      *adapters.DSMContainerListResponse
 	detail    *adapters.DSMContainerDetailResponse
@@ -73,6 +73,12 @@ func (m *mockContainerBackend) SupportsContainers() bool           { return true
 func (m *mockContainerBackend) StartContainer(name string) error   { return m.checkContainer(name) }
 func (m *mockContainerBackend) StopContainer(name string) error    { return m.checkContainer(name) }
 func (m *mockContainerBackend) RestartContainer(name string) error { return m.checkContainer(name) }
+func (m *mockContainerBackend) ListDockerNetworks() (*adapters.DSMDockerNetworkListResponse, error) {
+	return &adapters.DSMDockerNetworkListResponse{}, nil
+}
+func (m *mockContainerBackend) ListDockerImages() (*adapters.DSMDockerImageListResponse, error) {
+	return &adapters.DSMDockerImageListResponse{}, nil
+}
 
 // system.DSMBackend
 type mockDSMBackend struct {
@@ -175,7 +181,7 @@ func main() {
 		detail:    new(loadFixture[adapters.DSMContainerDetailResponse](base + "/docker/testdata/container_detail.json")),
 		resources: new(loadFixture[adapters.DSMContainerResourceResponse](base + "/docker/testdata/container_resources.json")),
 	}
-	dockerSvc := docker.NewService(map[string]docker.ContainerBackend{"nas-01": cb})
+	dockerSvc := docker.NewService(map[string]docker.DockerBackend{"nas-01": cb})
 	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
