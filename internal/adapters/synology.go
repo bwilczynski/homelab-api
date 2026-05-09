@@ -755,7 +755,8 @@ func (c *SynologyClient) ListDockerNetworks() (*DSMDockerNetworkListResponse, er
 
 // ListDockerImages retrieves all Docker images from the DSM API.
 func (c *SynologyClient) ListDockerImages() (*DSMDockerImageListResponse, error) {
-	data, err := c.Call("SYNO.Docker.Image", "list", "1", nil)
+	params := url.Values{"limit": {"-1"}, "offset": {"0"}, "show_dsm": {"false"}}
+	data, err := c.Call("SYNO.Docker.Image", "list", "1", params)
 	if err != nil {
 		return nil, err
 	}
