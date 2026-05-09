@@ -235,6 +235,116 @@ type ContainerResources struct {
 // ContainerStatus Current state of a container.
 type ContainerStatus string
 
+// DockerImage A Docker image stored on a backend device.
+type DockerImage struct {
+	// Device Identifier of the backend device storing this image.
+	Device string `json:"device"`
+
+	// Id Globally unique image identifier in the form `{device}.{shortId}`,
+	// where `shortId` is the first 12 characters of the image's SHA-256 digest.
+	Id string `json:"id"`
+
+	// Repository Full repository name. Includes the registry prefix for non-Docker Hub
+	// images (e.g. `ghcr.io/immich-app/immich-server`). Docker Hub images
+	// are stored without prefix (e.g. `caddy`).
+	Repository string `json:"repository"`
+
+	// Size On-disk size of the image in bytes.
+	Size Bytes `json:"size"`
+
+	// Tags Tags assigned to this image. Empty when the image is untagged.
+	Tags []string `json:"tags"`
+}
+
+// DockerImageDetail defines model for DockerImageDetail.
+type DockerImageDetail struct {
+	// Created Timestamp when the image was built.
+	Created time.Time `json:"created"`
+
+	// Description Human-readable description of the image. Omitted when empty.
+	Description *string `json:"description,omitempty"`
+
+	// Device Identifier of the backend device storing this image.
+	Device string `json:"device"`
+
+	// Id Globally unique image identifier in the form `{device}.{shortId}`,
+	// where `shortId` is the first 12 characters of the image's SHA-256 digest.
+	Id string `json:"id"`
+
+	// Repository Full repository name. Includes the registry prefix for non-Docker Hub
+	// images (e.g. `ghcr.io/immich-app/immich-server`). Docker Hub images
+	// are stored without prefix (e.g. `caddy`).
+	Repository string `json:"repository"`
+
+	// Size On-disk size of the image in bytes.
+	Size Bytes `json:"size"`
+
+	// Tags Tags assigned to this image. Empty when the image is untagged.
+	Tags []string `json:"tags"`
+
+	// VirtualSize Total uncompressed size of all image layers in bytes.
+	VirtualSize Bytes `json:"virtualSize"`
+}
+
+// DockerImageList List of Docker images.
+type DockerImageList struct {
+	// Items Docker images matching the query. Empty array, never null.
+	Items []DockerImage `json:"items"`
+}
+
+// DockerNetwork A Docker network on a backend device.
+type DockerNetwork struct {
+	// ConnectedContainers Number of containers currently connected to this network.
+	ConnectedContainers int `json:"connectedContainers"`
+
+	// Device Identifier of the backend device hosting this network.
+	Device string `json:"device"`
+
+	// Id Globally unique network identifier in the form `{device}.{name}`.
+	// Use this value directly in path parameters.
+	Id string `json:"id"`
+
+	// Name Network name as reported by Docker.
+	Name string `json:"name"`
+}
+
+// DockerNetworkDetail defines model for DockerNetworkDetail.
+type DockerNetworkDetail struct {
+	// ConnectedContainers Number of containers currently connected to this network.
+	ConnectedContainers int `json:"connectedContainers"`
+
+	// Containers Names of containers currently connected to this network.
+	Containers []string `json:"containers"`
+
+	// Device Identifier of the backend device hosting this network.
+	Device string `json:"device"`
+
+	// Driver Network driver (e.g. bridge, host, macvlan).
+	Driver string `json:"driver"`
+
+	// Gateway Default gateway IP. Omitted for networks without IPAM.
+	Gateway *string `json:"gateway,omitempty"`
+
+	// Id Globally unique network identifier in the form `{device}.{name}`.
+	// Use this value directly in path parameters.
+	Id string `json:"id"`
+
+	// IpRange IP range allocated to containers within this subnet, in CIDR notation. Omitted when not configured.
+	IpRange *string `json:"ipRange,omitempty"`
+
+	// Name Network name as reported by Docker.
+	Name string `json:"name"`
+
+	// Subnet Subnet in CIDR notation. Omitted for networks without IPAM (e.g. host).
+	Subnet *string `json:"subnet,omitempty"`
+}
+
+// DockerNetworkList List of Docker networks.
+type DockerNetworkList struct {
+	// Items Docker networks matching the query. Empty array, never null.
+	Items []DockerNetwork `json:"items"`
+}
+
 // EnvVariable An environment variable set in a container.
 type EnvVariable struct {
 	// Key Environment variable name.
@@ -362,6 +472,20 @@ type StopContainerParams struct {
 	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
 }
 
+// ListDockerImagesParams defines parameters for ListDockerImages.
+type ListDockerImagesParams struct {
+	// Device Filter results to a specific backend device by its identifier.
+	// Omit to return results from all devices.
+	Device *DeviceFilter `form:"device,omitempty" json:"device,omitempty"`
+}
+
+// ListDockerNetworksParams defines parameters for ListDockerNetworks.
+type ListDockerNetworksParams struct {
+	// Device Filter results to a specific backend device by its identifier.
+	// Omit to return results from all devices.
+	Device *DeviceFilter `form:"device,omitempty" json:"device,omitempty"`
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List containers
@@ -379,6 +503,18 @@ type ServerInterface interface {
 	// Stop a container
 	// (POST /docker/containers/{containerId}:stop)
 	StopContainer(w http.ResponseWriter, r *http.Request, containerId string, params StopContainerParams)
+	// List Docker images
+	// (GET /docker/images)
+	ListDockerImages(w http.ResponseWriter, r *http.Request, params ListDockerImagesParams)
+	// Get a Docker image
+	// (GET /docker/images/{imageId})
+	GetDockerImage(w http.ResponseWriter, r *http.Request, imageId string)
+	// List Docker networks
+	// (GET /docker/networks)
+	ListDockerNetworks(w http.ResponseWriter, r *http.Request, params ListDockerNetworksParams)
+	// Get a Docker network
+	// (GET /docker/networks/{networkId})
+	GetDockerNetwork(w http.ResponseWriter, r *http.Request, networkId string)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -412,6 +548,30 @@ func (_ Unimplemented) StartContainer(w http.ResponseWriter, r *http.Request, co
 // Stop a container
 // (POST /docker/containers/{containerId}:stop)
 func (_ Unimplemented) StopContainer(w http.ResponseWriter, r *http.Request, containerId string, params StopContainerParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List Docker images
+// (GET /docker/images)
+func (_ Unimplemented) ListDockerImages(w http.ResponseWriter, r *http.Request, params ListDockerImagesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a Docker image
+// (GET /docker/images/{imageId})
+func (_ Unimplemented) GetDockerImage(w http.ResponseWriter, r *http.Request, imageId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List Docker networks
+// (GET /docker/networks)
+func (_ Unimplemented) ListDockerNetworks(w http.ResponseWriter, r *http.Request, params ListDockerNetworksParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a Docker network
+// (GET /docker/networks/{networkId})
+func (_ Unimplemented) GetDockerNetwork(w http.ResponseWriter, r *http.Request, networkId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -663,6 +823,148 @@ func (siw *ServerInterfaceWrapper) StopContainer(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListDockerImages operation middleware
+func (siw *ServerInterfaceWrapper) ListDockerImages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{"read:docker"})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDockerImagesParams
+
+	// ------------- Optional query parameter "device" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "device", r.URL.Query(), &params.Device, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "device"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "device", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDockerImages(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDockerImage operation middleware
+func (siw *ServerInterfaceWrapper) GetDockerImage(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "imageId" -------------
+	var imageId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "imageId", chi.URLParam(r, "imageId"), &imageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "imageId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{"read:docker"})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDockerImage(w, r, imageId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDockerNetworks operation middleware
+func (siw *ServerInterfaceWrapper) ListDockerNetworks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{"read:docker"})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListDockerNetworksParams
+
+	// ------------- Optional query parameter "device" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "device", r.URL.Query(), &params.Device, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "device"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "device", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDockerNetworks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDockerNetwork operation middleware
+func (siw *ServerInterfaceWrapper) GetDockerNetwork(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "networkId" -------------
+	var networkId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "networkId", chi.URLParam(r, "networkId"), &networkId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "networkId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{"read:docker"})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDockerNetwork(w, r, networkId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -790,6 +1092,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/docker/containers/{containerId}:stop", wrapper.StopContainer)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/docker/images", wrapper.ListDockerImages)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/docker/images/{imageId}", wrapper.GetDockerImage)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/docker/networks", wrapper.ListDockerNetworks)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/docker/networks/{networkId}", wrapper.GetDockerNetwork)
 	})
 
 	return r
@@ -1372,6 +1686,426 @@ func (response StopContainer500ApplicationProblemPlusJSONResponse) VisitStopCont
 	return err
 }
 
+type ListDockerImagesRequestObject struct {
+	Params ListDockerImagesParams
+}
+
+type ListDockerImagesResponseObject interface {
+	VisitListDockerImagesResponse(w http.ResponseWriter) error
+}
+
+type ListDockerImages200JSONResponse DockerImageList
+
+func (response ListDockerImages200JSONResponse) VisitListDockerImagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerImages401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerImages401ApplicationProblemPlusJSONResponse) VisitListDockerImagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerImages403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerImages403ApplicationProblemPlusJSONResponse) VisitListDockerImagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerImages429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerImages429ApplicationProblemPlusJSONResponse) VisitListDockerImagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerImages500ApplicationProblemPlusJSONResponse struct {
+	InternalServerErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerImages500ApplicationProblemPlusJSONResponse) VisitListDockerImagesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImageRequestObject struct {
+	ImageId string `json:"imageId"`
+}
+
+type GetDockerImageResponseObject interface {
+	VisitGetDockerImageResponse(w http.ResponseWriter) error
+}
+
+type GetDockerImage200JSONResponse DockerImageDetail
+
+func (response GetDockerImage200JSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImage400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerImage400ApplicationProblemPlusJSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImage401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerImage401ApplicationProblemPlusJSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImage403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerImage403ApplicationProblemPlusJSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImage404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerImage404ApplicationProblemPlusJSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImage429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerImage429ApplicationProblemPlusJSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerImage500ApplicationProblemPlusJSONResponse struct {
+	InternalServerErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerImage500ApplicationProblemPlusJSONResponse) VisitGetDockerImageResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerNetworksRequestObject struct {
+	Params ListDockerNetworksParams
+}
+
+type ListDockerNetworksResponseObject interface {
+	VisitListDockerNetworksResponse(w http.ResponseWriter) error
+}
+
+type ListDockerNetworks200JSONResponse DockerNetworkList
+
+func (response ListDockerNetworks200JSONResponse) VisitListDockerNetworksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerNetworks401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerNetworks401ApplicationProblemPlusJSONResponse) VisitListDockerNetworksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerNetworks403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerNetworks403ApplicationProblemPlusJSONResponse) VisitListDockerNetworksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerNetworks429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerNetworks429ApplicationProblemPlusJSONResponse) VisitListDockerNetworksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListDockerNetworks500ApplicationProblemPlusJSONResponse struct {
+	InternalServerErrorApplicationProblemPlusJSONResponse
+}
+
+func (response ListDockerNetworks500ApplicationProblemPlusJSONResponse) VisitListDockerNetworksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetworkRequestObject struct {
+	NetworkId string `json:"networkId"`
+}
+
+type GetDockerNetworkResponseObject interface {
+	VisitGetDockerNetworkResponse(w http.ResponseWriter) error
+}
+
+type GetDockerNetwork200JSONResponse DockerNetworkDetail
+
+func (response GetDockerNetwork200JSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetwork400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerNetwork400ApplicationProblemPlusJSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetwork401ApplicationProblemPlusJSONResponse struct {
+	UnauthorizedApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerNetwork401ApplicationProblemPlusJSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetwork403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerNetwork403ApplicationProblemPlusJSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetwork404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerNetwork404ApplicationProblemPlusJSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetwork429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerNetwork429ApplicationProblemPlusJSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	if response.Headers.RetryAfter != nil {
+		w.Header().Set("Retry-After", fmt.Sprint(*response.Headers.RetryAfter))
+	}
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDockerNetwork500ApplicationProblemPlusJSONResponse struct {
+	InternalServerErrorApplicationProblemPlusJSONResponse
+}
+
+func (response GetDockerNetwork500ApplicationProblemPlusJSONResponse) VisitGetDockerNetworkResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// List containers
@@ -1389,6 +2123,18 @@ type StrictServerInterface interface {
 	// Stop a container
 	// (POST /docker/containers/{containerId}:stop)
 	StopContainer(ctx context.Context, request StopContainerRequestObject) (StopContainerResponseObject, error)
+	// List Docker images
+	// (GET /docker/images)
+	ListDockerImages(ctx context.Context, request ListDockerImagesRequestObject) (ListDockerImagesResponseObject, error)
+	// Get a Docker image
+	// (GET /docker/images/{imageId})
+	GetDockerImage(ctx context.Context, request GetDockerImageRequestObject) (GetDockerImageResponseObject, error)
+	// List Docker networks
+	// (GET /docker/networks)
+	ListDockerNetworks(ctx context.Context, request ListDockerNetworksRequestObject) (ListDockerNetworksResponseObject, error)
+	// Get a Docker network
+	// (GET /docker/networks/{networkId})
+	GetDockerNetwork(ctx context.Context, request GetDockerNetworkRequestObject) (GetDockerNetworkResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -1546,6 +2292,110 @@ func (sh *strictHandler) StopContainer(w http.ResponseWriter, r *http.Request, c
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StopContainerResponseObject); ok {
 		if err := validResponse.VisitStopContainerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListDockerImages operation middleware
+func (sh *strictHandler) ListDockerImages(w http.ResponseWriter, r *http.Request, params ListDockerImagesParams) {
+	var request ListDockerImagesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDockerImages(ctx, request.(ListDockerImagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDockerImages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListDockerImagesResponseObject); ok {
+		if err := validResponse.VisitListDockerImagesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDockerImage operation middleware
+func (sh *strictHandler) GetDockerImage(w http.ResponseWriter, r *http.Request, imageId string) {
+	var request GetDockerImageRequestObject
+
+	request.ImageId = imageId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDockerImage(ctx, request.(GetDockerImageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDockerImage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDockerImageResponseObject); ok {
+		if err := validResponse.VisitGetDockerImageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListDockerNetworks operation middleware
+func (sh *strictHandler) ListDockerNetworks(w http.ResponseWriter, r *http.Request, params ListDockerNetworksParams) {
+	var request ListDockerNetworksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListDockerNetworks(ctx, request.(ListDockerNetworksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListDockerNetworks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListDockerNetworksResponseObject); ok {
+		if err := validResponse.VisitListDockerNetworksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetDockerNetwork operation middleware
+func (sh *strictHandler) GetDockerNetwork(w http.ResponseWriter, r *http.Request, networkId string) {
+	var request GetDockerNetworkRequestObject
+
+	request.NetworkId = networkId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetDockerNetwork(ctx, request.(GetDockerNetworkRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetDockerNetwork")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetDockerNetworkResponseObject); ok {
+		if err := validResponse.VisitGetDockerNetworkResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
