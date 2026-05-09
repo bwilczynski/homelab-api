@@ -25,7 +25,7 @@ type deviceBackend struct {
 // Service implements Docker domain business logic.
 type Service struct {
 	backends []deviceBackend
-	monitor  adapters.AvailabilityChecker
+	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
 }
 
 // NewService creates a new Docker service with one or more backends.
