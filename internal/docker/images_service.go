@@ -51,9 +51,9 @@ func (s *Service) ListImages(ctx context.Context, device *string) (DockerImageLi
 	return DockerImageList{Items: items}, nil
 }
 
-// GetImage returns a single Docker image by composite ID "{device}.{shortId}".
+// GetImage returns a single Docker image by composite ID "{device}.{shortID}".
 func (s *Service) GetImage(ctx context.Context, imageID string) (*DockerImageDetail, error) {
-	device, shortId, err := parseDockerID(imageID)
+	device, shortID, err := parseDockerID(imageID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (s *Service) GetImage(ctx context.Context, imageID string) (*DockerImageDet
 		return nil, fmt.Errorf("list docker images: %w", err)
 	}
 	for _, img := range raw.Images {
-		if strings.HasPrefix(img.ID, "sha256:"+shortId) {
+		if strings.HasPrefix(img.ID, "sha256:"+shortID) {
 			detail := mapDockerImageDetail(device, img)
 			return &detail, nil
 		}
