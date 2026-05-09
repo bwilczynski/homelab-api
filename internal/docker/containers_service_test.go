@@ -9,11 +9,13 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
 
-// mockBackend implements ContainerBackend for testing.
+// mockBackend implements DockerBackend for testing.
 type mockBackend struct {
 	listResp      *adapters.DSMContainerListResponse
 	detailResp    *adapters.DSMContainerDetailResponse
 	resourcesResp *adapters.DSMContainerResourceResponse
+	networksResp  *adapters.DSMDockerNetworkListResponse
+	imagesResp    *adapters.DSMDockerImageListResponse
 	startErr      error
 	stopErr       error
 	restartErr    error
@@ -36,6 +38,14 @@ func (m *mockBackend) StartContainer(name string) error   { return m.startErr }
 func (m *mockBackend) StopContainer(name string) error    { return m.stopErr }
 func (m *mockBackend) RestartContainer(name string) error { return m.restartErr }
 
+func (m *mockBackend) ListDockerNetworks() (*adapters.DSMDockerNetworkListResponse, error) {
+	return m.networksResp, nil
+}
+
+func (m *mockBackend) ListDockerImages() (*adapters.DSMDockerImageListResponse, error) {
+	return m.imagesResp, nil
+}
+
 func loadFixture[T any](t *testing.T, path string) T {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -56,7 +66,7 @@ func TestListContainers(t *testing.T) {
 	listResp := loadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
 		resourcesResp: &resourcesResp,
 	}})
@@ -105,7 +115,7 @@ func TestListContainersWithDeviceFilter(t *testing.T) {
 	listResp := loadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
 		resourcesResp: &resourcesResp,
 	}})
@@ -135,7 +145,7 @@ func TestGetContainer(t *testing.T) {
 	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
 	}})
@@ -163,7 +173,7 @@ func TestGetContainerDetailFields(t *testing.T) {
 	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
 	}})
@@ -268,7 +278,7 @@ func TestGetContainerStatusFields(t *testing.T) {
 	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
 	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
 	}})
@@ -297,7 +307,7 @@ func TestGetContainerStatusFields(t *testing.T) {
 }
 
 func TestGetContainerInvalidID(t *testing.T) {
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}})
 
 	_, err := svc.GetContainer(context.Background(), "invalid-id")
 	if err == nil {
@@ -321,16 +331,16 @@ func TestParseContainerID(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		device, name, err := parseContainerID(tt.id)
+		device, name, err := parseDockerID(tt.id)
 		if (err != nil) != tt.wantErr {
-			t.Errorf("parseContainerID(%q) error = %v, wantErr %v", tt.id, err, tt.wantErr)
+			t.Errorf("parseDockerID(%q) error = %v, wantErr %v", tt.id, err, tt.wantErr)
 			continue
 		}
 		if device != tt.wantDevice {
-			t.Errorf("parseContainerID(%q) device = %q, want %q", tt.id, device, tt.wantDevice)
+			t.Errorf("parseDockerID(%q) device = %q, want %q", tt.id, device, tt.wantDevice)
 		}
 		if name != tt.wantName {
-			t.Errorf("parseContainerID(%q) name = %q, want %q", tt.id, name, tt.wantName)
+			t.Errorf("parseDockerID(%q) name = %q, want %q", tt.id, name, tt.wantName)
 		}
 	}
 }
@@ -356,7 +366,7 @@ func TestMapStatus(t *testing.T) {
 }
 
 func TestListContainersEmptyList(t *testing.T) {
-	svc := NewService(map[string]ContainerBackend{"nas-01": &mockBackend{
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{},
 		},
