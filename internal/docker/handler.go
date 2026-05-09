@@ -133,3 +133,87 @@ func (h *ServerHandler) StopContainer(ctx context.Context, request StopContainer
 	}
 	return StopContainer204Response{}, nil
 }
+
+func (h *ServerHandler) ListDockerImages(ctx context.Context, request ListDockerImagesRequestObject) (ListDockerImagesResponseObject, error) {
+	result, err := h.svc.ListImages(ctx, request.Params.Device)
+	if err != nil {
+		detail := err.Error()
+		return ListDockerImages500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return ListDockerImages200JSONResponse(result), nil
+}
+
+func (h *ServerHandler) GetDockerImage(ctx context.Context, request GetDockerImageRequestObject) (GetDockerImageResponseObject, error) {
+	result, err := h.svc.GetImage(ctx, request.ImageId)
+	if err != nil {
+		detail := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetDockerImage404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &detail,
+				},
+			}, nil
+		}
+		return GetDockerImage500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return GetDockerImage200JSONResponse(*result), nil
+}
+
+func (h *ServerHandler) ListDockerNetworks(ctx context.Context, request ListDockerNetworksRequestObject) (ListDockerNetworksResponseObject, error) {
+	result, err := h.svc.ListNetworks(ctx, request.Params.Device)
+	if err != nil {
+		detail := err.Error()
+		return ListDockerNetworks500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return ListDockerNetworks200JSONResponse(result), nil
+}
+
+func (h *ServerHandler) GetDockerNetwork(ctx context.Context, request GetDockerNetworkRequestObject) (GetDockerNetworkResponseObject, error) {
+	result, err := h.svc.GetNetwork(ctx, request.NetworkId)
+	if err != nil {
+		detail := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetDockerNetwork404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &detail,
+				},
+			}, nil
+		}
+		return GetDockerNetwork500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return GetDockerNetwork200JSONResponse(*result), nil
+}

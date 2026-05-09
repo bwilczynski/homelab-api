@@ -118,7 +118,7 @@ func main() {
 	})
 
 	// Docker: all Synology backends; capability checked per-request via SupportsContainers.
-	dockerBackends := make(map[string]docker.ContainerBackend, len(synologyClients))
+	dockerBackends := make(map[string]docker.DockerBackend, len(synologyClients))
 	for name, client := range synologyClients {
 		dockerBackends[name] = client
 	}
