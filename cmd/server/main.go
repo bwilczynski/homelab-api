@@ -148,7 +148,14 @@ func main() {
 	for name, client := range unifiClients {
 		networkBackends[name] = client
 	}
-	networkSvc := network.NewService(networkBackends, 30, monitor)
+	historyDays := 30
+	for _, b := range cfg.ByType(config.BackendTypeUniFi) {
+		if b.ClientHistoryDays > 0 {
+			historyDays = b.ClientHistoryDays
+			break
+		}
+	}
+	networkSvc := network.NewService(networkBackends, historyDays, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []network.MiddlewareFunc{scopeMw},
