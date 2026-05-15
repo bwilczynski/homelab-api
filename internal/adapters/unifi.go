@@ -158,6 +158,84 @@ func (c *UniFiClient) GetClients() ([]UniFiSta, error) {
 	return result.Data, nil
 }
 
+// --- Client v2 types ---
+
+// UniFiClientV2 represents a client from the UniFi Controller v2 API.
+// Active clients have IP, Uptime, ESSID, Signal populated; history clients have LastIP, LastSeen.
+type UniFiClientV2 struct {
+	ID             string  `json:"id"`
+	MAC            string  `json:"mac"`
+	DisplayName    string  `json:"display_name"`
+	Name           *string `json:"name"`
+	Hostname       *string `json:"hostname"`
+	IP             string  `json:"ip"`
+	LastIP         string  `json:"last_ip"`
+	IsWired        bool    `json:"is_wired"`
+	Status         string  `json:"status"` // "online" | "offline"
+	LastUplinkName string  `json:"last_uplink_name"`
+	Uptime         int     `json:"uptime"`
+	ESSID          *string `json:"essid"`
+	Signal         *int    `json:"signal"`
+	LastSeen       int64   `json:"last_seen"`
+}
+
+// getV2 performs an authenticated GET request against the UniFi v2 API and decodes the bare JSON array response.
+func (c *UniFiClient) getV2(path string, out any) error {
+	return c.get(path, out)
+}
+
+// fetchActiveClients calls the v2 active clients endpoint. Caller must have already called login().
+func (c *UniFiClient) fetchActiveClients() ([]UniFiClientV2, error) {
+	var result []UniFiClientV2
+	if err := c.getV2("/v2/api/site/default/clients/active?includeTrafficUsage=false&includeUnifiDevices=false", &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// fetchOfflineClients calls the v2 history clients endpoint. Caller must have already called login().
+func (c *UniFiClient) fetchOfflineClients(historyDays int) ([]UniFiClientV2, error) {
+	path := fmt.Sprintf("/v2/api/site/default/clients/history?onlyNonBlocked=true&withinHours=%d", historyDays*24)
+	var result []UniFiClientV2
+	if err := c.getV2(path, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// GetActiveClients retrieves currently connected clients from the UniFi Controller v2 API.
+func (c *UniFiClient) GetActiveClients() ([]UniFiClientV2, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	return c.fetchActiveClients()
+}
+
+// GetOfflineClients retrieves recently disconnected clients from the UniFi Controller v2 API.
+// historyDays controls how far back to look (passed as withinHours=historyDays*24).
+func (c *UniFiClient) GetOfflineClients(historyDays int) ([]UniFiClientV2, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	return c.fetchOfflineClients(historyDays)
+}
+
+// GetAllClients retrieves all clients (active and history) with a single login.
+func (c *UniFiClient) GetAllClients(historyDays int) ([]UniFiClientV2, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	active, err := c.fetchActiveClients()
+	if err != nil {
+		return nil, fmt.Errorf("fetch active clients: %w", err)
+	}
+	offline, err := c.fetchOfflineClients(historyDays)
+	if err != nil {
+		return nil, fmt.Errorf("fetch offline clients: %w", err)
+	}
+	return append(active, offline...), nil
+}
+
 // --- Health types ---
 
 // UniFiSubsystemHealth represents health data for a single UniFi subsystem.
