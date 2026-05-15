@@ -65,13 +65,13 @@ Description updated to "Returns all known client devices, online and offline."
 
 ### `WiredNetworkClientDetail.yaml`
 All session fields become optional (were required):
-- `switchName` — optional; populated for online and offline (from `last_uplink_name`)
+- `switchName` — optional; may be available for offline clients (last known switch)
 - `switchPort` — optional; online only
 - `uptime` — optional; online only
 
 ### `WirelessNetworkClientDetail.yaml`
 All session fields become optional (were required):
-- `ssid` — optional; online only (history response has only `wlanconf_id`, not the SSID string)
+- `ssid` — optional; may not be available for offline clients
 - `signalStrength` — optional; online only
 - `uptime` — optional; online only
 
