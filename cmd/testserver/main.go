@@ -250,8 +250,10 @@ func main() {
 
 	// Network
 	nb := &mockNetworkBackend{
-		devices: loadFixture[[]adapters.UniFiDevice](base + "/network/testdata/unifi-devices.json"),
-		clients: loadFixture[[]adapters.UniFiSta](base + "/network/testdata/unifi-clients.json"),
+		devices:        loadFixture[[]adapters.UniFiDevice](base + "/network/testdata/unifi-devices.json"),
+		clients:        loadFixture[[]adapters.UniFiSta](base + "/network/testdata/unifi-clients.json"),
+		activeClients:  loadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-active.json"),
+		offlineClients: loadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-history.json"),
 	}
 	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
