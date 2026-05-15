@@ -106,7 +106,24 @@ type UniFiClientV2 struct {
 func (c *UniFiClient) GetAllClients() ([]UniFiClientV2, error)
 ```
 
-`GetAllClients()`: one `login()`, GET active endpoint, GET history endpoint, concatenate slices, return.
+`GetAllClients(historyDays int)`: one `login()`, GET active endpoint, GET history endpoint with `withinHours=historyDays*24`, concatenate slices, return.
+
+## Config (`internal/config/config.go`)
+
+Add optional field to `Backend`:
+```go
+ClientHistoryDays int `yaml:"client_history_days"` // UniFi only; defaults to 30
+```
+
+Default applied at the service wiring site (`cmd/server/`): if `ClientHistoryDays == 0`, use 30. The value is passed through to `GetAllClients()`. Example `config.yaml` entry:
+```yaml
+- name: unifi
+  type: unifi
+  host: unifi.home.bwilczynski.com
+  username: agent
+  password: ${UNIFI_PASS}
+  client_history_days: 7  # optional, default 30
+```
 
 ## Service (`internal/network/`)
 
