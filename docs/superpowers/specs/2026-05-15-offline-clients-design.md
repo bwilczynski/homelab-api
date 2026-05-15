@@ -103,10 +103,12 @@ type UniFiClientV2 struct {
     LastSeen       int64   `json:"last_seen"`       // history only
 }
 
-func (c *UniFiClient) GetAllClients() ([]UniFiClientV2, error)
+func (c *UniFiClient) GetActiveClients() ([]UniFiClientV2, error)
+func (c *UniFiClient) GetOfflineClients(historyDays int) ([]UniFiClientV2, error)
 ```
 
-`GetAllClients(historyDays int)`: one `login()`, GET active endpoint, GET history endpoint with `withinHours=historyDays*24`, concatenate slices, return.
+`GetActiveClients()`: one `login()`, GET v2 active endpoint, return.
+`GetOfflineClients(historyDays int)`: one `login()`, GET v2 history endpoint with `withinHours=historyDays*24`, return.
 
 ## Config (`internal/config/config.go`)
 
@@ -115,7 +117,7 @@ Add optional field to `Backend`:
 ClientHistoryDays int `yaml:"client_history_days"` // UniFi only; defaults to 30
 ```
 
-Default applied at the service wiring site (`cmd/server/`): if `ClientHistoryDays == 0`, use 30. The value is passed through to `GetAllClients()`. Example `config.yaml` entry:
+Default applied at the service wiring site (`cmd/server/`): if `ClientHistoryDays == 0`, use 30. The value is passed through to `GetOfflineClients()`. Example `config.yaml` entry:
 ```yaml
 - name: unifi
   type: unifi
@@ -130,22 +132,26 @@ Default applied at the service wiring site (`cmd/server/`): if `ClientHistoryDay
 ### `ClientsBackend` interface
 ```go
 type ClientsBackend interface {
-    GetClients() ([]adapters.UniFiSta, error)        // detail path (unchanged)
-    GetAllClients() ([]adapters.UniFiClientV2, error) // list path
+    GetClients() ([]adapters.UniFiSta, error)                      // detail path (unchanged)
+    GetActiveClients() ([]adapters.UniFiClientV2, error)           // list: online
+    GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error) // list: offline
 }
 ```
 
 ### `ListClients`
-- Calls `GetAllClients()` instead of `GetClients()`.
-- Accepts optional `status` string param; filters if set, returns all if empty.
-- Name: `name → hostname → mac` fallback (ignores `display_name`).
-- IP: `IP` for online, `LastIP` for offline.
-- `connectionType`: from `IsWired`.
-- `status`: from `Status` field (`"online"` → `online`, `"offline"` → `offline`).
+Accepts optional `status` param. Calls only the endpoints needed:
+- `status=online` → `GetActiveClients()` only
+- `status=offline` → `GetOfflineClients(historyDays)` only
+- no filter → both, results concatenated
+
+Name: `name → hostname → mac` fallback (ignores `display_name`).
+IP: `IP` for online clients, `LastIP` for offline clients.
+`connectionType`: from `IsWired`.
+`status`: from `Status` field (`"online"` → `online`, `"offline"` → `offline`).
 
 ### `GetClient`
 - First checks `GetClients()` (v1 active) — if found, returns existing wired/wireless detail (unchanged path).
-- If not found in active, calls `GetAllClients()`, filters results to `status == "offline"`, and searches by composite ID suffix.
+- If not found in active, calls `GetOfflineClients(historyDays)` and searches by composite ID suffix.
 - If found in history, returns wired or wireless detail with only `switchName` populated (from `LastUplinkName`) and session fields absent.
 - If not found in either, returns 404.
 
@@ -156,7 +162,7 @@ type ClientsBackend interface {
 - `testdata/unifi-v2-history.json` — sanitized from `scripts/responses/unifi-v2-history-raw.json`
 
 ### Mock update
-`mockUniFi` gains `GetAllClients()` returning `[]adapters.UniFiClientV2`. Existing `GetClients()` mock unchanged — all existing detail tests compile and pass without modification.
+`mockUniFi` gains `GetActiveClients()` and `GetOfflineClients(historyDays int)` returning `[]adapters.UniFiClientV2` from separate fixture slices. Existing `GetClients()` mock unchanged — all existing detail tests compile and pass without modification.
 
 ### New list tests
 - All clients returned by default (online + offline count matches fixture total).
