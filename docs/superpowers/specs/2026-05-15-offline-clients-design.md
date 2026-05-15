@@ -22,6 +22,10 @@ The existing v1 `GetClients()` call (`/stat/sta`) is kept unchanged for the deta
 
 Name resolution for IDs uses `name → hostname → mac` (same as today), not `display_name`, so client IDs remain stable for clients with user-assigned aliases.
 
+## Workflow
+
+Spec changes go to the [homelab-api-spec](https://github.com/bwilczynski/homelab-api-spec) repo via PR. Implementation proceeds against the local `spec/` submodule changes without waiting for the PR to merge. Once the PR merges, update the submodule ref and re-run `make generate`.
+
 ## Spec Changes (`homelab-api-spec` repo)
 
 ### `NetworkClientConnectionType.yaml`
