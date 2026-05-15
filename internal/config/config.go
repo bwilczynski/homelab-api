@@ -24,8 +24,9 @@ type Backend struct {
 	Username    string      `yaml:"username"`
 	Password    string      `yaml:"password"`
 	AuthVersion string      `yaml:"auth_version"` // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
-	InsecureTLS bool        `yaml:"insecure_tls"` // optional; skip TLS certificate verification (defaults to false)
-	Timezone    string      `yaml:"timezone"`     // optional; IANA timezone name (e.g. "Europe/Warsaw"); defaults to server local TZ
+	InsecureTLS       bool        `yaml:"insecure_tls"`        // optional; skip TLS certificate verification (defaults to false)
+	ClientHistoryDays int         `yaml:"client_history_days"` // optional; UniFi only — how many days of offline client history to include (default: 30)
+	Timezone          string      `yaml:"timezone"`            // optional; IANA timezone name (e.g. "Europe/Warsaw"); defaults to server local TZ
 }
 
 // Auth holds JWT/JWKS authorization settings.

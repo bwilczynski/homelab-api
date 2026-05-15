@@ -11,27 +11,75 @@ import (
 // ClientsBackend is the narrow interface for client operations.
 type ClientsBackend interface {
 	GetClients() ([]adapters.UniFiSta, error)
+	GetActiveClients() ([]adapters.UniFiClientV2, error)
+	GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error)
+	GetAllClients(historyDays int) ([]adapters.UniFiClientV2, error)
 }
 
-// ListClients retrieves all connected clients from all backends.
-func (s *Service) ListClients(ctx context.Context) (NetworkClientList, error) {
+// ListClients retrieves clients from all backends. status filters by "online", "offline", or "" for all.
+func (s *Service) ListClients(ctx context.Context, status string) (NetworkClientList, error) {
 	var items []NetworkClient
 	for _, cb := range s.backends {
 		if s.monitor != nil && !s.monitor.Available(cb.controller) {
 			continue
 		}
-		raw, err := cb.unifi.GetClients()
+		var raw []adapters.UniFiClientV2
+		var err error
+		switch status {
+		case "online":
+			raw, err = cb.unifi.GetActiveClients()
+		case "offline":
+			raw, err = cb.unifi.GetOfflineClients(s.historyDays)
+		default:
+			raw, err = cb.unifi.GetAllClients(s.historyDays)
+		}
 		if err != nil {
 			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", cb.controller, err)
 		}
-		for _, sta := range raw {
-			items = append(items, clientToList(cb.controller, sta))
+		for _, c := range raw {
+			items = append(items, clientToListV2(cb.controller, c))
 		}
 	}
 	if items == nil {
 		items = []NetworkClient{}
 	}
 	return NetworkClientList{Items: items}, nil
+}
+
+func clientNameV2(c adapters.UniFiClientV2) string {
+	if c.Name != nil && *c.Name != "" {
+		return *c.Name
+	}
+	if c.Hostname != nil && *c.Hostname != "" {
+		return *c.Hostname
+	}
+	return c.MAC
+}
+
+func clientToListV2(controller string, c adapters.UniFiClientV2) NetworkClient {
+	name := clientNameV2(c)
+	mac := normalizeMac(c.MAC)
+	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	id := fmt.Sprintf("%s.%s-%s", controller, toKebab(name), prefix)
+
+	var ip string
+	if c.Status == "online" {
+		ip = c.IP
+	} else {
+		ip = c.LastIP
+	}
+
+	client := NetworkClient{
+		Id:             id,
+		Name:           name,
+		Mac:            mac,
+		ConnectionType: mapConnectionType(c.IsWired),
+		Status:         NetworkClientStatus(c.Status),
+	}
+	if ip != "" {
+		client.Ip = &ip
+	}
+	return client
 }
 
 // GetClient looks up a single client by composite ID and returns its typed detail.
@@ -60,7 +108,73 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 			return detail, true, nil
 		}
 	}
+
+	// Not found in active clients — check offline history.
+	offline, err := backend.GetOfflineClients(s.historyDays)
+	if err != nil {
+		return NetworkClientDetail{}, false, fmt.Errorf("get unifi offline clients: %w", err)
+	}
+
+	for _, c := range offline {
+		name := clientNameV2(c)
+		mac := normalizeMac(c.MAC)
+		prefix := strings.ReplaceAll(mac, ":", "")[:2]
+		if fmt.Sprintf("%s-%s", toKebab(name), prefix) == suffix {
+			detail, err := clientToDetailV2(controller, c)
+			if err != nil {
+				return NetworkClientDetail{}, false, err
+			}
+			return detail, true, nil
+		}
+	}
 	return NetworkClientDetail{}, false, nil
+}
+
+func clientToDetailV2(controller string, c adapters.UniFiClientV2) (NetworkClientDetail, error) {
+	name := clientNameV2(c)
+	mac := normalizeMac(c.MAC)
+	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	id := fmt.Sprintf("%s.%s-%s", controller, toKebab(name), prefix)
+
+	var ip *string
+	if c.LastIP != "" {
+		v := c.LastIP
+		ip = &v
+	}
+
+	var detail NetworkClientDetail
+	if c.IsWired {
+		var switchName *string
+		if c.LastUplinkName != "" {
+			s := c.LastUplinkName
+			switchName = &s
+		}
+		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
+			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
+			Id:             id,
+			Name:           name,
+			Mac:            mac,
+			Ip:             ip,
+			Status:         Offline,
+			SwitchName:     switchName,
+		})
+		if err != nil {
+			return NetworkClientDetail{}, fmt.Errorf("build offline wired client detail: %w", err)
+		}
+	} else {
+		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
+			ConnectionType: Wireless,
+			Id:             id,
+			Name:           name,
+			Mac:            mac,
+			Ip:             ip,
+			Status:         Offline,
+		})
+		if err != nil {
+			return NetworkClientDetail{}, fmt.Errorf("build offline wireless client detail: %w", err)
+		}
+	}
+	return detail, nil
 }
 
 func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
@@ -70,6 +184,7 @@ func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
 		Name:           clientName(sta),
 		Mac:            mac,
 		ConnectionType: mapConnectionType(sta.IsWired),
+		Status:         Online,
 	}
 	if sta.IP != "" {
 		ip := sta.IP
@@ -90,15 +205,19 @@ func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDeta
 
 	var detail NetworkClientDetail
 	if sta.IsWired {
+		switchName := sta.LastUplinkName
+		switchPort := sta.SwPort
+		uptime := sta.Uptime
 		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
 			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
 			Id:             id,
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
-			SwitchName:     sta.LastUplinkName,
-			SwitchPort:     sta.SwPort,
-			Uptime:         sta.Uptime,
+			Status:         Online,
+			SwitchName:     &switchName,
+			SwitchPort:     &switchPort,
+			Uptime:         &uptime,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build wired client detail: %w", err)
@@ -112,15 +231,17 @@ func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDeta
 		if sta.Signal != nil {
 			signal = *sta.Signal
 		}
+		uptime := sta.Uptime
 		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
-			ConnectionType: Wireless, // WirelessNetworkClientDetailConnectionType constant
+			ConnectionType: Wireless,
 			Id:             id,
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
-			Ssid:           ssid,
-			SignalStrength:  signal,
-			Uptime:         sta.Uptime,
+			Status:         Online,
+			Ssid:           &ssid,
+			SignalStrength:  &signal,
+			Uptime:         &uptime,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build wireless client detail: %w", err)

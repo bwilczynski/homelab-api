@@ -95,7 +95,11 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 
 // ListNetworkClients implements StrictServerInterface.
 func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetworkClientsRequestObject) (ListNetworkClientsResponseObject, error) {
-	result, err := h.svc.ListClients(ctx)
+	var status string
+	if request.Params.Status != nil {
+		status = string(*request.Params.Status)
+	}
+	result, err := h.svc.ListClients(ctx, status)
 	if err != nil {
 		detail := err.Error()
 		return ListNetworkClients500ApplicationProblemPlusJSONResponse{

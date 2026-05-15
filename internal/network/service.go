@@ -24,20 +24,21 @@ type controllerBackend struct {
 
 // Service implements network domain business logic.
 type Service struct {
-	backends []controllerBackend
-	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
+	backends    []controllerBackend
+	monitor     adapters.AvailabilityChecker // optional; nil means all backends available
+	historyDays int
 }
 
 // NewService creates a new network service with one or more UniFi backends.
 // An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
 // backends that are currently unreachable.
-func NewService(backends map[string]UniFiBackend, monitor ...adapters.AvailabilityChecker) *Service {
+func NewService(backends map[string]UniFiBackend, historyDays int, monitor ...adapters.AvailabilityChecker) *Service {
 	cbs := make([]controllerBackend, 0, len(backends))
 	for controller, unifi := range backends {
 		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi})
 	}
 	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
-	svc := &Service{backends: cbs}
+	svc := &Service{backends: cbs, historyDays: historyDays}
 	if len(monitor) > 0 {
 		svc.monitor = monitor[0]
 	}
