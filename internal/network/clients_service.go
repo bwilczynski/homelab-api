@@ -108,7 +108,73 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 			return detail, true, nil
 		}
 	}
+
+	// Not found in active clients — check offline history.
+	offline, err := backend.GetOfflineClients(s.historyDays)
+	if err != nil {
+		return NetworkClientDetail{}, false, fmt.Errorf("get unifi offline clients: %w", err)
+	}
+
+	for _, c := range offline {
+		name := clientNameV2(c)
+		mac := normalizeMac(c.MAC)
+		prefix := strings.ReplaceAll(mac, ":", "")[:2]
+		if fmt.Sprintf("%s-%s", toKebab(name), prefix) == suffix {
+			detail, err := clientToDetailV2(controller, c)
+			if err != nil {
+				return NetworkClientDetail{}, false, err
+			}
+			return detail, true, nil
+		}
+	}
 	return NetworkClientDetail{}, false, nil
+}
+
+func clientToDetailV2(controller string, c adapters.UniFiClientV2) (NetworkClientDetail, error) {
+	name := clientNameV2(c)
+	mac := normalizeMac(c.MAC)
+	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	id := fmt.Sprintf("%s.%s-%s", controller, toKebab(name), prefix)
+
+	var ip *string
+	if c.LastIP != "" {
+		v := c.LastIP
+		ip = &v
+	}
+
+	var detail NetworkClientDetail
+	if c.IsWired {
+		var switchName *string
+		if c.LastUplinkName != "" {
+			s := c.LastUplinkName
+			switchName = &s
+		}
+		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
+			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
+			Id:             id,
+			Name:           name,
+			Mac:            mac,
+			Ip:             ip,
+			Status:         Offline,
+			SwitchName:     switchName,
+		})
+		if err != nil {
+			return NetworkClientDetail{}, fmt.Errorf("build offline wired client detail: %w", err)
+		}
+	} else {
+		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
+			ConnectionType: Wireless,
+			Id:             id,
+			Name:           name,
+			Mac:            mac,
+			Ip:             ip,
+			Status:         Offline,
+		})
+		if err != nil {
+			return NetworkClientDetail{}, fmt.Errorf("build offline wireless client detail: %w", err)
+		}
+	}
+	return detail, nil
 }
 
 func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {

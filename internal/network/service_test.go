@@ -386,6 +386,96 @@ func TestGetClientNotFound(t *testing.T) {
 	}
 }
 
+func TestGetClientOfflineWired(t *testing.T) {
+	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		clients:        []adapters.UniFiSta{},
+		offlineClients: offline,
+	}}, 30)
+
+	detail, found, err := svc.GetClient(context.Background(), "unifi.host-02-aa")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected offline wired client to be found")
+	}
+
+	wired, err := detail.AsWiredNetworkClientDetail()
+	if err != nil {
+		t.Fatalf("expected wired detail: %v", err)
+	}
+	if wired.Id != "unifi.host-02-aa" {
+		t.Errorf("expected id unifi.host-02-aa, got %s", wired.Id)
+	}
+	if wired.Status != Offline {
+		t.Errorf("expected status offline, got %s", wired.Status)
+	}
+	// switchName populated from last_uplink_name
+	if wired.SwitchName == nil || *wired.SwitchName != "Switch Flex Mini" {
+		t.Errorf("expected switchName Switch Flex Mini, got %v", wired.SwitchName)
+	}
+	// session fields absent for offline clients
+	if wired.SwitchPort != nil {
+		t.Errorf("expected nil switchPort for offline client, got %v", wired.SwitchPort)
+	}
+	if wired.Uptime != nil {
+		t.Errorf("expected nil uptime for offline client, got %v", wired.Uptime)
+	}
+}
+
+func TestGetClientOfflineWireless(t *testing.T) {
+	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		clients:        []adapters.UniFiSta{},
+		offlineClients: offline,
+	}}, 30)
+
+	detail, found, err := svc.GetClient(context.Background(), "unifi.kindle-paperwhite-e0")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected offline wireless client to be found")
+	}
+
+	wireless, err := detail.AsWirelessNetworkClientDetail()
+	if err != nil {
+		t.Fatalf("expected wireless detail: %v", err)
+	}
+	if wireless.Status != Offline {
+		t.Errorf("expected status offline, got %s", wireless.Status)
+	}
+	if wireless.Ip == nil || *wireless.Ip != "192.168.10.37" {
+		t.Errorf("expected last_ip 192.168.10.37, got %v", wireless.Ip)
+	}
+	// session fields absent
+	if wireless.Ssid != nil {
+		t.Errorf("expected nil ssid for offline client, got %v", wireless.Ssid)
+	}
+	if wireless.SignalStrength != nil {
+		t.Errorf("expected nil signalStrength for offline client, got %v", wireless.SignalStrength)
+	}
+	if wireless.Uptime != nil {
+		t.Errorf("expected nil uptime for offline client, got %v", wireless.Uptime)
+	}
+}
+
+func TestGetClientNotFoundInEither(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		clients:        []adapters.UniFiSta{},
+		offlineClients: []adapters.UniFiClientV2{},
+	}}, 30)
+
+	_, found, err := svc.GetClient(context.Background(), "unifi.nobody-00")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Fatal("expected not found")
+	}
+}
+
 // --- helper unit tests ---
 
 func TestToKebab(t *testing.T) {
