@@ -151,8 +151,10 @@ func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTarg
 
 // network.UniFiBackend
 type mockNetworkBackend struct {
-	devices []adapters.UniFiDevice
-	clients []adapters.UniFiSta
+	devices        []adapters.UniFiDevice
+	clients        []adapters.UniFiSta
+	activeClients  []adapters.UniFiClientV2
+	offlineClients []adapters.UniFiClientV2
 }
 
 func (m *mockNetworkBackend) GetDevices() ([]adapters.UniFiDevice, error) {
@@ -161,6 +163,18 @@ func (m *mockNetworkBackend) GetDevices() ([]adapters.UniFiDevice, error) {
 
 func (m *mockNetworkBackend) GetClients() ([]adapters.UniFiSta, error) {
 	return m.clients, nil
+}
+
+func (m *mockNetworkBackend) GetActiveClients() ([]adapters.UniFiClientV2, error) {
+	return m.activeClients, nil
+}
+
+func (m *mockNetworkBackend) GetOfflineClients(_ int) ([]adapters.UniFiClientV2, error) {
+	return m.offlineClients, nil
+}
+
+func (m *mockNetworkBackend) GetAllClients(_ int) ([]adapters.UniFiClientV2, error) {
+	return append(m.activeClients, m.offlineClients...), nil
 }
 
 func main() {
@@ -239,7 +253,7 @@ func main() {
 		devices: loadFixture[[]adapters.UniFiDevice](base + "/network/testdata/unifi-devices.json"),
 		clients: loadFixture[[]adapters.UniFiSta](base + "/network/testdata/unifi-clients.json"),
 	}
-	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb})
+	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,

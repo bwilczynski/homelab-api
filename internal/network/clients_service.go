@@ -11,6 +11,9 @@ import (
 // ClientsBackend is the narrow interface for client operations.
 type ClientsBackend interface {
 	GetClients() ([]adapters.UniFiSta, error)
+	GetActiveClients() ([]adapters.UniFiClientV2, error)
+	GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error)
+	GetAllClients(historyDays int) ([]adapters.UniFiClientV2, error)
 }
 
 // ListClients retrieves all connected clients from all backends.
@@ -70,6 +73,7 @@ func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
 		Name:           clientName(sta),
 		Mac:            mac,
 		ConnectionType: mapConnectionType(sta.IsWired),
+		Status:         Online,
 	}
 	if sta.IP != "" {
 		ip := sta.IP
@@ -90,15 +94,19 @@ func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDeta
 
 	var detail NetworkClientDetail
 	if sta.IsWired {
+		switchName := sta.LastUplinkName
+		switchPort := sta.SwPort
+		uptime := sta.Uptime
 		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
 			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
 			Id:             id,
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
-			SwitchName:     sta.LastUplinkName,
-			SwitchPort:     sta.SwPort,
-			Uptime:         sta.Uptime,
+			Status:         Online,
+			SwitchName:     &switchName,
+			SwitchPort:     &switchPort,
+			Uptime:         &uptime,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build wired client detail: %w", err)
@@ -112,15 +120,17 @@ func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDeta
 		if sta.Signal != nil {
 			signal = *sta.Signal
 		}
+		uptime := sta.Uptime
 		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
-			ConnectionType: Wireless, // WirelessNetworkClientDetailConnectionType constant
+			ConnectionType: Wireless,
 			Id:             id,
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
-			Ssid:           ssid,
-			SignalStrength:  signal,
-			Uptime:         sta.Uptime,
+			Status:         Online,
+			Ssid:           &ssid,
+			SignalStrength:  &signal,
+			Uptime:         &uptime,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build wireless client detail: %w", err)

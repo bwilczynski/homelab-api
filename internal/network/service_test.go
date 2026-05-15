@@ -11,9 +11,11 @@ import (
 
 // mockUniFi implements UniFiBackend for testing.
 type mockUniFi struct {
-	devices []adapters.UniFiDevice
-	clients []adapters.UniFiSta
-	err     error
+	devices        []adapters.UniFiDevice
+	clients        []adapters.UniFiSta
+	activeClients  []adapters.UniFiClientV2
+	offlineClients []adapters.UniFiClientV2
+	err            error
 }
 
 func (m *mockUniFi) GetDevices() ([]adapters.UniFiDevice, error) {
@@ -22,6 +24,21 @@ func (m *mockUniFi) GetDevices() ([]adapters.UniFiDevice, error) {
 
 func (m *mockUniFi) GetClients() ([]adapters.UniFiSta, error) {
 	return m.clients, m.err
+}
+
+func (m *mockUniFi) GetActiveClients() ([]adapters.UniFiClientV2, error) {
+	return m.activeClients, m.err
+}
+
+func (m *mockUniFi) GetOfflineClients(_ int) ([]adapters.UniFiClientV2, error) {
+	return m.offlineClients, m.err
+}
+
+func (m *mockUniFi) GetAllClients(_ int) ([]adapters.UniFiClientV2, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return append(m.activeClients, m.offlineClients...), nil
 }
 
 func loadFixture[T any](t *testing.T, path string) T {
@@ -43,7 +60,7 @@ func loadFixture[T any](t *testing.T, path string) T {
 
 func TestListDevices(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	result, err := svc.ListDevices(context.Background())
 	if err != nil {
@@ -101,7 +118,7 @@ func TestListDevices(t *testing.T) {
 }
 
 func TestListDevicesEmpty(t *testing.T) {
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: []adapters.UniFiDevice{}}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: []adapters.UniFiDevice{}}}, 30)
 	result, err := svc.ListDevices(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -115,7 +132,7 @@ func TestListDevicesEmpty(t *testing.T) {
 
 func TestGetDevice(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	detail, found, err := svc.GetDevice(context.Background(), "unifi.usg-3p")
 	if err != nil {
@@ -144,7 +161,7 @@ func TestGetDevice(t *testing.T) {
 
 func TestGetDeviceNotFound(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	_, found, err := svc.GetDevice(context.Background(), "unifi.nonexistent")
 	if err != nil {
@@ -157,7 +174,7 @@ func TestGetDeviceNotFound(t *testing.T) {
 
 func TestGetDeviceWrongController(t *testing.T) {
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	_, found, err := svc.GetDevice(context.Background(), "other.usg-3p")
 	if err != nil {
@@ -172,7 +189,7 @@ func TestGetDeviceWrongController(t *testing.T) {
 
 func TestListClients(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
 
 	result, err := svc.ListClients(context.Background())
 	if err != nil {
@@ -221,7 +238,7 @@ func TestListClients(t *testing.T) {
 }
 
 func TestListClientsEmpty(t *testing.T) {
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: []adapters.UniFiSta{}}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: []adapters.UniFiSta{}}}, 30)
 	result, err := svc.ListClients(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -235,7 +252,7 @@ func TestListClientsEmpty(t *testing.T) {
 
 func TestGetClientWireless(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.macbook-pro-3c")
 	if err != nil {
@@ -249,20 +266,20 @@ func TestGetClientWireless(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected wireless detail, got error: %v", err)
 	}
-	if wireless.Ssid != "homelab" {
-		t.Errorf("expected ssid homelab, got %s", wireless.Ssid)
+	if wireless.Ssid == nil || *wireless.Ssid != "homelab" {
+		t.Errorf("expected ssid homelab, got %v", wireless.Ssid)
 	}
-	if wireless.SignalStrength != -69 {
-		t.Errorf("expected signal -69, got %d", wireless.SignalStrength)
+	if wireless.SignalStrength == nil || *wireless.SignalStrength != -69 {
+		t.Errorf("expected signal -69, got %v", wireless.SignalStrength)
 	}
-	if wireless.Uptime != 27075 {
-		t.Errorf("expected uptime 27075, got %d", wireless.Uptime)
+	if wireless.Uptime == nil || *wireless.Uptime != 27075 {
+		t.Errorf("expected uptime 27075, got %v", wireless.Uptime)
 	}
 }
 
 func TestGetClientWired(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.nas-1-68")
 	if err != nil {
@@ -276,20 +293,20 @@ func TestGetClientWired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected wired detail, got error: %v", err)
 	}
-	if wired.SwitchName != "Switch Living Room" {
-		t.Errorf("expected switchName Switch Living Room, got %s", wired.SwitchName)
+	if wired.SwitchName == nil || *wired.SwitchName != "Switch Living Room" {
+		t.Errorf("expected switchName Switch Living Room, got %v", wired.SwitchName)
 	}
-	if wired.SwitchPort != 3 {
-		t.Errorf("expected switchPort 3, got %d", wired.SwitchPort)
+	if wired.SwitchPort == nil || *wired.SwitchPort != 3 {
+		t.Errorf("expected switchPort 3, got %v", wired.SwitchPort)
 	}
-	if wired.Uptime != 1024199 {
-		t.Errorf("expected uptime 1024199, got %d", wired.Uptime)
+	if wired.Uptime == nil || *wired.Uptime != 1024199 {
+		t.Errorf("expected uptime 1024199, got %v", wired.Uptime)
 	}
 }
 
 func TestGetClientNotFound(t *testing.T) {
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}})
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
 
 	_, found, err := svc.GetClient(context.Background(), "unifi.nobody-00")
 	if err != nil {

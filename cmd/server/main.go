@@ -148,7 +148,7 @@ func main() {
 	for name, client := range unifiClients {
 		networkBackends[name] = client
 	}
-	networkSvc := network.NewService(networkBackends, monitor)
+	networkSvc := network.NewService(networkBackends, 30, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []network.MiddlewareFunc{scopeMw},
