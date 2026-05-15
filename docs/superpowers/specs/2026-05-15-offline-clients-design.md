@@ -103,12 +103,21 @@ type UniFiClientV2 struct {
     LastSeen       int64   `json:"last_seen"`       // history only
 }
 
+// private — HTTP call only, no login
+func (c *UniFiClient) fetchActiveClients() ([]UniFiClientV2, error)
+func (c *UniFiClient) fetchOfflineClients(historyDays int) ([]UniFiClientV2, error)
+
+// public — one login() each, delegate to private fetch methods
 func (c *UniFiClient) GetActiveClients() ([]UniFiClientV2, error)
 func (c *UniFiClient) GetOfflineClients(historyDays int) ([]UniFiClientV2, error)
+func (c *UniFiClient) GetAllClients(historyDays int) ([]UniFiClientV2, error)
 ```
 
-`GetActiveClients()`: one `login()`, GET v2 active endpoint, return.
-`GetOfflineClients(historyDays int)`: one `login()`, GET v2 history endpoint with `withinHours=historyDays*24`, return.
+`fetchActiveClients()`: GET v2 active endpoint, return results.
+`fetchOfflineClients(historyDays)`: GET v2 history endpoint with `withinHours=historyDays*24`, return results.
+`GetActiveClients()`: `login()`, then `fetchActiveClients()`.
+`GetOfflineClients(historyDays)`: `login()`, then `fetchOfflineClients(historyDays)`.
+`GetAllClients(historyDays)`: `login()` once, then `fetchActiveClients()` + `fetchOfflineClients(historyDays)`, concatenate.
 
 ## Config (`internal/config/config.go`)
 
@@ -132,9 +141,10 @@ Default applied at the service wiring site (`cmd/server/`): if `ClientHistoryDay
 ### `ClientsBackend` interface
 ```go
 type ClientsBackend interface {
-    GetClients() ([]adapters.UniFiSta, error)                      // detail path (unchanged)
-    GetActiveClients() ([]adapters.UniFiClientV2, error)           // list: online
-    GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error) // list: offline
+    GetClients() ([]adapters.UniFiSta, error)                           // detail: online (unchanged)
+    GetActiveClients() ([]adapters.UniFiClientV2, error)                // list: online only
+    GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error) // list: offline only
+    GetAllClients(historyDays int) ([]adapters.UniFiClientV2, error)    // list: both, single login
 }
 ```
 
