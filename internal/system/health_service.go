@@ -44,6 +44,10 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 			return Health{}, fmt.Errorf("get unifi health from %s: %w", ue.controller, err)
 		}
 		for _, sub := range subsystems {
+			if sub.Status == "unknown" {
+				s.logger.Info("skipping unifi subsystem with unknown status", "subsystem", sub.Subsystem, "controller", ue.controller)
+				continue
+			}
 			status := mapUniFiStatus(sub.Status)
 			name := sub.Subsystem
 			if len(s.unifiBackends) > 1 {

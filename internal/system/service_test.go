@@ -138,9 +138,8 @@ func TestGetSystemHealth_Healthy(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Fixture includes a "vpn" subsystem with status "unknown" → maps to Degraded.
-	if health.Status != Degraded {
-		t.Errorf("expected status degraded (vpn unknown), got %s", health.Status)
+	if health.Status != Healthy {
+		t.Errorf("expected status healthy, got %s", health.Status)
 	}
 	if len(health.Components) == 0 {
 		t.Error("expected non-empty components")
@@ -160,7 +159,7 @@ func TestGetSystemHealth_Healthy(t *testing.T) {
 	}
 }
 
-func TestGetSystemHealth_Degraded_WhenUnknownSubsystem(t *testing.T) {
+func TestGetSystemHealth_SkipsUnknownSubsystem(t *testing.T) {
 	svc := newTestService(&mockDSMBackend{}, &mockUniFiBackend{
 		subsystems: []adapters.UniFiSubsystemHealth{
 			{Subsystem: "wan", Status: "ok"},
@@ -173,8 +172,13 @@ func TestGetSystemHealth_Degraded_WhenUnknownSubsystem(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if health.Status != Degraded {
-		t.Errorf("expected degraded, got %s", health.Status)
+	if health.Status != Healthy {
+		t.Errorf("expected healthy (unknown subsystems skipped), got %s", health.Status)
+	}
+	for _, c := range health.Components {
+		if c.Name == "vpn" {
+			t.Error("vpn subsystem should be skipped when status is unknown")
+		}
 	}
 }
 
