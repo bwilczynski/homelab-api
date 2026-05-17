@@ -157,7 +157,7 @@ func clientToDetailV2(controller string, c adapters.UniFiClientV2, macToDevice m
 			conn.Device = deviceRef(controller, dev)
 		}
 		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
-			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
+			ConnectionType: Wired,
 			Id:             id,
 			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
@@ -178,7 +178,7 @@ func clientToDetailV2(controller string, c adapters.UniFiClientV2, macToDevice m
 			conn.Ssid = *c.ESSID
 		}
 		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
-			ConnectionType: Wireless,
+			ConnectionType: WirelessNetworkClientDetailConnectionTypeWireless,
 			Id:             id,
 			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
@@ -240,7 +240,7 @@ func clientToDetail(controller string, sta adapters.UniFiSta, macToDevice map[st
 		}
 		uptime := sta.Uptime
 		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
-			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
+			ConnectionType: Wired,
 			Id:             id,
 			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
@@ -264,7 +264,7 @@ func clientToDetail(controller string, sta adapters.UniFiSta, macToDevice map[st
 		conn.SignalStrength = sta.Signal
 		uptime := sta.Uptime
 		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
-			ConnectionType: Wireless,
+			ConnectionType: WirelessNetworkClientDetailConnectionTypeWireless,
 			Id:             id,
 			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
