@@ -70,10 +70,12 @@ func TestListDevices(t *testing.T) {
 		t.Fatalf("expected 5 devices, got %d", len(result.Items))
 	}
 
-	// Gateway: ID uses kebab name, list fields only
 	gw := result.Items[0]
 	if gw.Id != "unifi.usg-3p" {
 		t.Errorf("expected id unifi.usg-3p, got %s", gw.Id)
+	}
+	if gw.Uri != "/network/devices/unifi.usg-3p" {
+		t.Errorf("expected uri /network/devices/unifi.usg-3p, got %s", gw.Uri)
 	}
 	if gw.Type != Gateway {
 		t.Errorf("expected type gateway, got %s", gw.Type)
@@ -81,21 +83,18 @@ func TestListDevices(t *testing.T) {
 	if gw.Status != Connected {
 		t.Errorf("expected status connected, got %s", gw.Status)
 	}
-	// Gateways have no directly-connected clients — numClients must be nil
-	if gw.NumClients != nil {
-		t.Errorf("expected nil numClients for gateway, got %v", gw.NumClients)
-	}
 
-	// Switch
 	sw := result.Items[1]
 	if sw.Id != "unifi.us-8-60w" {
 		t.Errorf("expected id unifi.us-8-60w, got %s", sw.Id)
+	}
+	if sw.Uri != "/network/devices/unifi.us-8-60w" {
+		t.Errorf("expected uri /network/devices/unifi.us-8-60w, got %s", sw.Uri)
 	}
 	if sw.Type != Switch {
 		t.Errorf("expected type switch, got %s", sw.Type)
 	}
 
-	// Access point with clients
 	ap := result.Items[3]
 	if ap.Id != "unifi.uap-01" {
 		t.Errorf("expected id unifi.uap-01, got %s", ap.Id)
@@ -103,17 +102,10 @@ func TestListDevices(t *testing.T) {
 	if ap.Type != AccessPoint {
 		t.Errorf("expected type accessPoint, got %s", ap.Type)
 	}
-	if ap.NumClients == nil || *ap.NumClients != 7 {
-		t.Errorf("expected numClients=7 for AP, got %v", ap.NumClients)
-	}
 
-	// Offline AP: numClients=0 (AP type, just disconnected)
 	offline := result.Items[4]
 	if offline.Status != Disconnected {
 		t.Errorf("expected status disconnected, got %s", offline.Status)
-	}
-	if offline.NumClients == nil || *offline.NumClients != 0 {
-		t.Errorf("expected numClients=0 for offline AP, got %v", offline.NumClients)
 	}
 }
 
@@ -300,6 +292,14 @@ func TestListClientsIDAndFields(t *testing.T) {
 	}
 	if host.ConnectionType != NetworkClientConnectionTypeWired {
 		t.Errorf("expected wired, got %s", host.ConnectionType)
+	}
+
+	// Verify uri on list items
+	if mb.Uri != "/network/clients/unifi.macbook-pro-3c" {
+		t.Errorf("expected uri /network/clients/unifi.macbook-pro-3c, got %s", mb.Uri)
+	}
+	if nas.Uri != "/network/clients/unifi.nas-1-68" {
+		t.Errorf("expected uri /network/clients/unifi.nas-1-68, got %s", nas.Uri)
 	}
 }
 

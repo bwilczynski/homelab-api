@@ -60,19 +60,16 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 
 func deviceToList(controller string, d adapters.UniFiDevice) NetworkDevice {
 	mac := normalizeMac(d.MAC)
-	dev := NetworkDevice{
-		Id:     fmt.Sprintf("%s.%s", controller, toKebab(d.Name)),
+	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
+	return NetworkDevice{
+		Id:     id,
+		Uri:    fmt.Sprintf("/network/devices/%s", id),
 		Name:   d.Name,
 		Mac:    mac,
 		Ip:     d.IP,
 		Type:   mapDeviceType(d.Type),
 		Status: mapDeviceStatus(d.State),
 	}
-	if d.Type == "uap" {
-		total := d.UserNumSta + d.GuestNumSta
-		dev.NumClients = &total
-	}
-	return dev
 }
 
 func deviceToDetail(controller string, d adapters.UniFiDevice) NetworkDeviceDetail {

@@ -71,6 +71,7 @@ func clientToListV2(controller string, c adapters.UniFiClientV2) NetworkClient {
 
 	client := NetworkClient{
 		Id:             id,
+		Uri:            fmt.Sprintf("/network/clients/%s", id),
 		Name:           name,
 		Mac:            mac,
 		ConnectionType: mapConnectionType(c.IsWired),
@@ -179,8 +180,10 @@ func clientToDetailV2(controller string, c adapters.UniFiClientV2) (NetworkClien
 
 func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
 	mac := normalizeMac(sta.MAC)
+	id := fmt.Sprintf("%s.%s", controller, clientSuffix(sta))
 	client := NetworkClient{
-		Id:             fmt.Sprintf("%s.%s", controller, clientSuffix(sta)),
+		Id:             id,
+		Uri:            fmt.Sprintf("/network/clients/%s", id),
 		Name:           clientName(sta),
 		Mac:            mac,
 		ConnectionType: mapConnectionType(sta.IsWired),
