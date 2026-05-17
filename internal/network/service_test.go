@@ -362,8 +362,9 @@ func TestListClientsEmpty(t *testing.T) {
 // --- client detail tests ---
 
 func TestGetClientWireless(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.macbook-pro-3c")
 	if err != nil {
@@ -375,22 +376,32 @@ func TestGetClientWireless(t *testing.T) {
 
 	wireless, err := detail.AsWirelessNetworkClientDetail()
 	if err != nil {
-		t.Fatalf("expected wireless detail, got error: %v", err)
+		t.Fatalf("expected wireless detail: %v", err)
 	}
 	if wireless.ConnectedTo.Ssid != "homelab" {
-		t.Errorf("expected ssid homelab, got %v", wireless.ConnectedTo.Ssid)
+		t.Errorf("expected ssid homelab, got %s", wireless.ConnectedTo.Ssid)
 	}
 	if wireless.ConnectedTo.SignalStrength == nil || *wireless.ConnectedTo.SignalStrength != -69 {
 		t.Errorf("expected signal -69, got %v", wireless.ConnectedTo.SignalStrength)
 	}
+	if wireless.ConnectedTo.Device.Id != "unifi.uap-01" {
+		t.Errorf("expected device unifi.uap-01, got %s", wireless.ConnectedTo.Device.Id)
+	}
+	if wireless.ConnectedTo.Device.Uri != "/network/devices/unifi.uap-01" {
+		t.Errorf("expected device uri, got %s", wireless.ConnectedTo.Device.Uri)
+	}
 	if wireless.Uptime == nil || *wireless.Uptime != 27075 {
 		t.Errorf("expected uptime 27075, got %v", wireless.Uptime)
+	}
+	if wireless.Uri != "/network/clients/unifi.macbook-pro-3c" {
+		t.Errorf("expected uri, got %s", wireless.Uri)
 	}
 }
 
 func TestGetClientWired(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.nas-1-68")
 	if err != nil {
@@ -402,13 +413,16 @@ func TestGetClientWired(t *testing.T) {
 
 	wired, err := detail.AsWiredNetworkClientDetail()
 	if err != nil {
-		t.Fatalf("expected wired detail, got error: %v", err)
+		t.Fatalf("expected wired detail: %v", err)
 	}
-	if wired.ConnectedTo.Device.Name != "Switch Living Room" {
-		t.Errorf("expected switch name Switch Living Room, got %v", wired.ConnectedTo.Device.Name)
+	if wired.ConnectedTo.Device.Id != "unifi.us-8-60w" {
+		t.Errorf("expected device unifi.us-8-60w, got %s", wired.ConnectedTo.Device.Id)
 	}
 	if wired.ConnectedTo.Port == nil || *wired.ConnectedTo.Port != 3 {
-		t.Errorf("expected switchPort 3, got %v", wired.ConnectedTo.Port)
+		t.Errorf("expected port 3, got %v", wired.ConnectedTo.Port)
+	}
+	if wired.ConnectedTo.LinkSpeed == nil || *wired.ConnectedTo.LinkSpeed != "gbe1" {
+		t.Errorf("expected link speed gbe1, got %v", wired.ConnectedTo.LinkSpeed)
 	}
 	if wired.Uptime == nil || *wired.Uptime != 1024199 {
 		t.Errorf("expected uptime 1024199, got %v", wired.Uptime)
@@ -429,8 +443,10 @@ func TestGetClientNotFound(t *testing.T) {
 }
 
 func TestGetClientOfflineWired(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		devices:        devices,
 		clients:        []adapters.UniFiSta{},
 		offlineClients: offline,
 	}}, 30)
@@ -447,19 +463,20 @@ func TestGetClientOfflineWired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected wired detail: %v", err)
 	}
-	if wired.Id != "unifi.host-02-aa" {
-		t.Errorf("expected id unifi.host-02-aa, got %s", wired.Id)
-	}
 	if wired.Status != Offline {
-		t.Errorf("expected status offline, got %s", wired.Status)
+		t.Errorf("expected offline, got %s", wired.Status)
 	}
-	// switch name populated from last_uplink_name
+	if wired.ConnectedTo.Device.Id != "unifi.switch-flex-mini" {
+		t.Errorf("expected device unifi.switch-flex-mini, got %s", wired.ConnectedTo.Device.Id)
+	}
 	if wired.ConnectedTo.Device.Name != "Switch Flex Mini" {
-		t.Errorf("expected switch name Switch Flex Mini, got %v", wired.ConnectedTo.Device.Name)
+		t.Errorf("expected name Switch Flex Mini, got %s", wired.ConnectedTo.Device.Name)
 	}
-	// port absent for offline clients
 	if wired.ConnectedTo.Port != nil {
 		t.Errorf("expected nil port for offline client, got %v", wired.ConnectedTo.Port)
+	}
+	if wired.ConnectedTo.LinkSpeed != nil {
+		t.Errorf("expected nil linkSpeed for offline client, got %v", wired.ConnectedTo.LinkSpeed)
 	}
 	if wired.Uptime != nil {
 		t.Errorf("expected nil uptime for offline client, got %v", wired.Uptime)
@@ -467,8 +484,10 @@ func TestGetClientOfflineWired(t *testing.T) {
 }
 
 func TestGetClientOfflineWireless(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		devices:        devices,
 		clients:        []adapters.UniFiSta{},
 		offlineClients: offline,
 	}}, 30)
@@ -486,14 +505,19 @@ func TestGetClientOfflineWireless(t *testing.T) {
 		t.Fatalf("expected wireless detail: %v", err)
 	}
 	if wireless.Status != Offline {
-		t.Errorf("expected status offline, got %s", wireless.Status)
+		t.Errorf("expected offline, got %s", wireless.Status)
+	}
+	if wireless.ConnectedTo.Device.Id != "unifi.uap-01" {
+		t.Errorf("expected device unifi.uap-01, got %s", wireless.ConnectedTo.Device.Id)
+	}
+	if wireless.ConnectedTo.Ssid != "homelab" {
+		t.Errorf("expected ssid homelab, got %s", wireless.ConnectedTo.Ssid)
+	}
+	if wireless.ConnectedTo.SignalStrength != nil {
+		t.Errorf("expected nil signalStrength for offline, got %v", wireless.ConnectedTo.SignalStrength)
 	}
 	if wireless.Ip == nil || *wireless.Ip != "192.168.10.37" {
-		t.Errorf("expected last_ip 192.168.10.37, got %v", wireless.Ip)
-	}
-	// signalStrength absent for offline clients (not measured)
-	if wireless.ConnectedTo.SignalStrength != nil {
-		t.Errorf("expected nil signalStrength for offline client, got %v", wireless.ConnectedTo.SignalStrength)
+		t.Errorf("expected ip 192.168.10.37, got %v", wireless.Ip)
 	}
 	if wireless.Uptime != nil {
 		t.Errorf("expected nil uptime for offline client, got %v", wireless.Uptime)
