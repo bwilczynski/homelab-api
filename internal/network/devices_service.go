@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
@@ -146,9 +147,98 @@ func buildUnknownDetail(controller string, d adapters.UniFiDevice, macToDevice m
 	return det, err
 }
 
-// buildSwitchDetail and buildAPDetail are stubs — implemented in later tasks.
-func buildSwitchDetail(controller string, d adapters.UniFiDevice, macToDevice map[string]adapters.UniFiDevice, swPortToDevice map[string]adapters.UniFiDevice, swPortToClient map[string]adapters.UniFiSta) (NetworkDeviceDetail, error) {
-	return buildGatewayDetail(controller, d)
+func buildSwitchDetail(
+	controller string,
+	d adapters.UniFiDevice,
+	macToDevice map[string]adapters.UniFiDevice,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+) (NetworkDeviceDetail, error) {
+	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
+	uplink := deviceUplink(controller, d, macToDevice)
+	ports := buildSwitchPorts(controller, d, swPortToDevice, swPortToClient)
+
+	var det NetworkDeviceDetail
+	err := det.FromSwitchDetail(SwitchDetail{
+		Id:              id,
+		Uri:             fmt.Sprintf("/network/devices/%s", id),
+		Name:            d.Name,
+		Mac:             normalizeMac(d.MAC),
+		Ip:              d.IP,
+		Type:            Switch,
+		Status:          mapDeviceStatus(d.State),
+		Model:           d.Model,
+		FirmwareVersion: d.Version,
+		Uptime:          d.Uptime,
+		Traffic:         deviceTraffic(d),
+		Uplink:          uplink,
+		Ports:           ports,
+	})
+	return det, err
+}
+
+func buildSwitchPorts(
+	controller string,
+	d adapters.UniFiDevice,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+) []SwitchPort {
+	ports := make([]SwitchPort, 0, len(d.PortTable))
+	switchMAC := normalizeMac(d.MAC)
+	for _, p := range d.PortTable {
+		port := SwitchPort{
+			Number:  p.PortIdx,
+			State:   mapPortState(p.Up),
+			PoeMode: mapPoeMode(p.PoeMode),
+			Traffic: NetworkTraffic{
+				RxBytesTotal:  p.RxBytes,
+				TxBytesTotal:  p.TxBytes,
+				RxBytesPerSec: int64(p.RxBytesR),
+				TxBytesPerSec: int64(p.TxBytesR),
+			},
+		}
+		if p.Up && p.Speed > 0 {
+			ls := mapLinkSpeed(p.Speed)
+			if ls != "" {
+				port.LinkSpeed = &ls
+			}
+		}
+		if p.PortPoe && p.PoePower != "" {
+			watts, err := strconv.ParseFloat(p.PoePower, 64)
+			if err == nil {
+				w := Watts(watts)
+				port.PoePowerWatts = &w
+			}
+		}
+		port.ConnectedTo = resolvePortConnectedTo(controller, switchMAC, p.PortIdx, swPortToDevice, swPortToClient)
+		ports = append(ports, port)
+	}
+	return ports
+}
+
+func resolvePortConnectedTo(
+	controller string,
+	switchMAC string,
+	portIdx int,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+) *NetworkConnectionRef {
+	key := fmt.Sprintf("%s:%d", switchMAC, portIdx)
+	if dev, ok := swPortToDevice[key]; ok {
+		ref := deviceRef(controller, dev)
+		var conn NetworkConnectionRef
+		if err := conn.FromNetworkDeviceRef(ref); err == nil {
+			return &conn
+		}
+	}
+	if sta, ok := swPortToClient[key]; ok {
+		ref := clientRef(controller, sta)
+		var conn NetworkConnectionRef
+		if err := conn.FromNetworkClientRef(ref); err == nil {
+			return &conn
+		}
+	}
+	return nil
 }
 
 func buildAPDetail(controller string, d adapters.UniFiDevice, macToDevice map[string]adapters.UniFiDevice, apMacToClients map[string][]adapters.UniFiSta) (NetworkDeviceDetail, error) {

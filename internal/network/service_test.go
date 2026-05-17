@@ -560,6 +560,154 @@ func TestToKebab(t *testing.T) {
 	}
 }
 
+func TestGetDevice_Switch(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
+
+	detail, found, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected switch to be found")
+	}
+
+	sw, err := detail.AsSwitchDetail()
+	if err != nil {
+		t.Fatalf("expected switch detail: %v", err)
+	}
+	if sw.Id != "unifi.us-8-60w" {
+		t.Errorf("expected id unifi.us-8-60w, got %s", sw.Id)
+	}
+	if sw.Model != "US8P60" {
+		t.Errorf("expected model US8P60, got %s", sw.Model)
+	}
+	if len(sw.Ports) != 8 {
+		t.Fatalf("expected 8 ports, got %d", len(sw.Ports))
+	}
+	p1 := sw.Ports[0]
+	if p1.Number != 1 {
+		t.Errorf("expected port number 1, got %d", p1.Number)
+	}
+	if p1.State != "up" {
+		t.Errorf("expected port 1 up, got %s", p1.State)
+	}
+	if p1.LinkSpeed == nil || *p1.LinkSpeed != "gbe1" {
+		t.Errorf("expected link speed gbe1, got %v", p1.LinkSpeed)
+	}
+	if p1.PoeMode != "off" {
+		t.Errorf("expected poe mode off, got %s", p1.PoeMode)
+	}
+	if p1.PoePowerWatts != nil {
+		t.Errorf("expected nil poe power for non-poe port, got %v", p1.PoePowerWatts)
+	}
+	p4 := sw.Ports[3]
+	if p4.State != "down" {
+		t.Errorf("expected port 4 down, got %s", p4.State)
+	}
+	if p4.LinkSpeed != nil {
+		t.Errorf("expected nil link speed for down port, got %v", p4.LinkSpeed)
+	}
+	p5 := sw.Ports[4]
+	if p5.PoeMode != "auto" {
+		t.Errorf("expected poe auto, got %s", p5.PoeMode)
+	}
+	if p5.PoePowerWatts == nil || *p5.PoePowerWatts != 3.00 {
+		t.Errorf("expected poe power 3.00, got %v", p5.PoePowerWatts)
+	}
+	if p1.Traffic.TxBytesTotal != 25312100378 {
+		t.Errorf("expected port 1 tx_bytes 25312100378, got %d", p1.Traffic.TxBytesTotal)
+	}
+	if sw.Traffic.TxBytesTotal != 226683708402 {
+		t.Errorf("expected device tx_bytes 226683708402, got %d", sw.Traffic.TxBytesTotal)
+	}
+	if sw.Uplink == nil {
+		t.Fatal("expected uplink for switch")
+	}
+	if sw.Uplink.Device.Id != "unifi.usg-3p" {
+		t.Errorf("expected uplink device unifi.usg-3p, got %s", sw.Uplink.Device.Id)
+	}
+}
+
+func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
+
+	detail, _, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	sw, err := detail.AsSwitchDetail()
+	if err != nil {
+		t.Fatalf("expected switch detail: %v", err)
+	}
+
+	var port5 *SwitchPort
+	for i := range sw.Ports {
+		if sw.Ports[i].Number == 5 {
+			port5 = &sw.Ports[i]
+			break
+		}
+	}
+	if port5 == nil {
+		t.Fatal("port 5 not found")
+	}
+	if port5.ConnectedTo == nil {
+		t.Fatal("expected port 5 connectedTo to be set")
+	}
+	ref, err := port5.ConnectedTo.AsNetworkDeviceRef()
+	if err != nil {
+		t.Fatalf("expected device ref on port 5: %v", err)
+	}
+	if ref.Kind != Device {
+		t.Errorf("expected kind=device, got %s", ref.Kind)
+	}
+	if ref.Id != "unifi.uap-01" {
+		t.Errorf("expected device id unifi.uap-01, got %s", ref.Id)
+	}
+	if ref.Uri != "/network/devices/unifi.uap-01" {
+		t.Errorf("expected device uri, got %s", ref.Uri)
+	}
+	if ref.Name != "UAP-01" {
+		t.Errorf("expected device name UAP-01, got %s", ref.Name)
+	}
+}
+
+func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
+
+	detail, _, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	sw, err := detail.AsSwitchDetail()
+	if err != nil {
+		t.Fatalf("expected switch detail: %v", err)
+	}
+
+	var port3 *SwitchPort
+	for i := range sw.Ports {
+		if sw.Ports[i].Number == 3 {
+			port3 = &sw.Ports[i]
+			break
+		}
+	}
+	if port3 == nil {
+		t.Fatal("port 3 not found")
+	}
+	if port3.ConnectedTo == nil {
+		t.Fatal("expected port 3 connectedTo to be set")
+	}
+	ref, err := port3.ConnectedTo.AsNetworkClientRef()
+	if err != nil {
+		t.Fatalf("expected client ref on port 3: %v", err)
+	}
+	if ref.Kind != Client {
+		t.Errorf("expected kind=client, got %s", ref.Kind)
+	}
+	if ref.Id != "unifi.nas-1-68" {
+		t.Errorf("expected client id unifi.nas-1-68, got %s", ref.Id)
+	}
+}
+
 func TestMapDeviceType(t *testing.T) {
 	tests := []struct {
 		input string
