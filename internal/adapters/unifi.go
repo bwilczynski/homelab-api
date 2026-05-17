@@ -115,6 +115,42 @@ type UniFiDevice struct {
 	Uptime      int    `json:"uptime"`
 	UserNumSta  int    `json:"user-num_sta"`  // connected user clients
 	GuestNumSta int    `json:"guest-num_sta"` // connected guest clients
+	TxBytes     int64            `json:"tx_bytes"`
+	RxBytes     int64            `json:"rx_bytes"`
+	PortTable   []UniFiPortEntry `json:"port_table"`
+	Uplink      *UniFiUplink     `json:"uplink"`
+	Wan1        *UniFiWanIface   `json:"wan1"`
+}
+
+type UniFiPortEntry struct {
+	PortIdx  int     `json:"port_idx"`
+	Up       bool    `json:"up"`
+	Speed    int     `json:"speed"`
+	PortPoe  bool    `json:"port_poe"`
+	PoeMode  string  `json:"poe_mode"`
+	PoePower string  `json:"poe_power"`
+	TxBytes  int64   `json:"tx_bytes"`
+	RxBytes  int64   `json:"rx_bytes"`
+	TxBytesR float64 `json:"tx_bytes-r"`
+	RxBytesR float64 `json:"rx_bytes-r"`
+}
+
+type UniFiUplink struct {
+	UplinkMAC        string  `json:"uplink_mac"`
+	UplinkDeviceName string  `json:"uplink_device_name"`
+	UplinkRemotePort *int    `json:"uplink_remote_port"`
+	Speed            int     `json:"speed"`
+	TxBytesR         float64 `json:"tx_bytes-r"`
+	RxBytesR         float64 `json:"rx_bytes-r"`
+	TxBytes          int64   `json:"tx_bytes"`
+	RxBytes          int64   `json:"rx_bytes"`
+}
+
+type UniFiWanIface struct {
+	TxBytes  int64   `json:"tx_bytes"`
+	RxBytes  int64   `json:"rx_bytes"`
+	TxBytesR float64 `json:"tx_bytes-r"`
+	RxBytesR float64 `json:"rx_bytes-r"`
 }
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
@@ -144,6 +180,8 @@ type UniFiSta struct {
 	SwMAC          string  `json:"sw_mac"`           // MAC of the switch this client is connected to (wired)
 	SwPort         int     `json:"sw_port"`          // Switch port number (wired)
 	LastUplinkName string  `json:"last_uplink_name"` // Switch display name (wired)
+	ApMAC         string `json:"ap_mac"`
+	WiredRateMbps int    `json:"wired_rate_mbps"`
 }
 
 // GetClients retrieves currently active client devices from the UniFi Controller.
@@ -177,6 +215,7 @@ type UniFiClientV2 struct {
 	ESSID          *string `json:"essid"`
 	Signal         *int    `json:"signal"`
 	LastSeen       int64   `json:"last_seen"`
+	LastUplinkMAC string `json:"last_uplink_mac"`
 }
 
 // getV2 performs an authenticated GET request against the UniFi v2 API and decodes the bare JSON array response.
