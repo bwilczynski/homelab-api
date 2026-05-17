@@ -708,6 +708,65 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 	}
 }
 
+func TestGetDevice_AccessPoint(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
+
+	detail, found, err := svc.GetDevice(context.Background(), "unifi.uap-01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected AP to be found")
+	}
+
+	ap, err := detail.AsAccessPointDetail()
+	if err != nil {
+		t.Fatalf("expected access point detail: %v", err)
+	}
+	if ap.Id != "unifi.uap-01" {
+		t.Errorf("expected id unifi.uap-01, got %s", ap.Id)
+	}
+	if ap.Model != "U7LT" {
+		t.Errorf("expected model U7LT, got %s", ap.Model)
+	}
+	if len(ap.ConnectedClients) != 3 {
+		t.Fatalf("expected 3 connectedClients, got %d", len(ap.ConnectedClients))
+	}
+	var mb *AccessPointClient
+	for i := range ap.ConnectedClients {
+		if ap.ConnectedClients[i].Client.Name == "MacBook Pro" {
+			mb = &ap.ConnectedClients[i]
+			break
+		}
+	}
+	if mb == nil {
+		t.Fatal("MacBook Pro not found in connectedClients")
+	}
+	if mb.Client.Id != "unifi.macbook-pro-3c" {
+		t.Errorf("expected client id unifi.macbook-pro-3c, got %s", mb.Client.Id)
+	}
+	if mb.Client.Uri != "/network/clients/unifi.macbook-pro-3c" {
+		t.Errorf("expected client uri, got %s", mb.Client.Uri)
+	}
+	if mb.Ssid != "homelab" {
+		t.Errorf("expected ssid homelab, got %s", mb.Ssid)
+	}
+	if mb.SignalStrength != -69 {
+		t.Errorf("expected signal strength -69, got %d", mb.SignalStrength)
+	}
+	if ap.Uplink == nil {
+		t.Fatal("expected uplink for AP")
+	}
+	if ap.Uplink.Device.Id != "unifi.us-8-60w" {
+		t.Errorf("expected uplink device unifi.us-8-60w, got %s", ap.Uplink.Device.Id)
+	}
+	if ap.Uplink.Port == nil || *ap.Uplink.Port != 5 {
+		t.Errorf("expected uplink port 5, got %v", ap.Uplink.Port)
+	}
+}
+
 func TestMapDeviceType(t *testing.T) {
 	tests := []struct {
 		input string

@@ -242,7 +242,42 @@ func resolvePortConnectedTo(
 }
 
 func buildAPDetail(controller string, d adapters.UniFiDevice, macToDevice map[string]adapters.UniFiDevice, apMacToClients map[string][]adapters.UniFiSta) (NetworkDeviceDetail, error) {
-	return buildGatewayDetail(controller, d)
+	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
+	uplink := deviceUplink(controller, d, macToDevice)
+	apMAC := normalizeMac(d.MAC)
+	stas := apMacToClients[apMAC]
+
+	connectedClients := make([]AccessPointClient, 0, len(stas))
+	for _, sta := range stas {
+		ref := clientRef(controller, sta)
+		apc := AccessPointClient{Client: ref}
+		if sta.ESSID != nil {
+			apc.Ssid = *sta.ESSID
+		}
+		if sta.Signal != nil {
+			apc.SignalStrength = *sta.Signal
+		}
+		connectedClients = append(connectedClients, apc)
+	}
+
+	var det NetworkDeviceDetail
+	err := det.FromAccessPointDetail(AccessPointDetail{
+		Id:               id,
+		Uri:              fmt.Sprintf("/network/devices/%s", id),
+		Name:             d.Name,
+		Mac:              normalizeMac(d.MAC),
+		Ip:               d.IP,
+		Type:             AccessPointDetailTypeAccessPoint,
+		Status:           mapDeviceStatus(d.State),
+		Model:            d.Model,
+		FirmwareVersion:  d.Version,
+		Uptime:           d.Uptime,
+		Traffic:          deviceTraffic(d),
+		Uplink:           uplink,
+		NumClients:       len(connectedClients),
+		ConnectedClients: connectedClients,
+	})
+	return det, err
 }
 
 // --- index helpers ---
