@@ -1,5 +1,5 @@
 {
-  "meta": { "rc": "ok" },
+  "meta": {"rc": "ok"},
   "data": [
     {
       "_id": "000000000000000000000001",
@@ -13,7 +13,14 @@
       "uptime": 16066061,
       "user-num_sta": 9,
       "guest-num_sta": 0,
-      "num_sta": 9
+      "tx_bytes": 306168680348,
+      "rx_bytes": 3913232707026,
+      "wan1": {
+        "tx_bytes": 306168680348,
+        "rx_bytes": 3913232707026,
+        "tx_bytes-r": 79558.0,
+        "rx_bytes-r": 134932.0
+      }
     },
     {
       "_id": "000000000000000000000002",
@@ -27,7 +34,28 @@
       "uptime": 987970,
       "user-num_sta": 1,
       "guest-num_sta": 0,
-      "num_sta": 1
+      "tx_bytes": 226683708402,
+      "rx_bytes": 25312100378,
+      "uplink": {
+        "uplink_mac": "aa:bb:cc:dd:00:01",
+        "uplink_device_name": "USG 3P",
+        "uplink_remote_port": null,
+        "speed": 1000,
+        "tx_bytes-r": 87631.0,
+        "rx_bytes-r": 163452.0,
+        "tx_bytes": 25312100378,
+        "rx_bytes": 226683708402
+      },
+      "port_table": [
+        {"port_idx": 1, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 25312100378, "rx_bytes": 226683708402, "tx_bytes-r": 87631.0, "rx_bytes-r": 163452.0},
+        {"port_idx": 2, "up": true,  "speed": 100,  "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 100000,       "rx_bytes": 200000,       "tx_bytes-r": 100.0,    "rx_bytes-r": 200.0},
+        {"port_idx": 3, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 36706804229,  "rx_bytes": 8150054814,   "tx_bytes-r": 7380.0,   "rx_bytes-r": 54517.0},
+        {"port_idx": 4, "up": false, "speed": 0,    "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 0,            "rx_bytes": 0,            "tx_bytes-r": 0.0,      "rx_bytes-r": 0.0},
+        {"port_idx": 5, "up": true,  "speed": 1000, "port_poe": true,  "poe_mode": "auto", "poe_power": "3.00", "tx_bytes": 88380586202, "rx_bytes": 7997575920, "tx_bytes-r": 674.0, "rx_bytes-r": 222.0},
+        {"port_idx": 6, "up": true,  "speed": 1000, "port_poe": true,  "poe_mode": "auto", "poe_power": "1.61", "tx_bytes": 20169620222, "rx_bytes": 1080138674, "tx_bytes-r": 262.0, "rx_bytes-r": 479.0},
+        {"port_idx": 7, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 5000000,      "rx_bytes": 3000000,      "tx_bytes-r": 0.0,      "rx_bytes-r": 0.0},
+        {"port_idx": 8, "up": false, "speed": 0,    "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 0,            "rx_bytes": 0,            "tx_bytes-r": 0.0,      "rx_bytes-r": 0.0}
+      ]
     },
     {
       "_id": "000000000000000000000003",
@@ -41,7 +69,23 @@
       "uptime": 16065407,
       "user-num_sta": 4,
       "guest-num_sta": 0,
-      "num_sta": 4
+      "tx_bytes": 1220180199127,
+      "rx_bytes": 27798639955,
+      "uplink": {
+        "uplink_mac": "aa:bb:cc:dd:00:02",
+        "uplink_device_name": "US 8 60W",
+        "uplink_remote_port": 6,
+        "speed": 1000,
+        "tx_bytes-r": 311.0,
+        "rx_bytes-r": 200.0,
+        "tx_bytes": 27798639955,
+        "rx_bytes": 1220180199127
+      },
+      "port_table": [
+        {"port_idx": 1, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 1220180199127, "rx_bytes": 27798639955, "tx_bytes-r": 311.0, "rx_bytes-r": 200.0},
+        {"port_idx": 2, "up": true,  "speed": 100,  "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 50000,         "rx_bytes": 100000,      "tx_bytes-r": 50.0,  "rx_bytes-r": 100.0},
+        {"port_idx": 3, "up": false, "speed": 0,    "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 0,             "rx_bytes": 0,           "tx_bytes-r": 0.0,   "rx_bytes-r": 0.0}
+      ]
     },
     {
       "_id": "000000000000000000000004",
@@ -55,7 +99,18 @@
       "uptime": 89636,
       "user-num_sta": 7,
       "guest-num_sta": 0,
-      "num_sta": 7
+      "tx_bytes": 97191129029,
+      "rx_bytes": 8316685650,
+      "uplink": {
+        "uplink_mac": "aa:bb:cc:dd:00:02",
+        "uplink_device_name": "US 8 60W",
+        "uplink_remote_port": 5,
+        "speed": 1000,
+        "tx_bytes-r": 674.0,
+        "rx_bytes-r": 222.0,
+        "tx_bytes": 8316685650,
+        "rx_bytes": 97191129029
+      }
     },
     {
       "_id": "000000000000000000000005",
@@ -69,7 +124,8 @@
       "uptime": 0,
       "user-num_sta": 0,
       "guest-num_sta": 0,
-      "num_sta": 0
+      "tx_bytes": 0,
+      "rx_bytes": 0
     }
   ]
 }
