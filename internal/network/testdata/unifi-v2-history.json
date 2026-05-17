@@ -11,8 +11,9 @@
       "is_wired": false,
       "status": "offline",
       "last_uplink_name": "UAP-01",
+      "last_uplink_mac": "aa:bb:cc:dd:00:04",
       "uptime": 0,
-      "essid": null,
+      "essid": "homelab",
       "signal": null,
       "last_seen": 1778837212
     },
@@ -27,6 +28,7 @@
       "is_wired": true,
       "status": "offline",
       "last_uplink_name": "Switch Flex Mini",
+      "last_uplink_mac": "aa:bb:cc:dd:00:03",
       "uptime": 0,
       "essid": null,
       "signal": null,

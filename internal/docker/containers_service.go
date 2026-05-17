@@ -132,9 +132,15 @@ func (s *Service) RestartContainer(ctx context.Context, containerID string) erro
 }
 
 func mapRestartPolicy(name string) ContainerDetailRestartPolicy {
-	switch ContainerDetailRestartPolicy(name) {
-	case Always, No, OnFailure, UnlessStopped:
-		return ContainerDetailRestartPolicy(name)
+	switch name {
+	case "always":
+		return Always
+	case "no":
+		return No
+	case "unless-stopped":
+		return UnlessStopped
+	case "on-failure":
+		return OnFailure
 	default:
 		return No
 	}

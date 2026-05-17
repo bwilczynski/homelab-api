@@ -28,6 +28,26 @@ func (r networkClientDetailResponse) VisitGetNetworkClientResponse(w http.Respon
 	return err
 }
 
+// networkDeviceDetailResponse is a custom 200 response for GetNetworkDevice that
+// correctly serializes NetworkDeviceDetail's anyOf union. The generated
+// GetNetworkDevice200JSONResponse is a new type (not an alias), so it does not
+// inherit NetworkDeviceDetail.MarshalJSON — encoding it produces {}.
+// This type calls MarshalJSON explicitly.
+type networkDeviceDetailResponse struct {
+	detail NetworkDeviceDetail
+}
+
+func (r networkDeviceDetailResponse) VisitGetNetworkDeviceResponse(w http.ResponseWriter) error {
+	b, err := r.detail.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(b)
+	return err
+}
+
 // ServerHandler implements StrictServerInterface by delegating to the Service.
 type ServerHandler struct {
 	svc *Service
@@ -90,7 +110,7 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 			},
 		}, nil
 	}
-	return GetNetworkDevice200JSONResponse(detail), nil
+	return networkDeviceDetailResponse{detail: detail}, nil
 }
 
 // ListNetworkClients implements StrictServerInterface.

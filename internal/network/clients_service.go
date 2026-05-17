@@ -71,6 +71,7 @@ func clientToListV2(controller string, c adapters.UniFiClientV2) NetworkClient {
 
 	client := NetworkClient{
 		Id:             id,
+		Uri:            fmt.Sprintf("/network/clients/%s", id),
 		Name:           name,
 		Mac:            mac,
 		ConnectionType: mapConnectionType(c.IsWired),
@@ -94,6 +95,13 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 		return NetworkClientDetail{}, false, nil
 	}
 
+	// Fetch devices for cross-reference (device refs in connectedTo).
+	devices, err := backend.GetDevices()
+	if err != nil {
+		return NetworkClientDetail{}, false, fmt.Errorf("get unifi devices: %w", err)
+	}
+	macToDevice := buildMacToDevice(devices)
+
 	raw, err := backend.GetClients()
 	if err != nil {
 		return NetworkClientDetail{}, false, fmt.Errorf("get unifi clients: %w", err)
@@ -101,7 +109,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 
 	for _, sta := range raw {
 		if clientSuffix(sta) == suffix {
-			detail, err := clientToDetail(controller, sta)
+			detail, err := clientToDetail(controller, sta, macToDevice)
 			if err != nil {
 				return NetworkClientDetail{}, false, err
 			}
@@ -120,7 +128,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 		mac := normalizeMac(c.MAC)
 		prefix := strings.ReplaceAll(mac, ":", "")[:2]
 		if fmt.Sprintf("%s-%s", toKebab(name), prefix) == suffix {
-			detail, err := clientToDetailV2(controller, c)
+			detail, err := clientToDetailV2(controller, c, macToDevice)
 			if err != nil {
 				return NetworkClientDetail{}, false, err
 			}
@@ -130,7 +138,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 	return NetworkClientDetail{}, false, nil
 }
 
-func clientToDetailV2(controller string, c adapters.UniFiClientV2) (NetworkClientDetail, error) {
+func clientToDetailV2(controller string, c adapters.UniFiClientV2, macToDevice map[string]adapters.UniFiDevice) (NetworkClientDetail, error) {
 	name := clientNameV2(c)
 	mac := normalizeMac(c.MAC)
 	prefix := strings.ReplaceAll(mac, ":", "")[:2]
@@ -144,31 +152,40 @@ func clientToDetailV2(controller string, c adapters.UniFiClientV2) (NetworkClien
 
 	var detail NetworkClientDetail
 	if c.IsWired {
-		var switchName *string
-		if c.LastUplinkName != "" {
-			s := c.LastUplinkName
-			switchName = &s
+		conn := NetworkConnection{}
+		if dev, ok := macToDevice[normalizeMac(c.LastUplinkMAC)]; ok {
+			conn.Device = deviceRef(controller, dev)
 		}
 		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
 			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
 			Id:             id,
+			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
 			Status:         Offline,
-			SwitchName:     switchName,
+			ConnectedTo:    conn,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build offline wired client detail: %w", err)
 		}
 	} else {
+		conn := WirelessConnection{}
+		if dev, ok := macToDevice[normalizeMac(c.LastUplinkMAC)]; ok {
+			conn.Device = deviceRef(controller, dev)
+		}
+		if c.ESSID != nil {
+			conn.Ssid = *c.ESSID
+		}
 		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
 			ConnectionType: Wireless,
 			Id:             id,
+			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
 			Status:         Offline,
+			ConnectedTo:    conn,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build offline wireless client detail: %w", err)
@@ -179,8 +196,10 @@ func clientToDetailV2(controller string, c adapters.UniFiClientV2) (NetworkClien
 
 func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
 	mac := normalizeMac(sta.MAC)
+	id := fmt.Sprintf("%s.%s", controller, clientSuffix(sta))
 	client := NetworkClient{
-		Id:             fmt.Sprintf("%s.%s", controller, clientSuffix(sta)),
+		Id:             id,
+		Uri:            fmt.Sprintf("/network/clients/%s", id),
 		Name:           clientName(sta),
 		Mac:            mac,
 		ConnectionType: mapConnectionType(sta.IsWired),
@@ -193,7 +212,7 @@ func clientToList(controller string, sta adapters.UniFiSta) NetworkClient {
 	return client
 }
 
-func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDetail, error) {
+func clientToDetail(controller string, sta adapters.UniFiSta, macToDevice map[string]adapters.UniFiDevice) (NetworkClientDetail, error) {
 	mac := normalizeMac(sta.MAC)
 	id := fmt.Sprintf("%s.%s", controller, clientSuffix(sta))
 	name := clientName(sta)
@@ -205,42 +224,54 @@ func clientToDetail(controller string, sta adapters.UniFiSta) (NetworkClientDeta
 
 	var detail NetworkClientDetail
 	if sta.IsWired {
-		switchName := sta.LastUplinkName
-		switchPort := sta.SwPort
+		conn := NetworkConnection{}
+		if dev, ok := macToDevice[normalizeMac(sta.SwMAC)]; ok {
+			conn.Device = deviceRef(controller, dev)
+		}
+		if sta.SwPort > 0 {
+			port := sta.SwPort
+			conn.Port = &port
+		}
+		if sta.WiredRateMbps > 0 {
+			ls := mapLinkSpeed(sta.WiredRateMbps)
+			if ls != "" {
+				conn.LinkSpeed = &ls
+			}
+		}
 		uptime := sta.Uptime
 		err := detail.FromWiredNetworkClientDetail(WiredNetworkClientDetail{
 			ConnectionType: WiredNetworkClientDetailConnectionTypeWired,
 			Id:             id,
+			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
 			Status:         Online,
-			SwitchName:     &switchName,
-			SwitchPort:     &switchPort,
+			ConnectedTo:    conn,
 			Uptime:         &uptime,
 		})
 		if err != nil {
 			return NetworkClientDetail{}, fmt.Errorf("build wired client detail: %w", err)
 		}
 	} else {
-		ssid := ""
+		conn := WirelessConnection{}
+		if dev, ok := macToDevice[normalizeMac(sta.ApMAC)]; ok {
+			conn.Device = deviceRef(controller, dev)
+		}
 		if sta.ESSID != nil {
-			ssid = *sta.ESSID
+			conn.Ssid = *sta.ESSID
 		}
-		signal := 0
-		if sta.Signal != nil {
-			signal = *sta.Signal
-		}
+		conn.SignalStrength = sta.Signal
 		uptime := sta.Uptime
 		err := detail.FromWirelessNetworkClientDetail(WirelessNetworkClientDetail{
 			ConnectionType: Wireless,
 			Id:             id,
+			Uri:            fmt.Sprintf("/network/clients/%s", id),
 			Name:           name,
 			Mac:            mac,
 			Ip:             ip,
 			Status:         Online,
-			Ssid:           &ssid,
-			SignalStrength:  &signal,
+			ConnectedTo:    conn,
 			Uptime:         &uptime,
 		})
 		if err != nil {

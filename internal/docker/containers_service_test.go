@@ -383,3 +383,23 @@ func TestListContainersEmptyList(t *testing.T) {
 		t.Fatalf("expected 0 containers, got %d", len(result.Items))
 	}
 }
+
+func TestMapRestartPolicy(t *testing.T) {
+	tests := []struct {
+		input string
+		want  ContainerDetailRestartPolicy
+	}{
+		{"always", Always},
+		{"no", No},
+		{"unless-stopped", UnlessStopped},
+		{"on-failure", OnFailure},
+		{"unknown", No},
+		{"", No},
+	}
+	for _, tt := range tests {
+		got := mapRestartPolicy(tt.input)
+		if got != tt.want {
+			t.Errorf("mapRestartPolicy(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
