@@ -1012,6 +1012,28 @@ func TestGetTopology_WithClients(t *testing.T) {
 		t.Errorf("nas-1 edge linkSpeed: expected gbe1, got %v", nasEdge.LinkSpeed)
 	}
 
+	// Online wired edge: ec:b5:fa → UAP-01, port=6, linkSpeed=fe (100Mbps)
+	var ecEdge *testEdge
+	for _, e := range topo.Edges {
+		pe := parseTopologyEdge(t, e)
+		if pe.Kind == "wired" && pe.Source.Kind == "client" && pe.Source.Id == "unifi.ec-b5-fa-22-d1-dc-ec" {
+			ecEdge = &pe
+			break
+		}
+	}
+	if ecEdge == nil {
+		t.Fatal("expected wired edge for ec:b5:fa client")
+	}
+	if ecEdge.Target.Id != "unifi.uap-01" {
+		t.Errorf("ec:b5:fa edge target: expected unifi.uap-01, got %s", ecEdge.Target.Id)
+	}
+	if ecEdge.Port == nil || *ecEdge.Port != 6 {
+		t.Errorf("ec:b5:fa edge port: expected 6, got %v", ecEdge.Port)
+	}
+	if ecEdge.LinkSpeed == nil || *ecEdge.LinkSpeed != "fe" {
+		t.Errorf("ec:b5:fa edge linkSpeed: expected fe, got %v", ecEdge.LinkSpeed)
+	}
+
 	// Online wireless edge: MacBook Pro → UAP-01, ssid=homelab, signalStrength=-69
 	var macbookEdge *testEdge
 	for _, e := range topo.Edges {
