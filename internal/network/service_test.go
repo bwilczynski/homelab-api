@@ -947,6 +947,154 @@ func TestGetTopology_DevicesOnly(t *testing.T) {
 	}
 }
 
+func TestGetTopology_WithClients(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	history := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+
+	mock := &mockUniFi{devices: devices, clients: clients, offlineClients: history}
+	svc := NewService(map[string]UniFiBackend{"unifi": mock}, 30)
+
+	topo, err := svc.GetTopology(context.Background(), true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// 5 device + 5 online client + 2 offline client = 12 nodes
+	if len(topo.Nodes) != 12 {
+		t.Fatalf("expected 12 nodes, got %d", len(topo.Nodes))
+	}
+
+	// 3 device-device + 5 online-client + 2 offline-client = 10 edges
+	if len(topo.Edges) != 10 {
+		t.Fatalf("expected 10 edges, got %d", len(topo.Edges))
+	}
+
+	// Verify node kinds: 5 device + 7 client
+	deviceNodes, clientNodes := 0, 0
+	for _, n := range topo.Nodes {
+		pn := parseTopologyNode(t, n)
+		switch pn.Kind {
+		case "device":
+			deviceNodes++
+		case "client":
+			clientNodes++
+		default:
+			t.Errorf("unexpected node kind: %s", pn.Kind)
+		}
+	}
+	if deviceNodes != 5 {
+		t.Errorf("expected 5 device nodes, got %d", deviceNodes)
+	}
+	if clientNodes != 7 {
+		t.Errorf("expected 7 client nodes (5 online + 2 offline), got %d", clientNodes)
+	}
+
+	// Online wired edge: nas-1 → US 8 60W, port=3, linkSpeed=gbe1
+	var nasEdge *testEdge
+	for _, e := range topo.Edges {
+		pe := parseTopologyEdge(t, e)
+		if pe.Kind == "wired" && pe.Source.Kind == "client" && pe.Source.Id == "unifi.nas-1-68" {
+			nasEdge = &pe
+			break
+		}
+	}
+	if nasEdge == nil {
+		t.Fatal("expected wired edge for nas-1")
+	}
+	if nasEdge.Target.Id != "unifi.us-8-60w" {
+		t.Errorf("nas-1 edge target: expected unifi.us-8-60w, got %s", nasEdge.Target.Id)
+	}
+	if nasEdge.Port == nil || *nasEdge.Port != 3 {
+		t.Errorf("nas-1 edge port: expected 3, got %v", nasEdge.Port)
+	}
+	if nasEdge.LinkSpeed == nil || *nasEdge.LinkSpeed != "gbe1" {
+		t.Errorf("nas-1 edge linkSpeed: expected gbe1, got %v", nasEdge.LinkSpeed)
+	}
+
+	// Online wireless edge: MacBook Pro → UAP-01, ssid=homelab, signalStrength=-69
+	var macbookEdge *testEdge
+	for _, e := range topo.Edges {
+		pe := parseTopologyEdge(t, e)
+		if pe.Kind == "wireless" && pe.Source.Id == "unifi.macbook-pro-3c" {
+			macbookEdge = &pe
+			break
+		}
+	}
+	if macbookEdge == nil {
+		t.Fatal("expected wireless edge for MacBook Pro")
+	}
+	if macbookEdge.Target.Id != "unifi.uap-01" {
+		t.Errorf("MacBook Pro edge target: expected unifi.uap-01, got %s", macbookEdge.Target.Id)
+	}
+	if macbookEdge.Ssid == nil || *macbookEdge.Ssid != "homelab" {
+		t.Errorf("MacBook Pro edge ssid: expected homelab, got %v", macbookEdge.Ssid)
+	}
+	if macbookEdge.SignalStrength == nil || *macbookEdge.SignalStrength != -69 {
+		t.Errorf("MacBook Pro edge signalStrength: expected -69, got %v", macbookEdge.SignalStrength)
+	}
+
+	// Offline wireless edge: Kindle Paperwhite → UAP-01, ssid=homelab, no signalStrength
+	var kindleEdge *testEdge
+	for _, e := range topo.Edges {
+		pe := parseTopologyEdge(t, e)
+		if pe.Kind == "wireless" && pe.Source.Id == "unifi.kindle-paperwhite-e0" {
+			kindleEdge = &pe
+			break
+		}
+	}
+	if kindleEdge == nil {
+		t.Fatal("expected wireless edge for Kindle Paperwhite")
+	}
+	if kindleEdge.Target.Id != "unifi.uap-01" {
+		t.Errorf("Kindle edge target: expected unifi.uap-01, got %s", kindleEdge.Target.Id)
+	}
+	if kindleEdge.Ssid == nil || *kindleEdge.Ssid != "homelab" {
+		t.Errorf("Kindle edge ssid: expected homelab, got %v", kindleEdge.Ssid)
+	}
+	if kindleEdge.SignalStrength != nil {
+		t.Errorf("Kindle (offline): expected no signalStrength, got %d", *kindleEdge.SignalStrength)
+	}
+
+	// Offline wired edge: host-02 aa → Switch Flex Mini, no port
+	// ID uses clientNameV2 which returns hostname "host-02" (display_name is ignored), prefix "aa"
+	var hostEdge *testEdge
+	for _, e := range topo.Edges {
+		pe := parseTopologyEdge(t, e)
+		if pe.Kind == "wired" && pe.Source.Id == "unifi.host-02-aa" {
+			hostEdge = &pe
+			break
+		}
+	}
+	if hostEdge == nil {
+		t.Fatal("expected wired edge for host-02 aa")
+	}
+	if hostEdge.Target.Id != "unifi.switch-flex-mini" {
+		t.Errorf("host-02 edge target: expected unifi.switch-flex-mini, got %s", hostEdge.Target.Id)
+	}
+	if hostEdge.Port != nil {
+		t.Errorf("host-02 (offline): expected no port, got %d", *hostEdge.Port)
+	}
+
+	// Offline client nodes have status=offline; online client nodes have status=online
+	for _, n := range topo.Nodes {
+		pn := parseTopologyNode(t, n)
+		if pn.Kind != "client" {
+			continue
+		}
+		switch pn.Id {
+		case "unifi.kindle-paperwhite-e0", "unifi.host-02-aa":
+			if pn.Status != "offline" {
+				t.Errorf("%s: expected status=offline, got %s", pn.Id, pn.Status)
+			}
+		default:
+			if pn.Status != "online" {
+				t.Errorf("%s: expected status=online, got %s", pn.Id, pn.Status)
+			}
+		}
+	}
+}
+
 func TestMapDeviceType(t *testing.T) {
 	tests := []struct {
 		input string
