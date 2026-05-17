@@ -15,6 +15,7 @@ import (
 type UniFiBackend interface {
 	DevicesBackend
 	ClientsBackend
+	TopologyBackend
 }
 
 type controllerBackend struct {
