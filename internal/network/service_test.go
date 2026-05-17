@@ -658,7 +658,7 @@ func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected device ref on port 5: %v", err)
 	}
-	if ref.Kind != Device {
+	if ref.Kind != NetworkDeviceRefKindDevice {
 		t.Errorf("expected kind=device, got %s", ref.Kind)
 	}
 	if ref.Id != "unifi.uap-01" {
@@ -700,7 +700,7 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected client ref on port 3: %v", err)
 	}
-	if ref.Kind != Client {
+	if ref.Kind != NetworkClientRefKindClient {
 		t.Errorf("expected kind=client, got %s", ref.Kind)
 	}
 	if ref.Id != "unifi.nas-1-68" {
