@@ -117,6 +117,17 @@ func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetwork
 func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetworkClientsRequestObject) (ListNetworkClientsResponseObject, error) {
 	var status string
 	if request.Params.Status != nil {
+		if !request.Params.Status.Valid() {
+			detail := "Invalid value for parameter status: " + string(*request.Params.Status)
+			return ListNetworkClients400ApplicationProblemPlusJSONResponse{
+				BadRequestApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNBadRequest,
+					Title:  apierrors.TitleBadRequest,
+					Status: 400,
+					Detail: &detail,
+				},
+			}, nil
+		}
 		status = string(*request.Params.Status)
 	}
 	result, err := h.svc.ListClients(ctx, status)
