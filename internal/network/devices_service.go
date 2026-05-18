@@ -331,7 +331,7 @@ func buildApMacToClients(clients []adapters.UniFiSta) map[string][]adapters.UniF
 func deviceRef(controller string, d adapters.UniFiDevice) NetworkDeviceRef {
 	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
 	return NetworkDeviceRef{
-		Kind: Device,
+		Kind: NetworkDeviceRefKindDevice,
 		Id:   id,
 		Uri:  fmt.Sprintf("/network/devices/%s", id),
 		Name: d.Name,
@@ -341,7 +341,7 @@ func deviceRef(controller string, d adapters.UniFiDevice) NetworkDeviceRef {
 func clientRef(controller string, sta adapters.UniFiSta) NetworkClientRef {
 	id := fmt.Sprintf("%s.%s", controller, clientSuffix(sta))
 	return NetworkClientRef{
-		Kind: Client,
+		Kind: NetworkClientRefKindClient,
 		Id:   id,
 		Uri:  fmt.Sprintf("/network/clients/%s", id),
 		Name: clientName(sta),

@@ -182,3 +182,21 @@ func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetwork
 	}
 	return networkClientDetailResponse{detail: detail}, nil
 }
+
+// GetNetworkTopology implements StrictServerInterface.
+func (h *ServerHandler) GetNetworkTopology(ctx context.Context, request GetNetworkTopologyRequestObject) (GetNetworkTopologyResponseObject, error) {
+	includeClients := request.Params.IncludeClients != nil && *request.Params.IncludeClients
+	result, err := h.svc.GetTopology(ctx, includeClients)
+	if err != nil {
+		detail := err.Error()
+		return GetNetworkTopology500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return GetNetworkTopology200JSONResponse(result), nil
+}
