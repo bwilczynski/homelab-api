@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"log/slog"
 	"fmt"
 	"testing"
 	"time"
@@ -43,6 +44,7 @@ func TestListBackupTasks(t *testing.T) {
 	svc := NewService(
 		map[string]StorageBackend{},
 		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks, taskStatus: &taskStatus}},
+		slog.Default(),
 	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -79,6 +81,7 @@ func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 	svc := NewService(
 		map[string]StorageBackend{},
 		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks}},
+		slog.Default(),
 	)
 
 	device := "nas-01"
@@ -108,6 +111,7 @@ func TestListBackupTasksEmpty(t *testing.T) {
 				tasks: &adapters.DSMBackupTaskListResponse{TaskList: []adapters.DSMBackupTask{}},
 			},
 		},
+		slog.Default(),
 	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -135,6 +139,7 @@ func TestGetBackupTask(t *testing.T) {
 				target:     &target,
 			},
 		},
+		slog.Default(),
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")
@@ -188,6 +193,7 @@ func TestGetBackupTaskNotFound(t *testing.T) {
 	svc := NewService(
 		map[string]StorageBackend{},
 		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks}},
+		slog.Default(),
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.999")
@@ -200,7 +206,7 @@ func TestGetBackupTaskNotFound(t *testing.T) {
 }
 
 func TestGetBackupTaskInvalidID(t *testing.T) {
-	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{})
+	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{}, slog.Default())
 
 	_, err := svc.GetBackupTask(context.Background(), "invalid-id")
 	if err == nil {
@@ -320,6 +326,7 @@ func TestListBackupTasksStatusError(t *testing.T) {
 				statusErr: fmt.Errorf("connection refused"),
 			},
 		},
+		slog.Default(),
 	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -349,6 +356,7 @@ func TestGetBackupTaskEnrichmentErrors(t *testing.T) {
 				targetErr: fmt.Errorf("connection refused"),
 			},
 		},
+		slog.Default(),
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")

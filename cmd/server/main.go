@@ -150,7 +150,7 @@ func main() {
 		storageBackends[name] = client
 		storageBackupBackends[name] = client
 	}
-	storageSvc := storage.NewService(storageBackends, storageBackupBackends, monitor)
+	storageSvc := storage.NewService(storageBackends, storageBackupBackends, logger, monitor)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []storage.MiddlewareFunc{scopeMw},

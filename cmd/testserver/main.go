@@ -250,7 +250,7 @@ func main() {
 		taskStatus: new(loadFixture[adapters.DSMBackupTaskStatusResponse](base + "/storage/testdata/backup_task_status.json")),
 		target:     new(loadFixture[adapters.DSMBackupTargetResponse](base + "/storage/testdata/backup_target.json")),
 	}
-	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb})
+	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb}, logger)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,

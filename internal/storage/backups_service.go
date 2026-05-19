@@ -66,7 +66,11 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
 		}
 		for _, t := range tasks.TaskList {
-			status, _ := db.backend.GetBackupTaskStatus(t.TaskID)
+			status, err := db.backend.GetBackupTaskStatus(t.TaskID)
+			if err != nil {
+				s.logger.Warn("backup task status lookup failed",
+					"device", db.device, "task_id", t.TaskID, "err", err)
+			}
 			items = append(items, BackupTask{
 				Device:     db.device,
 				Id:         fmt.Sprintf("%s.%d", db.device, t.TaskID),
@@ -107,9 +111,21 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		}
 
 		loc := backend.Location()
-		status, _ := backend.GetBackupTaskStatus(t.TaskID)
-		detail, _ := backend.GetBackupTaskDetail(t.TaskID)
-		target, _ := backend.GetBackupTarget(t.TaskID)
+		status, err := backend.GetBackupTaskStatus(t.TaskID)
+		if err != nil {
+			s.logger.Warn("backup task status lookup failed",
+				"device", device, "task_id", t.TaskID, "err", err)
+		}
+		detail, err := backend.GetBackupTaskDetail(t.TaskID)
+		if err != nil {
+			s.logger.Warn("backup task detail lookup failed",
+				"device", device, "task_id", t.TaskID, "err", err)
+		}
+		target, err := backend.GetBackupTarget(t.TaskID)
+		if err != nil {
+			s.logger.Warn("backup target lookup failed",
+				"device", device, "task_id", t.TaskID, "err", err)
+		}
 
 		var lastBkpSuccessTime, nextBkpTime string
 		if status != nil {
