@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,6 +23,17 @@ const (
 
 // DSM error codes.
 const dsmErrContainerNotFound = 117
+
+// dsmSessionExpiredCodes are DSM API error codes that indicate the session ID
+// is no longer accepted. On any of these, callers should drop the cached SID
+// and re-authenticate.
+var dsmSessionExpiredCodes = map[int]bool{
+	106: true, // session timeout
+	107: true, // session interrupted by duplicate login
+	119: true, // SID not found
+}
+
+func isSessionExpired(code int) bool { return dsmSessionExpiredCodes[code] }
 
 // dsmAPIInfo holds the discovered path and max version for a DSM API.
 type dsmAPIInfo struct {
@@ -315,12 +327,33 @@ func (c *SynologyClient) ensureSession() (string, error) {
 }
 
 // Call makes an authenticated API call and returns the raw data payload.
+// If DSM rejects the session as expired, it invalidates the cached SID,
+// re-authenticates, and retries the call once.
 func (c *SynologyClient) Call(api, method, version string, extra url.Values) (json.RawMessage, error) {
 	sid, err := c.ensureSession()
 	if err != nil {
 		return nil, err
 	}
+	data, err := c.callWithSID(sid, api, method, version, extra)
+	if err == nil {
+		return data, nil
+	}
+	var apiErr *DSMAPIError
+	if !errors.As(err, &apiErr) || !isSessionExpired(apiErr.Code) {
+		return nil, err
+	}
 
+	c.logger.Info("synology session expired; re-authenticating", "backend", c.name, "api", api, "code", apiErr.Code)
+	c.invalidateSession(sid)
+	sid, err = c.ensureSession()
+	if err != nil {
+		return nil, err
+	}
+	return c.callWithSID(sid, api, method, version, extra)
+}
+
+// callWithSID performs a single authenticated request using the given SID.
+func (c *SynologyClient) callWithSID(sid, api, method, version string, extra url.Values) (json.RawMessage, error) {
 	params := url.Values{
 		"api":     {api},
 		"method":  {method},
@@ -341,6 +374,17 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 		return nil, &DSMAPIError{API: api, Code: code}
 	}
 	return resp.Data, nil
+}
+
+// invalidateSession clears c.sid only if it still equals the SID we just used.
+// This prevents trampling a fresh SID that another goroutine logged in
+// concurrently after observing the same expired-session error.
+func (c *SynologyClient) invalidateSession(usedSID string) {
+	c.mu.Lock()
+	if c.sid == usedSID {
+		c.sid = ""
+	}
+	c.mu.Unlock()
 }
 
 func (c *SynologyClient) rawGet(endpoint string, params url.Values) (*SynologyResponse, error) {
