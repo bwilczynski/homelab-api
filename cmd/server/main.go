@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	keyfunc "github.com/MicahParks/keyfunc/v3"
@@ -22,6 +26,8 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
 )
+
+const shutdownTimeout = 10 * time.Second
 
 func main() {
 	var handler slog.Handler
@@ -67,8 +73,16 @@ func main() {
 
 	discoverAPIs(synologyClients)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	monitor := health.NewMonitor(buildHealthCheckers(synologyClients, unifiClients), 30*time.Second, logger)
-	go monitor.Start(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		monitor.Start(ctx)
+	}()
 
 	r := chi.NewRouter()
 	r.Use(httplog.RequestLogger(logger, &httplog.Options{
@@ -162,10 +176,39 @@ func main() {
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
 
-	addr := ":8080"
-	logger.Info("starting server", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		logger.Error("server failed", "err", err)
-		os.Exit(1)
+	server := &http.Server{
+		Addr:    ":8080",
+		Handler: r,
+	}
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		serverErrCh <- server.ListenAndServe()
+	}()
+	logger.Info("starting server", "addr", server.Addr)
+
+	exitCode := 0
+	select {
+	case <-ctx.Done():
+		logger.Info("shutdown signal received, stopping server")
+	case err := <-serverErrCh:
+		if !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server failed", "err", err)
+			exitCode = 1
+		}
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("graceful shutdown failed", "err", err)
+	}
+
+	stop()
+	wg.Wait()
+	logger.Info("shutdown complete")
+
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 }
