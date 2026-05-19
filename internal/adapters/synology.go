@@ -234,6 +234,14 @@ func (c *SynologyClient) SupportsBackups() bool {
 // Login authenticates with the DSM and stores the session ID.
 // It first discovers the correct auth endpoint and version from the DSM itself.
 func (c *SynologyClient) Login() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.loginLocked()
+}
+
+// loginLocked performs the login work. Caller must hold c.mu for writing;
+// this also serializes access to c.authInfo, which is only read/written here.
+func (c *SynologyClient) loginLocked() error {
 	info, err := c.discoverAuth()
 	if err != nil {
 		return fmt.Errorf("synology login: %w", err)
@@ -271,30 +279,53 @@ func (c *SynologyClient) Login() error {
 
 // Logout ends the DSM session.
 func (c *SynologyClient) Logout() error {
+	c.mu.Lock()
+	sid := c.sid
+	c.sid = ""
+	c.mu.Unlock()
+
 	params := url.Values{
 		"api":     {"SYNO.API.Auth"},
 		"method":  {"logout"},
 		"version": {"6"},
-		"_sid":    {c.sid},
+		"_sid":    {sid},
 	}
 	_, err := c.rawGet("entry.cgi", params)
-	c.sid = ""
 	return err
+}
+
+// ensureSession returns the current SID, logging in if needed. Double-checked
+// locking keeps cached-session calls on the RLock fast path.
+func (c *SynologyClient) ensureSession() (string, error) {
+	c.mu.RLock()
+	sid := c.sid
+	c.mu.RUnlock()
+	if sid != "" {
+		return sid, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.sid != "" {
+		return c.sid, nil
+	}
+	if err := c.loginLocked(); err != nil {
+		return "", err
+	}
+	return c.sid, nil
 }
 
 // Call makes an authenticated API call and returns the raw data payload.
 func (c *SynologyClient) Call(api, method, version string, extra url.Values) (json.RawMessage, error) {
-	if c.sid == "" {
-		if err := c.Login(); err != nil {
-			return nil, err
-		}
+	sid, err := c.ensureSession()
+	if err != nil {
+		return nil, err
 	}
 
 	params := url.Values{
 		"api":     {api},
 		"method":  {method},
 		"version": {version},
-		"_sid":    {c.sid},
+		"_sid":    {sid},
 	}
 	maps.Copy(params, extra)
 
