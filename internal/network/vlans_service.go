@@ -141,13 +141,14 @@ func extractVlanID(v interface{}) int {
 }
 
 func mapDhcpMode(dhcpdEnabled, relayEnabled bool) DhcpMode {
-	if relayEnabled {
-		return DhcpModeRelay
-	}
-	if dhcpdEnabled {
+	switch {
+	case dhcpdEnabled:
 		return DhcpModeServer
+	case relayEnabled:
+		return DhcpModeRelay
+	default:
+		return DhcpModeDisabled
 	}
-	return DhcpModeDisabled
 }
 
 func collectDNSServers(dns ...string) []string {

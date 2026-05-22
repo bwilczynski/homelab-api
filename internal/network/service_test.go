@@ -1237,6 +1237,34 @@ func TestGetVLAN_ServerDHCP(t *testing.T) {
 	}
 }
 
+func TestGetVLAN_RelayDHCP(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		networkConf: []adapters.UniFiNetworkConf{
+			{
+				ID:               "bb30",
+				Name:             "LAN-RELAY",
+				Purpose:          "corporate",
+				Vlan:             float64(30),
+				VlanEnabled:      true,
+				IPSubnet:         "192.168.30.1/24",
+				DHCPRelayEnabled: true,
+				DhcpdEnabled:     false,
+			},
+		},
+	}}, 30)
+
+	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-relay")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected LAN-RELAY to be found")
+	}
+	if detail.DhcpMode != DhcpModeRelay {
+		t.Errorf("expected dhcpMode relay, got %s", detail.DhcpMode)
+	}
+}
+
 func TestGetVLAN_MultipleDNS(t *testing.T) {
 	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
