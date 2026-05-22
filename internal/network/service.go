@@ -16,6 +16,9 @@ type UniFiBackend interface {
 	DevicesBackend
 	ClientsBackend
 	TopologyBackend
+	SSIDsBackend
+	VLANsBackend
+	WANsBackend
 }
 
 type controllerBackend struct {

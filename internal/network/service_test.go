@@ -15,6 +15,8 @@ type mockUniFi struct {
 	clients        []adapters.UniFiSta
 	activeClients  []adapters.UniFiClientV2
 	offlineClients []adapters.UniFiClientV2
+	wlanConf       []adapters.UniFiWlanConf
+	networkConf    []adapters.UniFiNetworkConf
 	err            error
 }
 
@@ -39,6 +41,14 @@ func (m *mockUniFi) GetAllClients(_ int) ([]adapters.UniFiClientV2, error) {
 		return nil, m.err
 	}
 	return append(m.activeClients, m.offlineClients...), nil
+}
+
+func (m *mockUniFi) GetWlanConf() ([]adapters.UniFiWlanConf, error) {
+	return m.wlanConf, m.err
+}
+
+func (m *mockUniFi) GetNetworkConf() ([]adapters.UniFiNetworkConf, error) {
+	return m.networkConf, m.err
 }
 
 func loadFixture[T any](t *testing.T, path string) T {
