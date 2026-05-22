@@ -1346,6 +1346,98 @@ func TestGetVLANNotFound(t *testing.T) {
 	}
 }
 
+// --- WAN list tests ---
+
+func TestListWANs(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30)
+
+	result, err := svc.ListWANs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 WAN, got %d", len(result.Items))
+	}
+
+	wan := result.Items[0]
+	if wan.Id != "unifi.internet-1" {
+		t.Errorf("expected id unifi.internet-1, got %s", wan.Id)
+	}
+	if wan.Uri != "/network/wans/unifi.internet-1" {
+		t.Errorf("expected uri /network/wans/unifi.internet-1, got %s", wan.Uri)
+	}
+	if wan.Name != "Internet 1" {
+		t.Errorf("expected name Internet 1, got %s", wan.Name)
+	}
+	if wan.IpAddress != "203.0.113.42" {
+		t.Errorf("expected ipAddress 203.0.113.42, got %s", wan.IpAddress)
+	}
+	if wan.Status != WanStatusConnected {
+		t.Errorf("expected status connected, got %s", wan.Status)
+	}
+	if wan.Uptime <= 0 {
+		t.Errorf("expected positive uptime, got %d", wan.Uptime)
+	}
+}
+
+func TestListWANsEmpty(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		devices:     []adapters.UniFiDevice{},
+		networkConf: []adapters.UniFiNetworkConf{},
+	}}, 30)
+	result, err := svc.ListWANs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("expected 0 WANs, got %d", len(result.Items))
+	}
+}
+
+// --- WAN detail tests ---
+
+func TestGetWAN(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30)
+
+	detail, found, err := svc.GetWAN(context.Background(), "unifi.internet-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected internet-1 to be found")
+	}
+	if detail.Id != "unifi.internet-1" {
+		t.Errorf("expected id unifi.internet-1, got %s", detail.Id)
+	}
+	if detail.IpAddress != "203.0.113.42" {
+		t.Errorf("expected ipAddress 203.0.113.42, got %s", detail.IpAddress)
+	}
+	if detail.Status != WanStatusConnected {
+		t.Errorf("expected status connected, got %s", detail.Status)
+	}
+	if len(detail.DnsServers) == 0 {
+		t.Error("expected at least one DNS server")
+	}
+}
+
+func TestGetWANNotFound(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30)
+
+	_, found, err := svc.GetWAN(context.Background(), "unifi.nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Fatal("expected not found")
+	}
+}
+
 func TestMapDeviceType(t *testing.T) {
 	tests := []struct {
 		input string
