@@ -1,0 +1,26 @@
+{
+  "data": [
+    {
+      "_id": "aabbccddee0011223344aa01",
+      "name": "hamster-iot",
+      "networkconf_id": "aabbccddee0011223344bb10",
+      "security": "wpapsk",
+      "wpa_mode": "wpa2",
+      "wpa3_support": false,
+      "wpa3_transition": false,
+      "wlan_bands": ["2g", "5g"],
+      "enabled": true
+    },
+    {
+      "_id": "aabbccddee0011223344aa02",
+      "name": "hamster",
+      "networkconf_id": "aabbccddee0011223344bb11",
+      "security": "wpapsk",
+      "wpa_mode": "wpa2",
+      "wpa3_support": false,
+      "wpa3_transition": false,
+      "wlan_bands": ["2g", "5g"],
+      "enabled": true
+    }
+  ]
+}
