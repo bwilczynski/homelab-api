@@ -1238,6 +1238,7 @@ func TestGetVLAN_ServerDHCP(t *testing.T) {
 }
 
 func TestGetVLAN_RelayDHCP(t *testing.T) {
+	relayServer := "192.168.30.200"
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		networkConf: []adapters.UniFiNetworkConf{
 			{
@@ -1249,6 +1250,7 @@ func TestGetVLAN_RelayDHCP(t *testing.T) {
 				IPSubnet:         "192.168.30.1/24",
 				DHCPRelayEnabled: true,
 				DhcpdEnabled:     false,
+				DhcpdStart:       relayServer,
 			},
 		},
 	}}, 30)
@@ -1262,6 +1264,15 @@ func TestGetVLAN_RelayDHCP(t *testing.T) {
 	}
 	if detail.DhcpMode != DhcpModeRelay {
 		t.Errorf("expected dhcpMode relay, got %s", detail.DhcpMode)
+	}
+	if detail.RelayServer == nil {
+		t.Fatal("expected RelayServer to be non-nil")
+	}
+	if *detail.RelayServer != relayServer {
+		t.Errorf("expected RelayServer %s, got %s", relayServer, *detail.RelayServer)
+	}
+	if detail.DhcpRange != nil {
+		t.Errorf("expected DhcpRange to be nil for relay mode, got %v", detail.DhcpRange)
 	}
 }
 

@@ -133,7 +133,7 @@ func parseIPSubnet(ipSubnet string) (subnet, gatewayIP, broadcastIP string) {
 
 // extractVlanID returns the integer VLAN tag from a UniFi vlan field.
 // Returns 1 (native/untagged VLAN) when the value is absent, null, or empty string.
-func extractVlanID(v interface{}) int {
+func extractVlanID(v any) int {
 	if f, ok := v.(float64); ok {
 		return int(f)
 	}
