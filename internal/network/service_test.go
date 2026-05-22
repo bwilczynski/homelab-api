@@ -1438,6 +1438,8 @@ func TestGetWANNotFound(t *testing.T) {
 	}
 }
 
+func ptr[T any](v T) *T { return &v }
+
 func TestMapDeviceType(t *testing.T) {
 	tests := []struct {
 		input string
@@ -1456,5 +1458,138 @@ func TestMapDeviceType(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("mapDeviceType(%q) = %s, want %s", tt.input, got, tt.want)
 		}
+	}
+}
+
+// --- SSID list tests ---
+
+func TestListSSIDs(t *testing.T) {
+	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	// Two clients on "hamster-iot", one on "hamster"
+	clients := []adapters.UniFiSta{
+		{MAC: "aa:bb:cc:dd:ee:01", IsWired: false, ESSID: ptr("hamster-iot")},
+		{MAC: "aa:bb:cc:dd:ee:02", IsWired: false, ESSID: ptr("hamster-iot")},
+		{MAC: "aa:bb:cc:dd:ee:03", IsWired: false, ESSID: ptr("hamster")},
+	}
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf: wlans, networkConf: networks, clients: clients,
+	}}, 30)
+
+	result, err := svc.ListSSIDs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 SSIDs, got %d", len(result.Items))
+	}
+
+	byID := make(map[string]Ssid)
+	for _, s := range result.Items {
+		byID[s.Id] = s
+	}
+
+	iot, ok := byID["unifi.hamster-iot"]
+	if !ok {
+		t.Fatal("expected unifi.hamster-iot")
+	}
+	if iot.VlanId != 20 {
+		t.Errorf("hamster-iot: expected vlanId 20 (from LAN-IOT), got %d", iot.VlanId)
+	}
+	if iot.NumClients != 2 {
+		t.Errorf("hamster-iot: expected 2 clients, got %d", iot.NumClients)
+	}
+	if iot.Uri != "/network/ssids/unifi.hamster-iot" {
+		t.Errorf("hamster-iot: unexpected uri %s", iot.Uri)
+	}
+	if len(iot.Bands) != 2 {
+		t.Fatalf("hamster-iot: expected 2 bands, got %d", len(iot.Bands))
+	}
+	if iot.Bands[0] != Band2g || iot.Bands[1] != Band5g {
+		t.Errorf("hamster-iot: expected [band2g band5g], got %v", iot.Bands)
+	}
+
+	home, ok := byID["unifi.hamster"]
+	if !ok {
+		t.Fatal("expected unifi.hamster")
+	}
+	if home.VlanId != 10 {
+		t.Errorf("hamster: expected vlanId 10 (from LAN-INT), got %d", home.VlanId)
+	}
+	if home.NumClients != 1 {
+		t.Errorf("hamster: expected 1 client, got %d", home.NumClients)
+	}
+}
+
+func TestListSSIDsEmpty(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf: []adapters.UniFiWlanConf{}, networkConf: []adapters.UniFiNetworkConf{}, clients: []adapters.UniFiSta{},
+	}}, 30)
+	result, err := svc.ListSSIDs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("expected 0 SSIDs, got %d", len(result.Items))
+	}
+}
+
+// --- SSID detail tests ---
+
+func TestGetSSID(t *testing.T) {
+	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := []adapters.UniFiSta{
+		{MAC: "aa:bb:cc:dd:ee:01", Name: ptr("Device A"), IsWired: false, ESSID: ptr("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
+		{MAC: "aa:bb:cc:dd:ee:02", Name: ptr("Device B"), IsWired: false, ESSID: ptr("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
+	}
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf: wlans, networkConf: networks, devices: devices, clients: clients,
+	}}, 30)
+
+	detail, found, err := svc.GetSSID(context.Background(), "unifi.hamster-iot")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected hamster-iot to be found")
+	}
+	if detail.Id != "unifi.hamster-iot" {
+		t.Errorf("expected id unifi.hamster-iot, got %s", detail.Id)
+	}
+	if detail.VlanId != 20 {
+		t.Errorf("expected vlanId 20, got %d", detail.VlanId)
+	}
+	if detail.NumClients != 2 {
+		t.Errorf("expected 2 clients, got %d", detail.NumClients)
+	}
+	if len(detail.Clients) != 2 {
+		t.Fatalf("expected 2 client refs, got %d", len(detail.Clients))
+	}
+	// broadcastingAps should contain connected APs from device fixture
+	if len(detail.BroadcastingAps) == 0 {
+		t.Error("expected at least one broadcasting AP")
+	}
+	for _, ap := range detail.BroadcastingAps {
+		if ap.Kind != "device" {
+			t.Errorf("broadcastingAp kind: expected device, got %s", ap.Kind)
+		}
+	}
+}
+
+func TestGetSSIDNotFound(t *testing.T) {
+	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf: wlans, networkConf: networks, clients: []adapters.UniFiSta{}, devices: []adapters.UniFiDevice{},
+	}}, 30)
+
+	_, found, err := svc.GetSSID(context.Background(), "unifi.nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Fatal("expected not found")
 	}
 }

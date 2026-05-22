@@ -177,6 +177,14 @@ func (m *mockNetworkBackend) GetAllClients(_ int) ([]adapters.UniFiClientV2, err
 	return append(m.activeClients, m.offlineClients...), nil
 }
 
+func (m *mockNetworkBackend) GetWlanConf() ([]adapters.UniFiWlanConf, error) {
+	return []adapters.UniFiWlanConf{}, nil
+}
+
+func (m *mockNetworkBackend) GetNetworkConf() ([]adapters.UniFiNetworkConf, error) {
+	return []adapters.UniFiNetworkConf{}, nil
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
