@@ -90,7 +90,7 @@ func TestListDevices(t *testing.T) {
 	if gw.Type != NetworkDeviceTypeGateway {
 		t.Errorf("expected type gateway, got %s", gw.Type)
 	}
-	if gw.Status != Connected {
+	if gw.Status != NetworkDeviceStatusConnected {
 		t.Errorf("expected status connected, got %s", gw.Status)
 	}
 
@@ -114,7 +114,7 @@ func TestListDevices(t *testing.T) {
 	}
 
 	offline := result.Items[4]
-	if offline.Status != Disconnected {
+	if offline.Status != NetworkDeviceStatusDisconnected {
 		t.Errorf("expected status disconnected, got %s", offline.Status)
 	}
 }
@@ -1124,6 +1124,186 @@ func TestGetTopology_WithClients(t *testing.T) {
 				t.Errorf("%s: expected status=online, got %s", pn.Id, pn.Status)
 			}
 		}
+	}
+}
+
+// --- VLAN list tests ---
+
+func TestListVLANs(t *testing.T) {
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
+
+	result, err := svc.ListVLANs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 4 LAN networks; WAN entry is excluded
+	if len(result.Items) != 4 {
+		t.Fatalf("expected 4 VLANs, got %d", len(result.Items))
+	}
+
+	byID := make(map[string]Vlan)
+	for _, v := range result.Items {
+		byID[v.Id] = v
+	}
+
+	mgmt, ok := byID["unifi.lan-mgmt"]
+	if !ok {
+		t.Fatal("expected unifi.lan-mgmt")
+	}
+	if mgmt.VlanId != 1 {
+		t.Errorf("LAN-MGMT: expected vlanId 1 (untagged), got %d", mgmt.VlanId)
+	}
+	if mgmt.Subnet != "192.168.1.0/24" {
+		t.Errorf("LAN-MGMT: expected subnet 192.168.1.0/24, got %s", mgmt.Subnet)
+	}
+	if mgmt.Uri != "/network/vlans/unifi.lan-mgmt" {
+		t.Errorf("LAN-MGMT: expected uri /network/vlans/unifi.lan-mgmt, got %s", mgmt.Uri)
+	}
+
+	iot, ok := byID["unifi.lan-iot"]
+	if !ok {
+		t.Fatal("expected unifi.lan-iot")
+	}
+	if iot.VlanId != 20 {
+		t.Errorf("LAN-IOT: expected vlanId 20, got %d", iot.VlanId)
+	}
+	if iot.Subnet != "192.168.20.0/24" {
+		t.Errorf("LAN-IOT: expected subnet 192.168.20.0/24, got %s", iot.Subnet)
+	}
+
+	srv, ok := byID["unifi.lan-srv"]
+	if !ok {
+		t.Fatal("expected unifi.lan-srv")
+	}
+	if srv.VlanId != 100 {
+		t.Errorf("LAN-SRV: expected vlanId 100, got %d", srv.VlanId)
+	}
+}
+
+func TestListVLANsEmpty(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: []adapters.UniFiNetworkConf{}}}, 30)
+	result, err := svc.ListVLANs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("expected 0 VLANs, got %d", len(result.Items))
+	}
+}
+
+// --- VLAN detail tests ---
+
+func TestGetVLAN_ServerDHCP(t *testing.T) {
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
+
+	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-iot")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected LAN-IOT to be found")
+	}
+	if detail.Id != "unifi.lan-iot" {
+		t.Errorf("expected id unifi.lan-iot, got %s", detail.Id)
+	}
+	if detail.VlanId != 20 {
+		t.Errorf("expected vlanId 20, got %d", detail.VlanId)
+	}
+	if detail.Subnet != "192.168.20.0/24" {
+		t.Errorf("expected subnet 192.168.20.0/24, got %s", detail.Subnet)
+	}
+	if detail.GatewayIp != "192.168.20.1" {
+		t.Errorf("expected gatewayIp 192.168.20.1, got %s", detail.GatewayIp)
+	}
+	if detail.BroadcastIp != "192.168.20.255" {
+		t.Errorf("expected broadcastIp 192.168.20.255, got %s", detail.BroadcastIp)
+	}
+	if detail.DhcpMode != DhcpModeServer {
+		t.Errorf("expected dhcpMode server, got %s", detail.DhcpMode)
+	}
+	if detail.DhcpRange == nil {
+		t.Fatal("expected dhcpRange to be set")
+	}
+	if detail.DhcpRange.Start != "192.168.20.6" {
+		t.Errorf("expected dhcpRange.start 192.168.20.6, got %s", detail.DhcpRange.Start)
+	}
+	if detail.DhcpRange.End != "192.168.20.254" {
+		t.Errorf("expected dhcpRange.end 192.168.20.254, got %s", detail.DhcpRange.End)
+	}
+	if len(detail.DnsServers) != 1 || detail.DnsServers[0] != "192.168.20.1" {
+		t.Errorf("expected dnsServers [192.168.20.1], got %v", detail.DnsServers)
+	}
+}
+
+func TestGetVLAN_MultipleDNS(t *testing.T) {
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
+
+	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-int")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected LAN-INT to be found")
+	}
+	if len(detail.DnsServers) != 2 {
+		t.Fatalf("expected 2 DNS servers, got %d", len(detail.DnsServers))
+	}
+	if detail.DnsServers[0] != "192.168.100.5" || detail.DnsServers[1] != "192.168.10.1" {
+		t.Errorf("unexpected DNS servers: %v", detail.DnsServers)
+	}
+}
+
+func TestGetVLAN_NullDNS(t *testing.T) {
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
+
+	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-srv")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected LAN-SRV to be found")
+	}
+	if len(detail.DnsServers) != 0 {
+		t.Errorf("expected empty dnsServers for LAN-SRV, got %v", detail.DnsServers)
+	}
+}
+
+func TestGetVLAN_UntaggedVLAN1(t *testing.T) {
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
+
+	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-mgmt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected LAN-MGMT to be found")
+	}
+	if detail.VlanId != 1 {
+		t.Errorf("expected vlanId 1 for untagged, got %d", detail.VlanId)
+	}
+	if detail.GatewayIp != "192.168.1.1" {
+		t.Errorf("expected gatewayIp 192.168.1.1, got %s", detail.GatewayIp)
+	}
+	if detail.BroadcastIp != "192.168.1.255" {
+		t.Errorf("expected broadcastIp 192.168.1.255, got %s", detail.BroadcastIp)
+	}
+}
+
+func TestGetVLANNotFound(t *testing.T) {
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
+
+	_, found, err := svc.GetVLAN(context.Background(), "unifi.nonexistent")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if found {
+		t.Fatal("expected not found")
 	}
 }
 

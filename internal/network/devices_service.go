@@ -456,7 +456,7 @@ func mapDeviceType(t string) NetworkDeviceType {
 
 func mapDeviceStatus(state int) NetworkDeviceStatus {
 	if state == 1 {
-		return Connected
+		return NetworkDeviceStatusConnected
 	}
-	return Disconnected
+	return NetworkDeviceStatusDisconnected
 }
