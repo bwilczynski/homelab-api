@@ -205,6 +205,16 @@ func (h *ServerHandler) GetSsid(ctx context.Context, request GetSsidRequestObjec
 	detail, found, err := h.svc.GetSSID(ctx, request.SsidId)
 	if err != nil {
 		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetSsid404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
 		return GetSsid500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
@@ -250,6 +260,16 @@ func (h *ServerHandler) GetVlan(ctx context.Context, request GetVlanRequestObjec
 	detail, found, err := h.svc.GetVLAN(ctx, request.VlanId)
 	if err != nil {
 		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetVlan404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
 		return GetVlan500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
@@ -295,6 +315,16 @@ func (h *ServerHandler) GetWan(ctx context.Context, request GetWanRequestObject)
 	detail, found, err := h.svc.GetWAN(ctx, request.WanId)
 	if err != nil {
 		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetWan404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
 		return GetWan500ApplicationProblemPlusJSONResponse{
 			InternalServerErrorApplicationProblemPlusJSONResponse{
 				Type:   apierrors.URNInternalServerError,
