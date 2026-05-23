@@ -104,17 +104,17 @@ func (c *UniFiClient) get(path string, out any) error {
 
 // UniFiDevice represents a managed network device from the UniFi Controller.
 type UniFiDevice struct {
-	ID          string `json:"_id"`
-	MAC         string `json:"mac"`
-	Name        string `json:"name"`
-	Model       string `json:"model"`
-	Type        string `json:"type"` // uap, usw, ugw, udm, udm-pro
-	State       int    `json:"state"`
-	IP          string `json:"ip"`
-	Version     string `json:"version"`
-	Uptime      int    `json:"uptime"`
-	UserNumSta  int    `json:"user-num_sta"`  // connected user clients
-	GuestNumSta int    `json:"guest-num_sta"` // connected guest clients
+	ID          string           `json:"_id"`
+	MAC         string           `json:"mac"`
+	Name        string           `json:"name"`
+	Model       string           `json:"model"`
+	Type        string           `json:"type"` // uap, usw, ugw, udm, udm-pro
+	State       int              `json:"state"`
+	IP          string           `json:"ip"`
+	Version     string           `json:"version"`
+	Uptime      int              `json:"uptime"`
+	UserNumSta  int              `json:"user-num_sta"`  // connected user clients
+	GuestNumSta int              `json:"guest-num_sta"` // connected guest clients
 	TxBytes     int64            `json:"tx_bytes"`
 	RxBytes     int64            `json:"rx_bytes"`
 	PortTable   []UniFiPortEntry `json:"port_table"`
@@ -175,22 +175,22 @@ type UniFiWlanConf struct {
 // The Vlan field is interface{} because the JSON value is an integer for tagged VLANs,
 // an empty string for the default untagged network, and null for WAN entries.
 type UniFiNetworkConf struct {
-	ID               string      `json:"_id"`
-	Name             string      `json:"name"`
-	Purpose          string      `json:"purpose"` // "corporate", "guest", "wan"
-	NetworkGroup     string      `json:"networkgroup"`
-	Vlan             interface{} `json:"vlan"`
-	VlanEnabled      bool        `json:"vlan_enabled"`
-	IPSubnet         string      `json:"ip_subnet"` // gateway IP + prefix, e.g. "192.168.1.1/24"
-	DhcpdEnabled     bool        `json:"dhcpd_enabled"`
-	DHCPRelayEnabled bool        `json:"dhcp_relay_enabled"`
-	DhcpdStart       string      `json:"dhcpd_start"`
-	DhcpdStop        string      `json:"dhcpd_stop"`
-	DhcpdDNS1        string      `json:"dhcpd_dns_1"`
-	DhcpdDNS2        string      `json:"dhcpd_dns_2"`
-	WanNetworkGroup  string      `json:"wan_networkgroup"` // "WAN" → wan1, "WAN2" → wan2
-	WanDNS1          string      `json:"wan_dns1"`
-	WanDNS2          string      `json:"wan_dns2"`
+	ID               string `json:"_id"`
+	Name             string `json:"name"`
+	Purpose          string `json:"purpose"` // "corporate", "guest", "wan"
+	NetworkGroup     string `json:"networkgroup"`
+	Vlan             any    `json:"vlan"`
+	VlanEnabled      bool   `json:"vlan_enabled"`
+	IPSubnet         string `json:"ip_subnet"` // gateway IP + prefix, e.g. "192.168.1.1/24"
+	DhcpdEnabled     bool   `json:"dhcpd_enabled"`
+	DHCPRelayEnabled bool   `json:"dhcp_relay_enabled"`
+	DhcpdStart       string `json:"dhcpd_start"`
+	DhcpdStop        string `json:"dhcpd_stop"`
+	DhcpdDNS1        string `json:"dhcpd_dns_1"`
+	DhcpdDNS2        string `json:"dhcpd_dns_2"`
+	WanNetworkGroup  string `json:"wan_networkgroup"` // "WAN" → wan1, "WAN2" → wan2
+	WanDNS1          string `json:"wan_dns1"`
+	WanDNS2          string `json:"wan_dns2"`
 }
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
@@ -220,8 +220,8 @@ type UniFiSta struct {
 	SwMAC          string  `json:"sw_mac"`           // MAC of the switch this client is connected to (wired)
 	SwPort         int     `json:"sw_port"`          // Switch port number (wired)
 	LastUplinkName string  `json:"last_uplink_name"` // Switch display name (wired)
-	ApMAC         string `json:"ap_mac"`
-	WiredRateMbps int    `json:"wired_rate_mbps"`
+	ApMAC          string  `json:"ap_mac"`
+	WiredRateMbps  int     `json:"wired_rate_mbps"`
 }
 
 // GetClients retrieves currently active client devices from the UniFi Controller.
@@ -255,7 +255,7 @@ type UniFiClientV2 struct {
 	ESSID          *string `json:"essid"`
 	Signal         *int    `json:"signal"`
 	LastSeen       int64   `json:"last_seen"`
-	LastUplinkMAC string `json:"last_uplink_mac"`
+	LastUplinkMAC  string  `json:"last_uplink_mac"`
 }
 
 // getV2 performs an authenticated GET request against the UniFi v2 API and decodes the bare JSON array response.

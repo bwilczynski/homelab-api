@@ -801,7 +801,7 @@ type testEdge struct {
 	Port           *int    `json:"port,omitempty"`
 	LinkSpeed      *string `json:"linkSpeed,omitempty"`
 	Ssid           *string `json:"ssid,omitempty"`
-	SignalStrength  *int    `json:"signalStrength,omitempty"`
+	SignalStrength *int    `json:"signalStrength,omitempty"`
 }
 
 func parseTopologyNode(t *testing.T, n TopologyNode) testNode {
@@ -1438,8 +1438,6 @@ func TestGetWANNotFound(t *testing.T) {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
-
 func TestMapDeviceType(t *testing.T) {
 	tests := []struct {
 		input string
@@ -1468,9 +1466,9 @@ func TestListSSIDs(t *testing.T) {
 	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	// Two clients on "hamster-iot", one on "hamster"
 	clients := []adapters.UniFiSta{
-		{MAC: "aa:bb:cc:dd:ee:01", IsWired: false, ESSID: ptr("hamster-iot")},
-		{MAC: "aa:bb:cc:dd:ee:02", IsWired: false, ESSID: ptr("hamster-iot")},
-		{MAC: "aa:bb:cc:dd:ee:03", IsWired: false, ESSID: ptr("hamster")},
+		{MAC: "aa:bb:cc:dd:ee:01", IsWired: false, ESSID: new("hamster-iot")},
+		{MAC: "aa:bb:cc:dd:ee:02", IsWired: false, ESSID: new("hamster-iot")},
+		{MAC: "aa:bb:cc:dd:ee:03", IsWired: false, ESSID: new("hamster")},
 	}
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		wlanConf: wlans, networkConf: networks, clients: clients,
@@ -1541,8 +1539,8 @@ func TestGetSSID(t *testing.T) {
 	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := []adapters.UniFiSta{
-		{MAC: "aa:bb:cc:dd:ee:01", Name: ptr("Device A"), IsWired: false, ESSID: ptr("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
-		{MAC: "aa:bb:cc:dd:ee:02", Name: ptr("Device B"), IsWired: false, ESSID: ptr("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
+		{MAC: "aa:bb:cc:dd:ee:01", Name: new("Device A"), IsWired: false, ESSID: new("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
+		{MAC: "aa:bb:cc:dd:ee:02", Name: new("Device B"), IsWired: false, ESSID: new("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
 	}
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		wlanConf: wlans, networkConf: networks, devices: devices, clients: clients,
