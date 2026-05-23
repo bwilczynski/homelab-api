@@ -147,10 +147,15 @@ func wanLiveFields(iface *adapters.UniFiWanIface, gw *adapters.UniFiDevice) (ip 
 }
 
 // wanDNSServers returns DNS servers for a WAN.
-// Prefers live DNS from the interface; falls back to configured wan_dns1/wan_dns2.
+// Prefers configured wan_dns1/wan_dns2 from networkconf; falls back to the live
+// interface DNS. The live value (wan1.dns) often reflects the gateway's local
+// resolver (127.0.0.1) rather than the upstream servers the user configured.
 func wanDNSServers(iface *adapters.UniFiWanIface, n adapters.UniFiNetworkConf) []string {
-	if iface != nil && len(iface.DNS) > 0 {
-		return iface.DNS
+	if configured := collectDNSServers(n.WanDNS1, n.WanDNS2); len(configured) > 0 {
+		return configured
 	}
-	return collectDNSServers(n.WanDNS1, n.WanDNS2)
+	if iface != nil {
+		return collectDNSServers(iface.DNS...)
+	}
+	return []string{}
 }

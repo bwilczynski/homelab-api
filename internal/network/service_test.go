@@ -1419,8 +1419,14 @@ func TestGetWAN(t *testing.T) {
 	if detail.Status != WanStatusConnected {
 		t.Errorf("expected status connected, got %s", detail.Status)
 	}
-	if len(detail.DnsServers) == 0 {
-		t.Error("expected at least one DNS server")
+	if len(detail.DnsServers) != 2 {
+		t.Fatalf("expected 2 DNS servers, got %d", len(detail.DnsServers))
+	}
+	if detail.DnsServers[0] != "8.8.8.8" {
+		t.Errorf("expected primary DNS 8.8.8.8, got %s", detail.DnsServers[0])
+	}
+	if detail.DnsServers[1] != "8.8.4.4" {
+		t.Errorf("expected secondary DNS 8.8.4.4, got %s", detail.DnsServers[1])
 	}
 }
 

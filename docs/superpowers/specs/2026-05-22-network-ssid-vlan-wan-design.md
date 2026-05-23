@@ -110,8 +110,9 @@ wan1.dns    []string  live DNS servers pushed by ISP (may differ from wan_dns1/w
 **Uptime:** UniFi does not expose per-WAN-interface uptime. `device.uptime` (gateway device uptime)
 is used as the best available approximation.
 
-**DNS priority:** Live `wan1.dns` is preferred; falls back to `wan_dns1`/`wan_dns2` from networkconf
-when the interface object is absent or its DNS list is empty.
+**DNS priority:** `wan_dns1`/`wan_dns2` from networkconf are preferred (these are the upstream
+servers the user configured). The live `wan1.dns` is used as fallback only — it often reflects the
+gateway's internal resolver (`127.0.0.1`) rather than the upstream servers.
 
 ### AP device `vap_table`
 
@@ -284,9 +285,10 @@ each AP device already contains the resolved broadcast state and handles all thr
 **No per-interface WAN uptime.** UniFi does not expose per-WAN-interface uptime in `wan1`/`wan2`.
 Gateway device `uptime` is used instead. This is documented in a comment on `wanLiveFields`.
 
-**DNS source priority for WANs.** Live `wan1.dns` is preferred because it reflects what the ISP
-actually pushed (e.g. `127.0.0.1` for a local resolver) rather than the static config. Fallback
-to `wan_dns1`/`wan_dns2` from networkconf when the live list is empty.
+**DNS source priority for WANs.** `wan_dns1`/`wan_dns2` from networkconf are preferred because they
+reflect the upstream servers the user configured. The live `wan1.dns` value is often `127.0.0.1`
+(the gateway's internal dnsmasq resolver) rather than the actual upstream servers. Live interface
+DNS is used as fallback only when networkconf has no configured servers.
 
 **`ip_subnet` holds gateway IP, not network address.** This is a UniFi quirk — the field stores
 `"192.168.1.1/24"` not `"192.168.1.0/24"`. `net.ParseCIDR` is used to separate host IP from
