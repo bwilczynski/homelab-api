@@ -1,8 +1,10 @@
 package network
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
@@ -186,6 +188,9 @@ func collectBroadcastingAPs(controller string, clients []adapters.UniFiSta, devi
 			}
 		}
 		if len(refs) > 0 {
+			slices.SortFunc(refs, func(a, b NetworkDeviceRef) int {
+				return cmp.Compare(a.Id, b.Id)
+			})
 			return refs
 		}
 	}
@@ -196,6 +201,9 @@ func collectBroadcastingAPs(controller string, clients []adapters.UniFiSta, devi
 			refs = append(refs, deviceRef(controller, d))
 		}
 	}
+	slices.SortFunc(refs, func(a, b NetworkDeviceRef) int {
+		return cmp.Compare(a.Id, b.Id)
+	})
 	return refs
 }
 
