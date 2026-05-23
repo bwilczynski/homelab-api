@@ -118,9 +118,16 @@ type UniFiDevice struct {
 	TxBytes     int64            `json:"tx_bytes"`
 	RxBytes     int64            `json:"rx_bytes"`
 	PortTable   []UniFiPortEntry `json:"port_table"`
+	VapTable    []UniFiVap       `json:"vap_table"`
 	Uplink      *UniFiUplink     `json:"uplink"`
 	Wan1        *UniFiWanIface   `json:"wan1"`
 	Wan2        *UniFiWanIface   `json:"wan2"`
+}
+
+// UniFiVap is one entry in a device's vap_table — one row per radio per SSID.
+type UniFiVap struct {
+	ID    string `json:"id"`    // wlanconf _id
+	Up    bool   `json:"up"`
 }
 
 type UniFiPortEntry struct {

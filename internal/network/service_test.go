@@ -1565,9 +1565,9 @@ func TestGetSSID(t *testing.T) {
 	if len(detail.Clients) != 2 {
 		t.Fatalf("expected 2 client refs, got %d", len(detail.Clients))
 	}
-	// broadcastingAps should contain connected APs from device fixture
-	if len(detail.BroadcastingAps) == 0 {
-		t.Error("expected at least one broadcasting AP")
+	// UAP-01 (state=1) has a vap_table entry for hamster-iot; UAP-02 (state=0) is excluded
+	if len(detail.BroadcastingAps) != 1 {
+		t.Fatalf("expected 1 broadcasting AP, got %d", len(detail.BroadcastingAps))
 	}
 	for _, ap := range detail.BroadcastingAps {
 		if ap.Kind != "device" {
@@ -1634,26 +1634,3 @@ func TestListSSIDs_MissingNetworkConf(t *testing.T) {
 	}
 }
 
-func TestGetSSID_BroadcastingApsFallback(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
-		wlanConf:    wlans,
-		networkConf: networks,
-		devices:     devices,
-		clients:     []adapters.UniFiSta{}, // no clients → fallback path
-	}}, 30)
-
-	detail, found, err := svc.GetSSID(context.Background(), "unifi.hamster-iot")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected hamster-iot to be found")
-	}
-	// Fallback: all connected UAPs in device fixture
-	if len(detail.BroadcastingAps) == 0 {
-		t.Error("expected broadcastingAps via fallback (all connected UAPs)")
-	}
-}
