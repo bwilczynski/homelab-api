@@ -124,7 +124,7 @@ func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error
 	}
 
 	deviceByMAC := indexDevicesByMAC(devices)
-	broadcastingAPs := collectBroadcastingAPs(controller, deviceByMAC)
+	broadcastingAPs := collectBroadcastingAPs(controller, ssidClients, deviceByMAC)
 
 	return SsidDetail{
 		Id:               id,
@@ -169,10 +169,33 @@ func buildClientsBySSID(clients []adapters.UniFiSta) map[string][]adapters.UniFi
 	return m
 }
 
-// collectBroadcastingAPs returns all connected APs (type "uap", state 1).
-// All connected APs broadcast all enabled SSIDs site-wide in a standard UniFi setup.
-func collectBroadcastingAPs(controller string, deviceByMAC map[string]adapters.UniFiDevice) []NetworkDeviceRef {
+// collectBroadcastingAPs finds the APs broadcasting this SSID.
+// First tries the APs referenced by client ApMAC fields; falls back to all connected APs.
+func collectBroadcastingAPs(controller string, clients []adapters.UniFiSta, deviceByMAC map[string]adapters.UniFiDevice) []NetworkDeviceRef {
+	// Collect unique AP MACs seen from clients.
+	seenMACs := make(map[string]struct{})
+	for _, c := range clients {
+		if c.ApMAC != "" {
+			seenMACs[normalizeMac(c.ApMAC)] = struct{}{}
+		}
+	}
+
 	var refs []NetworkDeviceRef
+	if len(seenMACs) > 0 {
+		for mac := range seenMACs {
+			if d, ok := deviceByMAC[mac]; ok {
+				refs = append(refs, deviceRef(controller, d))
+			}
+		}
+		if len(refs) > 0 {
+			slices.SortFunc(refs, func(a, b NetworkDeviceRef) int {
+				return cmp.Compare(a.Id, b.Id)
+			})
+			return refs
+		}
+	}
+
+	// Fallback: all connected APs.
 	for _, d := range deviceByMAC {
 		if d.Type == "uap" && d.State == 1 {
 			refs = append(refs, deviceRef(controller, d))
