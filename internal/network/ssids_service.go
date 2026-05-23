@@ -20,18 +20,21 @@ func (s *Service) ListSSIDs(_ context.Context) (SsidList, error) {
 	var items []Ssid
 
 	for _, cb := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+			continue
+		}
 		controller, backend := cb.controller, cb.unifi
 		wlans, err := backend.GetWlanConf()
 		if err != nil {
-			return SsidList{}, fmt.Errorf("GetWlanConf (%s): %w", controller, err)
+			return SsidList{}, fmt.Errorf("get wlan conf from %s: %w", controller, err)
 		}
 		networks, err := backend.GetNetworkConf()
 		if err != nil {
-			return SsidList{}, fmt.Errorf("GetNetworkConf (%s): %w", controller, err)
+			return SsidList{}, fmt.Errorf("get network conf from %s: %w", controller, err)
 		}
 		clients, err := backend.GetClients()
 		if err != nil {
-			return SsidList{}, fmt.Errorf("GetClients (%s): %w", controller, err)
+			return SsidList{}, fmt.Errorf("get clients from %s: %w", controller, err)
 		}
 
 		networkByID := indexNetworksByID(networks)
@@ -77,19 +80,19 @@ func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error
 
 	wlans, err := backend.GetWlanConf()
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("GetWlanConf (%s): %w", controller, err)
+		return SsidDetail{}, false, fmt.Errorf("get wlan conf: %w", err)
 	}
 	networks, err := backend.GetNetworkConf()
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("GetNetworkConf (%s): %w", controller, err)
+		return SsidDetail{}, false, fmt.Errorf("get network conf: %w", err)
 	}
 	clients, err := backend.GetClients()
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("GetClients (%s): %w", controller, err)
+		return SsidDetail{}, false, fmt.Errorf("get clients: %w", err)
 	}
 	devices, err := backend.GetDevices()
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("GetDevices (%s): %w", controller, err)
+		return SsidDetail{}, false, fmt.Errorf("get devices: %w", err)
 	}
 
 	// Find the WLAN (including disabled ones — direct lookup by kebab name)
