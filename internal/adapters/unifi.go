@@ -104,22 +104,30 @@ func (c *UniFiClient) get(path string, out any) error {
 
 // UniFiDevice represents a managed network device from the UniFi Controller.
 type UniFiDevice struct {
-	ID          string `json:"_id"`
-	MAC         string `json:"mac"`
-	Name        string `json:"name"`
-	Model       string `json:"model"`
-	Type        string `json:"type"` // uap, usw, ugw, udm, udm-pro
-	State       int    `json:"state"`
-	IP          string `json:"ip"`
-	Version     string `json:"version"`
-	Uptime      int    `json:"uptime"`
-	UserNumSta  int    `json:"user-num_sta"`  // connected user clients
-	GuestNumSta int    `json:"guest-num_sta"` // connected guest clients
+	ID          string           `json:"_id"`
+	MAC         string           `json:"mac"`
+	Name        string           `json:"name"`
+	Model       string           `json:"model"`
+	Type        string           `json:"type"` // uap, usw, ugw, udm, udm-pro
+	State       int              `json:"state"`
+	IP          string           `json:"ip"`
+	Version     string           `json:"version"`
+	Uptime      int              `json:"uptime"`
+	UserNumSta  int              `json:"user-num_sta"`  // connected user clients
+	GuestNumSta int              `json:"guest-num_sta"` // connected guest clients
 	TxBytes     int64            `json:"tx_bytes"`
 	RxBytes     int64            `json:"rx_bytes"`
 	PortTable   []UniFiPortEntry `json:"port_table"`
+	VapTable    []UniFiVap       `json:"vap_table"`
 	Uplink      *UniFiUplink     `json:"uplink"`
 	Wan1        *UniFiWanIface   `json:"wan1"`
+	Wan2        *UniFiWanIface   `json:"wan2"`
+}
+
+// UniFiVap is one entry in a device's vap_table — one row per radio per SSID.
+type UniFiVap struct {
+	ID    string `json:"id"`    // wlanconf _id
+	Up    bool   `json:"up"`
 }
 
 type UniFiPortEntry struct {
@@ -147,10 +155,49 @@ type UniFiUplink struct {
 }
 
 type UniFiWanIface struct {
-	TxBytes  int64   `json:"tx_bytes"`
-	RxBytes  int64   `json:"rx_bytes"`
-	TxBytesR float64 `json:"tx_bytes-r"`
-	RxBytesR float64 `json:"rx_bytes-r"`
+	Name     string   `json:"name"`
+	IP       string   `json:"ip"`
+	Up       bool     `json:"up"`
+	DNS      []string `json:"dns"`
+	TxBytes  int64    `json:"tx_bytes"`
+	RxBytes  int64    `json:"rx_bytes"`
+	TxBytesR float64  `json:"tx_bytes-r"`
+	RxBytesR float64  `json:"rx_bytes-r"`
+}
+
+// UniFiWlanConf represents a WiFi network configuration from the UniFi Controller.
+type UniFiWlanConf struct {
+	ID             string   `json:"_id"`
+	Name           string   `json:"name"`
+	NetworkConfID  string   `json:"networkconf_id"`
+	Security       string   `json:"security"`
+	WpaMode        string   `json:"wpa_mode"`
+	Wpa3Support    bool     `json:"wpa3_support"`
+	Wpa3Transition bool     `json:"wpa3_transition"`
+	WlanBands      []string `json:"wlan_bands"`
+	Enabled        bool     `json:"enabled"`
+}
+
+// UniFiNetworkConf represents a network/VLAN configuration from the UniFi Controller.
+// The Vlan field is interface{} because the JSON value is an integer for tagged VLANs,
+// an empty string for the default untagged network, and null for WAN entries.
+type UniFiNetworkConf struct {
+	ID               string `json:"_id"`
+	Name             string `json:"name"`
+	Purpose          string `json:"purpose"` // "corporate", "guest", "wan"
+	NetworkGroup     string `json:"networkgroup"`
+	Vlan             any    `json:"vlan"`
+	VlanEnabled      bool   `json:"vlan_enabled"`
+	IPSubnet         string `json:"ip_subnet"` // gateway IP + prefix, e.g. "192.168.1.1/24"
+	DhcpdEnabled     bool   `json:"dhcpd_enabled"`
+	DHCPRelayEnabled bool   `json:"dhcp_relay_enabled"`
+	DhcpdStart       string `json:"dhcpd_start"`
+	DhcpdStop        string `json:"dhcpd_stop"`
+	DhcpdDNS1        string `json:"dhcpd_dns_1"`
+	DhcpdDNS2        string `json:"dhcpd_dns_2"`
+	WanNetworkGroup  string `json:"wan_networkgroup"` // "WAN" → wan1, "WAN2" → wan2
+	WanDNS1          string `json:"wan_dns1"`
+	WanDNS2          string `json:"wan_dns2"`
 }
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
@@ -180,8 +227,8 @@ type UniFiSta struct {
 	SwMAC          string  `json:"sw_mac"`           // MAC of the switch this client is connected to (wired)
 	SwPort         int     `json:"sw_port"`          // Switch port number (wired)
 	LastUplinkName string  `json:"last_uplink_name"` // Switch display name (wired)
-	ApMAC         string `json:"ap_mac"`
-	WiredRateMbps int    `json:"wired_rate_mbps"`
+	ApMAC          string  `json:"ap_mac"`
+	WiredRateMbps  int     `json:"wired_rate_mbps"`
 }
 
 // GetClients retrieves currently active client devices from the UniFi Controller.
@@ -215,7 +262,7 @@ type UniFiClientV2 struct {
 	ESSID          *string `json:"essid"`
 	Signal         *int    `json:"signal"`
 	LastSeen       int64   `json:"last_seen"`
-	LastUplinkMAC string `json:"last_uplink_mac"`
+	LastUplinkMAC  string  `json:"last_uplink_mac"`
 }
 
 // getV2 performs an authenticated GET request against the UniFi v2 API and decodes the bare JSON array response.
@@ -291,6 +338,30 @@ func (c *UniFiClient) GetHealth() ([]UniFiSubsystemHealth, error) {
 
 	var result unifiResponse[[]UniFiSubsystemHealth]
 	if err := c.get("/api/s/default/stat/health", &result); err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// GetWlanConf retrieves all WiFi network configurations from the UniFi Controller.
+func (c *UniFiClient) GetWlanConf() ([]UniFiWlanConf, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	var result unifiResponse[[]UniFiWlanConf]
+	if err := c.get("/api/s/default/rest/wlanconf", &result); err != nil {
+		return nil, err
+	}
+	return result.Data, nil
+}
+
+// GetNetworkConf retrieves all network configurations (VLANs + WAN) from the UniFi Controller.
+func (c *UniFiClient) GetNetworkConf() ([]UniFiNetworkConf, error) {
+	if err := c.login(); err != nil {
+		return nil, err
+	}
+	var result unifiResponse[[]UniFiNetworkConf]
+	if err := c.get("/api/s/default/rest/networkconf", &result); err != nil {
 		return nil, err
 	}
 	return result.Data, nil

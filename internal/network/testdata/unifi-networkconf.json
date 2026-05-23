@@ -1,0 +1,72 @@
+{
+  "data": [
+    {
+      "_id": "aabbccddee0011223344bb20",
+      "name": "LAN-MGMT",
+      "purpose": "corporate",
+      "networkgroup": "LAN",
+      "vlan": "",
+      "vlan_enabled": false,
+      "ip_subnet": "192.168.1.1/24",
+      "dhcpd_enabled": true,
+      "dhcp_relay_enabled": false,
+      "dhcpd_start": "192.168.1.6",
+      "dhcpd_stop": "192.168.1.49",
+      "dhcpd_dns_1": "192.168.1.1",
+      "dhcpd_dns_2": ""
+    },
+    {
+      "_id": "aabbccddee0011223344bb10",
+      "name": "LAN-IOT",
+      "purpose": "corporate",
+      "networkgroup": "LAN",
+      "vlan": 20,
+      "vlan_enabled": true,
+      "ip_subnet": "192.168.20.1/24",
+      "dhcpd_enabled": true,
+      "dhcp_relay_enabled": false,
+      "dhcpd_start": "192.168.20.6",
+      "dhcpd_stop": "192.168.20.254",
+      "dhcpd_dns_1": "192.168.20.1",
+      "dhcpd_dns_2": ""
+    },
+    {
+      "_id": "aabbccddee0011223344bb11",
+      "name": "LAN-INT",
+      "purpose": "corporate",
+      "networkgroup": "LAN",
+      "vlan": 10,
+      "vlan_enabled": true,
+      "ip_subnet": "192.168.10.1/24",
+      "dhcpd_enabled": true,
+      "dhcp_relay_enabled": false,
+      "dhcpd_start": "192.168.10.6",
+      "dhcpd_stop": "192.168.10.254",
+      "dhcpd_dns_1": "192.168.100.5",
+      "dhcpd_dns_2": "192.168.10.1"
+    },
+    {
+      "_id": "aabbccddee0011223344bb12",
+      "name": "LAN-SRV",
+      "purpose": "corporate",
+      "networkgroup": "LAN",
+      "vlan": 100,
+      "vlan_enabled": true,
+      "ip_subnet": "192.168.100.1/24",
+      "dhcpd_enabled": true,
+      "dhcp_relay_enabled": false,
+      "dhcpd_start": "192.168.100.200",
+      "dhcpd_stop": "192.168.100.254",
+      "dhcpd_dns_1": null,
+      "dhcpd_dns_2": null
+    },
+    {
+      "_id": "aabbccddee0011223344bb30",
+      "name": "Internet 1",
+      "purpose": "wan",
+      "wan_networkgroup": "WAN",
+      "wan_dns1": "8.8.8.8",
+      "wan_dns2": "8.8.4.4"
+    }
+  ]
+}

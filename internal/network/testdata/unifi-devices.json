@@ -1,5 +1,7 @@
 {
-  "meta": {"rc": "ok"},
+  "meta": {
+    "rc": "ok"
+  },
   "data": [
     {
       "_id": "000000000000000000000001",
@@ -16,10 +18,16 @@
       "tx_bytes": 306168680348,
       "rx_bytes": 3913232707026,
       "wan1": {
-        "tx_bytes": 306168680348,
+        "name": "wan",
+        "ip": "203.0.113.42",
+        "up": true,
+        "dns": [
+          "8.8.8.8"
+        ],
+        "tx_bytes-r": 79558.09798451557,
+        "rx_bytes-r": 134932.2634235025,
         "rx_bytes": 3913232707026,
-        "tx_bytes-r": 79558.0,
-        "rx_bytes-r": 134932.0
+        "tx_bytes": 306168680348
       }
     },
     {
@@ -47,14 +55,102 @@
         "rx_bytes": 226683708402
       },
       "port_table": [
-        {"port_idx": 1, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 25312100378, "rx_bytes": 226683708402, "tx_bytes-r": 87631.0, "rx_bytes-r": 163452.0},
-        {"port_idx": 2, "up": true,  "speed": 100,  "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 100000,       "rx_bytes": 200000,       "tx_bytes-r": 100.0,    "rx_bytes-r": 200.0},
-        {"port_idx": 3, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 36706804229,  "rx_bytes": 8150054814,   "tx_bytes-r": 7380.0,   "rx_bytes-r": 54517.0},
-        {"port_idx": 4, "up": false, "speed": 0,    "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 0,            "rx_bytes": 0,            "tx_bytes-r": 0.0,      "rx_bytes-r": 0.0},
-        {"port_idx": 5, "up": true,  "speed": 1000, "port_poe": true,  "poe_mode": "auto", "poe_power": "3.00", "tx_bytes": 88380586202, "rx_bytes": 7997575920, "tx_bytes-r": 674.0, "rx_bytes-r": 222.0},
-        {"port_idx": 6, "up": true,  "speed": 1000, "port_poe": true,  "poe_mode": "auto", "poe_power": "1.61", "tx_bytes": 20169620222, "rx_bytes": 1080138674, "tx_bytes-r": 262.0, "rx_bytes-r": 479.0},
-        {"port_idx": 7, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 5000000,      "rx_bytes": 3000000,      "tx_bytes-r": 0.0,      "rx_bytes-r": 0.0},
-        {"port_idx": 8, "up": false, "speed": 0,    "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 0,            "rx_bytes": 0,            "tx_bytes-r": 0.0,      "rx_bytes-r": 0.0}
+        {
+          "port_idx": 1,
+          "up": true,
+          "speed": 1000,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 25312100378,
+          "rx_bytes": 226683708402,
+          "tx_bytes-r": 87631.0,
+          "rx_bytes-r": 163452.0
+        },
+        {
+          "port_idx": 2,
+          "up": true,
+          "speed": 100,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 100000,
+          "rx_bytes": 200000,
+          "tx_bytes-r": 100.0,
+          "rx_bytes-r": 200.0
+        },
+        {
+          "port_idx": 3,
+          "up": true,
+          "speed": 1000,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 36706804229,
+          "rx_bytes": 8150054814,
+          "tx_bytes-r": 7380.0,
+          "rx_bytes-r": 54517.0
+        },
+        {
+          "port_idx": 4,
+          "up": false,
+          "speed": 0,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 0,
+          "rx_bytes": 0,
+          "tx_bytes-r": 0.0,
+          "rx_bytes-r": 0.0
+        },
+        {
+          "port_idx": 5,
+          "up": true,
+          "speed": 1000,
+          "port_poe": true,
+          "poe_mode": "auto",
+          "poe_power": "3.00",
+          "tx_bytes": 88380586202,
+          "rx_bytes": 7997575920,
+          "tx_bytes-r": 674.0,
+          "rx_bytes-r": 222.0
+        },
+        {
+          "port_idx": 6,
+          "up": true,
+          "speed": 1000,
+          "port_poe": true,
+          "poe_mode": "auto",
+          "poe_power": "1.61",
+          "tx_bytes": 20169620222,
+          "rx_bytes": 1080138674,
+          "tx_bytes-r": 262.0,
+          "rx_bytes-r": 479.0
+        },
+        {
+          "port_idx": 7,
+          "up": true,
+          "speed": 1000,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 5000000,
+          "rx_bytes": 3000000,
+          "tx_bytes-r": 0.0,
+          "rx_bytes-r": 0.0
+        },
+        {
+          "port_idx": 8,
+          "up": false,
+          "speed": 0,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 0,
+          "rx_bytes": 0,
+          "tx_bytes-r": 0.0,
+          "rx_bytes-r": 0.0
+        }
       ]
     },
     {
@@ -82,9 +178,42 @@
         "rx_bytes": 1220180199127
       },
       "port_table": [
-        {"port_idx": 1, "up": true,  "speed": 1000, "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 1220180199127, "rx_bytes": 27798639955, "tx_bytes-r": 311.0, "rx_bytes-r": 200.0},
-        {"port_idx": 2, "up": true,  "speed": 100,  "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 50000,         "rx_bytes": 100000,      "tx_bytes-r": 50.0,  "rx_bytes-r": 100.0},
-        {"port_idx": 3, "up": false, "speed": 0,    "port_poe": false, "poe_mode": null, "poe_power": null, "tx_bytes": 0,             "rx_bytes": 0,           "tx_bytes-r": 0.0,   "rx_bytes-r": 0.0}
+        {
+          "port_idx": 1,
+          "up": true,
+          "speed": 1000,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 1220180199127,
+          "rx_bytes": 27798639955,
+          "tx_bytes-r": 311.0,
+          "rx_bytes-r": 200.0
+        },
+        {
+          "port_idx": 2,
+          "up": true,
+          "speed": 100,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 50000,
+          "rx_bytes": 100000,
+          "tx_bytes-r": 50.0,
+          "rx_bytes-r": 100.0
+        },
+        {
+          "port_idx": 3,
+          "up": false,
+          "speed": 0,
+          "port_poe": false,
+          "poe_mode": null,
+          "poe_power": null,
+          "tx_bytes": 0,
+          "rx_bytes": 0,
+          "tx_bytes-r": 0.0,
+          "rx_bytes-r": 0.0
+        }
       ]
     },
     {
@@ -110,7 +239,29 @@
         "rx_bytes-r": 222.0,
         "tx_bytes": 8316685650,
         "rx_bytes": 97191129029
-      }
+      },
+      "vap_table": [
+        {
+          "id": "aabbccddee0011223344aa01",
+          "up": true,
+          "radio": "na"
+        },
+        {
+          "id": "aabbccddee0011223344aa02",
+          "up": true,
+          "radio": "na"
+        },
+        {
+          "id": "aabbccddee0011223344aa01",
+          "up": true,
+          "radio": "ng"
+        },
+        {
+          "id": "aabbccddee0011223344aa02",
+          "up": true,
+          "radio": "ng"
+        }
+      ]
     },
     {
       "_id": "000000000000000000000005",
@@ -125,7 +276,29 @@
       "user-num_sta": 0,
       "guest-num_sta": 0,
       "tx_bytes": 0,
-      "rx_bytes": 0
+      "rx_bytes": 0,
+      "vap_table": [
+        {
+          "id": "aabbccddee0011223344aa01",
+          "up": true,
+          "radio": "na"
+        },
+        {
+          "id": "aabbccddee0011223344aa02",
+          "up": true,
+          "radio": "na"
+        },
+        {
+          "id": "aabbccddee0011223344aa01",
+          "up": true,
+          "radio": "ng"
+        },
+        {
+          "id": "aabbccddee0011223344aa02",
+          "up": true,
+          "radio": "ng"
+        }
+      ]
     }
   ]
 }

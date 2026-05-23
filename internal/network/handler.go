@@ -183,6 +183,171 @@ func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetwork
 	return networkClientDetailResponse{detail: detail}, nil
 }
 
+// ListSsids implements StrictServerInterface.
+func (h *ServerHandler) ListSsids(ctx context.Context, _ ListSsidsRequestObject) (ListSsidsResponseObject, error) {
+	result, err := h.svc.ListSSIDs(ctx)
+	if err != nil {
+		detail := err.Error()
+		return ListSsids500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return ListSsids200JSONResponse(result), nil
+}
+
+// GetSsid implements StrictServerInterface.
+func (h *ServerHandler) GetSsid(ctx context.Context, request GetSsidRequestObject) (GetSsidResponseObject, error) {
+	detail, found, err := h.svc.GetSSID(ctx, request.SsidId)
+	if err != nil {
+		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetSsid404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
+		return GetSsid500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &msg,
+			},
+		}, nil
+	}
+	if !found {
+		msg := "SSID not found: " + request.SsidId
+		return GetSsid404ApplicationProblemPlusJSONResponse{
+			NotFoundApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNNotFound,
+				Title:  apierrors.TitleNotFound,
+				Status: 404,
+				Detail: &msg,
+			},
+		}, nil
+	}
+	return GetSsid200JSONResponse(detail), nil
+}
+
+// ListVlans implements StrictServerInterface.
+func (h *ServerHandler) ListVlans(ctx context.Context, _ ListVlansRequestObject) (ListVlansResponseObject, error) {
+	result, err := h.svc.ListVLANs(ctx)
+	if err != nil {
+		detail := err.Error()
+		return ListVlans500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return ListVlans200JSONResponse(result), nil
+}
+
+// GetVlan implements StrictServerInterface.
+func (h *ServerHandler) GetVlan(ctx context.Context, request GetVlanRequestObject) (GetVlanResponseObject, error) {
+	detail, found, err := h.svc.GetVLAN(ctx, request.VlanId)
+	if err != nil {
+		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetVlan404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
+		return GetVlan500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &msg,
+			},
+		}, nil
+	}
+	if !found {
+		msg := "VLAN not found: " + request.VlanId
+		return GetVlan404ApplicationProblemPlusJSONResponse{
+			NotFoundApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNNotFound,
+				Title:  apierrors.TitleNotFound,
+				Status: 404,
+				Detail: &msg,
+			},
+		}, nil
+	}
+	return GetVlan200JSONResponse(detail), nil
+}
+
+// ListWans implements StrictServerInterface.
+func (h *ServerHandler) ListWans(ctx context.Context, _ ListWansRequestObject) (ListWansResponseObject, error) {
+	result, err := h.svc.ListWANs(ctx)
+	if err != nil {
+		detail := err.Error()
+		return ListWans500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &detail,
+			},
+		}, nil
+	}
+	return ListWans200JSONResponse(result), nil
+}
+
+// GetWan implements StrictServerInterface.
+func (h *ServerHandler) GetWan(ctx context.Context, request GetWanRequestObject) (GetWanResponseObject, error) {
+	detail, found, err := h.svc.GetWAN(ctx, request.WanId)
+	if err != nil {
+		msg := err.Error()
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetWan404ApplicationProblemPlusJSONResponse{
+				NotFoundApplicationProblemPlusJSONResponse{
+					Type:   apierrors.URNNotFound,
+					Title:  apierrors.TitleNotFound,
+					Status: 404,
+					Detail: &msg,
+				},
+			}, nil
+		}
+		return GetWan500ApplicationProblemPlusJSONResponse{
+			InternalServerErrorApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNInternalServerError,
+				Title:  apierrors.TitleInternalServerError,
+				Status: 500,
+				Detail: &msg,
+			},
+		}, nil
+	}
+	if !found {
+		msg := "WAN not found: " + request.WanId
+		return GetWan404ApplicationProblemPlusJSONResponse{
+			NotFoundApplicationProblemPlusJSONResponse{
+				Type:   apierrors.URNNotFound,
+				Title:  apierrors.TitleNotFound,
+				Status: 404,
+				Detail: &msg,
+			},
+		}, nil
+	}
+	return GetWan200JSONResponse(detail), nil
+}
+
 // GetNetworkTopology implements StrictServerInterface.
 func (h *ServerHandler) GetNetworkTopology(ctx context.Context, request GetNetworkTopologyRequestObject) (GetNetworkTopologyResponseObject, error) {
 	includeClients := request.Params.IncludeClients != nil && *request.Params.IncludeClients
