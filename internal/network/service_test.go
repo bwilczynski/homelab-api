@@ -1593,3 +1593,69 @@ func TestGetSSIDNotFound(t *testing.T) {
 		t.Fatal("expected not found")
 	}
 }
+
+func TestGetSSIDDisabled(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf: []adapters.UniFiWlanConf{
+			{ID: "cc01", Name: "hidden-net", NetworkConfID: "bb20", Enabled: false, WlanBands: []string{"2g"}},
+		},
+		networkConf: []adapters.UniFiNetworkConf{
+			{ID: "bb20", Name: "LAN-MGMT", Purpose: "corporate", VlanEnabled: false},
+		},
+		clients: []adapters.UniFiSta{},
+		devices: []adapters.UniFiDevice{},
+	}}, 30)
+
+	_, found, err := svc.GetSSID(context.Background(), "unifi.hidden-net")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected disabled SSID to be found by GetSSID")
+	}
+}
+
+func TestListSSIDs_MissingNetworkConf(t *testing.T) {
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf: []adapters.UniFiWlanConf{
+			{ID: "cc02", Name: "orphan-ssid", NetworkConfID: "missing-id", Enabled: true, WlanBands: []string{"5g"}},
+		},
+		networkConf: []adapters.UniFiNetworkConf{},
+		clients:     []adapters.UniFiSta{},
+	}}, 30)
+
+	result, err := svc.ListSSIDs(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].VlanId != 1 {
+		t.Errorf("expected vlanId 1 for missing networkconf, got %d", result.Items[0].VlanId)
+	}
+}
+
+func TestGetSSID_BroadcastingApsFallback(t *testing.T) {
+	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
+		wlanConf:    wlans,
+		networkConf: networks,
+		devices:     devices,
+		clients:     []adapters.UniFiSta{}, // no clients → fallback path
+	}}, 30)
+
+	detail, found, err := svc.GetSSID(context.Background(), "unifi.hamster-iot")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !found {
+		t.Fatal("expected hamster-iot to be found")
+	}
+	// Fallback: all connected UAPs in device fixture
+	if len(detail.BroadcastingAps) == 0 {
+		t.Error("expected broadcastingAps via fallback (all connected UAPs)")
+	}
+}

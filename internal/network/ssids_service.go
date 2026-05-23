@@ -41,8 +41,8 @@ func (s *Service) ListSSIDs(_ context.Context) (SsidList, error) {
 			if !w.Enabled {
 				continue
 			}
-			id := fmt.Sprintf("%s.%s", controller, w.Name)
-			vlanID := 0
+			id := fmt.Sprintf("%s.%s", controller, toKebab(w.Name))
+			vlanID := 1 // default native VLAN
 			if n, ok := networkByID[w.NetworkConfID]; ok {
 				vlanID = extractVlanID(n.Vlan)
 			}
@@ -92,10 +92,10 @@ func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error
 		return SsidDetail{}, false, fmt.Errorf("GetDevices (%s): %w", controller, err)
 	}
 
-	// Find the WLAN (including disabled ones — direct lookup by name)
+	// Find the WLAN (including disabled ones — direct lookup by kebab name)
 	var wlan *adapters.UniFiWlanConf
 	for i := range wlans {
-		if wlans[i].Name == name {
+		if toKebab(wlans[i].Name) == name {
 			wlan = &wlans[i]
 			break
 		}
@@ -105,7 +105,7 @@ func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error
 	}
 
 	networkByID := indexNetworksByID(networks)
-	vlanID := 0
+	vlanID := 1 // default native VLAN
 	if n, ok := networkByID[wlan.NetworkConfID]; ok {
 		vlanID = extractVlanID(n.Vlan)
 	}
