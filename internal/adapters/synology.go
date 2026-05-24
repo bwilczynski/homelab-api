@@ -243,14 +243,6 @@ func (c *SynologyClient) SupportsBackups() bool {
 	return c.SupportsAPI(APISynoBackupTask)
 }
 
-// Login authenticates with the DSM and stores the session ID.
-// It first discovers the correct auth endpoint and version from the DSM itself.
-func (c *SynologyClient) Login() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.loginLocked()
-}
-
 // loginLocked performs the login work. Caller must hold c.mu for writing;
 // this also serializes access to c.authInfo, which is only read/written here.
 func (c *SynologyClient) loginLocked() error {
@@ -287,23 +279,6 @@ func (c *SynologyClient) loginLocked() error {
 	}
 	c.sid = loginData.SID
 	return nil
-}
-
-// Logout ends the DSM session.
-func (c *SynologyClient) Logout() error {
-	c.mu.Lock()
-	sid := c.sid
-	c.sid = ""
-	c.mu.Unlock()
-
-	params := url.Values{
-		"api":     {"SYNO.API.Auth"},
-		"method":  {"logout"},
-		"version": {"6"},
-		"_sid":    {sid},
-	}
-	_, err := c.rawGet("entry.cgi", params)
-	return err
 }
 
 // ensureSession returns the current SID, logging in if needed. Double-checked
