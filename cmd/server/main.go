@@ -78,11 +78,9 @@ func main() {
 
 	monitor := health.NewMonitor(buildHealthCheckers(synologyClients, unifiClients), 30*time.Second, logger)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		monitor.Start(ctx)
-	}()
+	})
 
 	r := chi.NewRouter()
 	r.Use(httplog.RequestLogger(logger, &httplog.Options{
