@@ -98,6 +98,8 @@ Return this type from the handler instead of the generated `Foo200JSONResponse`.
 
 The `spec/` submodule and all `api.gen.go` files are read-only in this repo. Never modify them here. If the spec seems wrong or incomplete, changes must go through the [homelab-api-spec](https://github.com/bwilczynski/homelab-api-spec) repo. This repo only implements the contract.
 
+**Never stage or commit `internal/*/api.gen.go` files.** They are regenerated locally by `make generate` and `.gitignore` lists `internal/*/api.gen.go`. Do not use `git add -A` / `git add .` in this repo — stage specific paths instead (`git add internal/foo/handler.go ...`). Before every commit, run `git diff --cached --name-only | grep gen.go`; if anything matches, stop and unstage. This rule applies even when a `make generate` run produces "intended" diffs in the gen files — those stay local.
+
 ## Backend adapter rules
 
 These rules apply any time you write or extend adapter code, regardless of how the task was initiated.
