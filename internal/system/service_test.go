@@ -123,6 +123,7 @@ func newTestService(dsm DSMBackend, unifi UniFiBackend) *Service {
 		map[string]UniFiBackend{"unifi": unifi},
 		config.UpdatesConfig{},
 		slog.Default(),
+		nil,
 	)
 }
 
@@ -503,6 +504,7 @@ func newTestServiceWithUpdates(t *testing.T, dsm DSMBackend) *Service {
 		map[string]UniFiBackend{},
 		config.UpdatesConfig{},
 		slog.Default(),
+		nil,
 	)
 }
 
@@ -524,6 +526,7 @@ func TestListSystemUpdates_PreservesCachedStatusOnGitHubFailure(t *testing.T) {
 		map[string]UniFiBackend{},
 		config.UpdatesConfig{},
 		slog.Default(),
+		nil,
 	)
 
 	// Seed GitHub releases cache with a known-good release.
@@ -622,6 +625,7 @@ func TestListSystemUpdates_UpToDateWhenVPrefixMismatch(t *testing.T) {
 			},
 		},
 		slog.Default(),
+		nil,
 	)
 
 	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
@@ -730,6 +734,7 @@ func TestListSystemUpdates_SkipsNonDockerBackend(t *testing.T) {
 		map[string]UniFiBackend{},
 		config.UpdatesConfig{},
 		slog.Default(),
+		nil,
 	)
 
 	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)

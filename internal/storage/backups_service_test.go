@@ -46,6 +46,7 @@ func TestListBackupTasks(t *testing.T) {
 		map[string]StorageBackend{},
 		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks, taskStatus: &taskStatus}},
 		slog.Default(),
+		nil,
 	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -83,6 +84,7 @@ func TestListBackupTasksWithDeviceFilter(t *testing.T) {
 		map[string]StorageBackend{},
 		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks}},
 		slog.Default(),
+		nil,
 	)
 
 	device := "nas-01"
@@ -113,6 +115,7 @@ func TestListBackupTasksEmpty(t *testing.T) {
 			},
 		},
 		slog.Default(),
+		nil,
 	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -141,6 +144,7 @@ func TestGetBackupTask(t *testing.T) {
 			},
 		},
 		slog.Default(),
+		nil,
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")
@@ -195,6 +199,7 @@ func TestGetBackupTaskNotFound(t *testing.T) {
 		map[string]StorageBackend{},
 		map[string]BackupBackend{"nas-01": &mockBackupBackend{tasks: &tasks}},
 		slog.Default(),
+		nil,
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.999")
@@ -207,7 +212,7 @@ func TestGetBackupTaskNotFound(t *testing.T) {
 }
 
 func TestGetBackupTaskInvalidID(t *testing.T) {
-	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{}, slog.Default())
+	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{}, slog.Default(), nil)
 
 	_, err := svc.GetBackupTask(context.Background(), "invalid-id")
 	if err == nil {
@@ -328,6 +333,7 @@ func TestListBackupTasksStatusError(t *testing.T) {
 			},
 		},
 		slog.Default(),
+		nil,
 	)
 
 	result, err := svc.ListBackupTasks(context.Background(), nil)
@@ -358,6 +364,7 @@ func TestGetBackupTaskEnrichmentErrors(t *testing.T) {
 			},
 		},
 		slog.Default(),
+		nil,
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.3")

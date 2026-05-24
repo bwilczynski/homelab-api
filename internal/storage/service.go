@@ -15,16 +15,12 @@ type Service struct {
 }
 
 // NewService creates a new storage service with storage and backup backends.
-// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
-// backends that are currently unreachable.
-func NewService(storageBackends map[string]StorageBackend, backupBackends map[string]BackupBackend, logger *slog.Logger, monitor ...adapters.AvailabilityChecker) *Service {
-	svc := &Service{
+// monitor may be nil; when non-nil, unreachable backends are skipped.
+func NewService(storageBackends map[string]StorageBackend, backupBackends map[string]BackupBackend, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
+	return &Service{
 		storageBackends: newStorageDeviceBackends(storageBackends),
 		backupBackends:  newBackupDeviceBackends(backupBackends),
 		logger:          logger,
+		monitor:         monitor,
 	}
-	if len(monitor) > 0 {
-		svc.monitor = monitor[0]
-	}
-	return svc
 }

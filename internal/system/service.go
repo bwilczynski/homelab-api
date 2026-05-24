@@ -57,9 +57,8 @@ type Service struct {
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
 // sources maps container images (without tag) to their GitHub release repos for update checks.
-// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
-// backends that are currently unreachable.
-func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, updatesCfg config.UpdatesConfig, logger *slog.Logger, monitor ...adapters.AvailabilityChecker) *Service {
+// monitor may be nil; when non-nil, unreachable backends are skipped.
+func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[string]UniFiBackend, updatesCfg config.UpdatesConfig, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
 	dsms := make([]dsmEntry, 0, len(dsmBackends))
 	for device, cfg := range dsmBackends {
 		dsms = append(dsms, dsmEntry{device: device, dsm: cfg.Backend, dockerEnabled: cfg.DockerEnabled})
@@ -82,16 +81,13 @@ func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[strin
 		ttl = time.Hour
 	}
 
-	svc := &Service{
+	return &Service{
 		dsmBackends:    dsms,
 		unifiBackends:  unifis,
 		sources:        srcMap,
 		updateCacheTTL: ttl,
 		logger:         logger,
 		warnedImages:   make(map[string]bool),
+		monitor:        monitor,
 	}
-	if len(monitor) > 0 {
-		svc.monitor = monitor[0]
-	}
-	return svc
 }

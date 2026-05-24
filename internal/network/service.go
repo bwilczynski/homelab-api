@@ -36,19 +36,14 @@ type Service struct {
 }
 
 // NewService creates a new network service with one or more UniFi backends.
-// An optional AvailabilityChecker (e.g. a health.Monitor) may be passed to skip
-// backends that are currently unreachable.
-func NewService(backends map[string]UniFiBackend, historyDays int, logger *slog.Logger, monitor ...adapters.AvailabilityChecker) *Service {
+// monitor may be nil; when non-nil, unreachable backends are skipped.
+func NewService(backends map[string]UniFiBackend, historyDays int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
 	cbs := make([]controllerBackend, 0, len(backends))
 	for controller, unifi := range backends {
 		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi})
 	}
 	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
-	svc := &Service{backends: cbs, historyDays: historyDays, logger: logger}
-	if len(monitor) > 0 {
-		svc.monitor = monitor[0]
-	}
-	return svc
+	return &Service{backends: cbs, historyDays: historyDays, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {

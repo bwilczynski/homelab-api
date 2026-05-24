@@ -187,7 +187,7 @@ func main() {
 		detail:    new(testhelpers.MustLoadFixture[adapters.DSMContainerDetailResponse](base + "/docker/testdata/container_detail.json")),
 		resources: new(testhelpers.MustLoadFixture[adapters.DSMContainerResourceResponse](base + "/docker/testdata/container_resources.json")),
 	}
-	dockerSvc := docker.NewService(map[string]docker.DockerBackend{"nas-01": cb}, slog.Default())
+	dockerSvc := docker.NewService(map[string]docker.DockerBackend{"nas-01": cb}, slog.Default(), nil)
 	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
@@ -212,6 +212,7 @@ func main() {
 			},
 		},
 		slog.Default(),
+		nil,
 	)
 	now := time.Now().UTC()
 	systemSvc.SeedGitHubReleases(map[string]*system.GitHubRelease{
@@ -234,7 +235,7 @@ func main() {
 		taskStatus: new(testhelpers.MustLoadFixture[adapters.DSMBackupTaskStatusResponse](base + "/storage/testdata/backup_task_status.json")),
 		target:     new(testhelpers.MustLoadFixture[adapters.DSMBackupTargetResponse](base + "/storage/testdata/backup_target.json")),
 	}
-	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb}, logger)
+	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb}, logger, nil)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
@@ -247,7 +248,7 @@ func main() {
 		activeClients:  testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-active.json"),
 		offlineClients: testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-history.json"),
 	}
-	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30, slog.Default())
+	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30, slog.Default(), nil)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,

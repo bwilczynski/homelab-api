@@ -31,17 +31,14 @@ type Service struct {
 }
 
 // NewService creates a new Docker service with one or more backends.
-func NewService(backends map[string]DockerBackend, logger *slog.Logger, monitor ...adapters.AvailabilityChecker) *Service {
+// monitor may be nil; when non-nil, unreachable backends are skipped.
+func NewService(backends map[string]DockerBackend, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
 	dbs := make([]deviceBackend, 0, len(backends))
 	for device, backend := range backends {
 		dbs = append(dbs, deviceBackend{device: device, backend: backend})
 	}
 	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
-	svc := &Service{backends: dbs, logger: logger}
-	if len(monitor) > 0 {
-		svc.monitor = monitor[0]
-	}
-	return svc
+	return &Service{backends: dbs, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(device string) (DockerBackend, error) {
