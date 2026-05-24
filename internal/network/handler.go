@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -12,40 +13,28 @@ import (
 // correctly serializes NetworkClientDetail's anyOf union. The generated
 // GetNetworkClient200JSONResponse is a new type (not an alias), so it does not
 // inherit NetworkClientDetail.MarshalJSON — encoding it produces {}.
-// This type calls MarshalJSON explicitly.
 type networkClientDetailResponse struct {
 	detail NetworkClientDetail
 }
 
 func (r networkClientDetailResponse) VisitGetNetworkClientResponse(w http.ResponseWriter) error {
-	b, err := r.detail.MarshalJSON()
-	if err != nil {
-		return err
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(b)
-	return err
+	return json.NewEncoder(w).Encode(r.detail)
 }
 
 // networkDeviceDetailResponse is a custom 200 response for GetNetworkDevice that
 // correctly serializes NetworkDeviceDetail's anyOf union. The generated
 // GetNetworkDevice200JSONResponse is a new type (not an alias), so it does not
 // inherit NetworkDeviceDetail.MarshalJSON — encoding it produces {}.
-// This type calls MarshalJSON explicitly.
 type networkDeviceDetailResponse struct {
 	detail NetworkDeviceDetail
 }
 
 func (r networkDeviceDetailResponse) VisitGetNetworkDeviceResponse(w http.ResponseWriter) error {
-	b, err := r.detail.MarshalJSON()
-	if err != nil {
-		return err
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(b)
-	return err
+	return json.NewEncoder(w).Encode(r.detail)
 }
 
 // ServerHandler implements StrictServerInterface by delegating to the Service.
