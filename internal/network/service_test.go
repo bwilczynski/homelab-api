@@ -3,10 +3,10 @@ package network
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
 // mockUniFi implements UniFiBackend for testing.
@@ -51,25 +51,10 @@ func (m *mockUniFi) GetNetworkConf() ([]adapters.UniFiNetworkConf, error) {
 	return m.networkConf, m.err
 }
 
-func loadFixture[T any](t *testing.T, path string) T {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", path, err)
-	}
-	var envelope struct {
-		Data T `json:"data"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		t.Fatalf("parse fixture %s: %v", path, err)
-	}
-	return envelope.Data
-}
-
 // --- device list tests ---
 
 func TestListDevices(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	result, err := svc.ListDevices(context.Background())
@@ -133,8 +118,8 @@ func TestListDevicesEmpty(t *testing.T) {
 // --- device detail tests ---
 
 func TestGetDevice_Gateway(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetDevice(context.Background(), "unifi.usg-3p")
@@ -204,7 +189,7 @@ func TestGetDevice_Unknown(t *testing.T) {
 }
 
 func TestGetDeviceNotFound(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	_, found, err := svc.GetDevice(context.Background(), "unifi.nonexistent")
@@ -217,7 +202,7 @@ func TestGetDeviceNotFound(t *testing.T) {
 }
 
 func TestGetDeviceWrongController(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	_, found, err := svc.GetDevice(context.Background(), "other.usg-3p")
@@ -232,8 +217,8 @@ func TestGetDeviceWrongController(t *testing.T) {
 // --- client list tests ---
 
 func TestListClientsAll(t *testing.T) {
-	active := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
-	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	active := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{activeClients: active, offlineClients: offline}}, 30)
 
 	result, err := svc.ListClients(context.Background(), "")
@@ -246,8 +231,8 @@ func TestListClientsAll(t *testing.T) {
 }
 
 func TestListClientsOnlineFilter(t *testing.T) {
-	active := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
-	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	active := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{activeClients: active, offlineClients: offline}}, 30)
 
 	result, err := svc.ListClients(context.Background(), "online")
@@ -265,8 +250,8 @@ func TestListClientsOnlineFilter(t *testing.T) {
 }
 
 func TestListClientsOfflineFilter(t *testing.T) {
-	active := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
-	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	active := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{activeClients: active, offlineClients: offline}}, 30)
 
 	result, err := svc.ListClients(context.Background(), "offline")
@@ -284,8 +269,8 @@ func TestListClientsOfflineFilter(t *testing.T) {
 }
 
 func TestListClientsIDAndFields(t *testing.T) {
-	active := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
-	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	active := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{activeClients: active, offlineClients: offline}}, 30)
 
 	result, err := svc.ListClients(context.Background(), "")
@@ -372,8 +357,8 @@ func TestListClientsEmpty(t *testing.T) {
 // --- client detail tests ---
 
 func TestGetClientWireless(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.macbook-pro-3c")
@@ -409,8 +394,8 @@ func TestGetClientWireless(t *testing.T) {
 }
 
 func TestGetClientWired(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetClient(context.Background(), "unifi.nas-1-68")
@@ -440,7 +425,7 @@ func TestGetClientWired(t *testing.T) {
 }
 
 func TestGetClientNotFound(t *testing.T) {
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30)
 
 	_, found, err := svc.GetClient(context.Background(), "unifi.nobody-00")
@@ -453,8 +438,8 @@ func TestGetClientNotFound(t *testing.T) {
 }
 
 func TestGetClientOfflineWired(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		devices:        devices,
 		clients:        []adapters.UniFiSta{},
@@ -494,8 +479,8 @@ func TestGetClientOfflineWired(t *testing.T) {
 }
 
 func TestGetClientOfflineWireless(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	offline := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		devices:        devices,
 		clients:        []adapters.UniFiSta{},
@@ -571,8 +556,8 @@ func TestToKebab(t *testing.T) {
 }
 
 func TestGetDevice_Switch(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
@@ -641,8 +626,8 @@ func TestGetDevice_Switch(t *testing.T) {
 }
 
 func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, _, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
@@ -683,8 +668,8 @@ func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
 }
 
 func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, _, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
@@ -719,8 +704,8 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 }
 
 func TestGetDevice_AccessPoint(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30)
 
 	detail, found, err := svc.GetDevice(context.Background(), "unifi.uap-01")
@@ -831,7 +816,7 @@ func parseTopologyEdge(t *testing.T, e TopologyEdge) testEdge {
 }
 
 func TestGetTopology_DevicesOnly(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30)
 
 	topo, err := svc.GetTopology(context.Background(), false)
@@ -958,9 +943,9 @@ func TestGetTopology_DevicesOnly(t *testing.T) {
 }
 
 func TestGetTopology_WithClients(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	clients := loadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	history := loadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	history := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
 
 	mock := &mockUniFi{devices: devices, clients: clients, offlineClients: history}
 	svc := NewService(map[string]UniFiBackend{"unifi": mock}, 30)
@@ -1130,7 +1115,7 @@ func TestGetTopology_WithClients(t *testing.T) {
 // --- VLAN list tests ---
 
 func TestListVLANs(t *testing.T) {
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
 
 	result, err := svc.ListVLANs(context.Background())
@@ -1195,7 +1180,7 @@ func TestListVLANsEmpty(t *testing.T) {
 // --- VLAN detail tests ---
 
 func TestGetVLAN_ServerDHCP(t *testing.T) {
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
 
 	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-iot")
@@ -1277,7 +1262,7 @@ func TestGetVLAN_RelayDHCP(t *testing.T) {
 }
 
 func TestGetVLAN_MultipleDNS(t *testing.T) {
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
 
 	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-int")
@@ -1296,7 +1281,7 @@ func TestGetVLAN_MultipleDNS(t *testing.T) {
 }
 
 func TestGetVLAN_NullDNS(t *testing.T) {
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
 
 	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-srv")
@@ -1312,7 +1297,7 @@ func TestGetVLAN_NullDNS(t *testing.T) {
 }
 
 func TestGetVLAN_UntaggedVLAN1(t *testing.T) {
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
 
 	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-mgmt")
@@ -1334,7 +1319,7 @@ func TestGetVLAN_UntaggedVLAN1(t *testing.T) {
 }
 
 func TestGetVLANNotFound(t *testing.T) {
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30)
 
 	_, found, err := svc.GetVLAN(context.Background(), "unifi.nonexistent")
@@ -1349,8 +1334,8 @@ func TestGetVLANNotFound(t *testing.T) {
 // --- WAN list tests ---
 
 func TestListWANs(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30)
 
 	result, err := svc.ListWANs(context.Background())
@@ -1399,8 +1384,8 @@ func TestListWANsEmpty(t *testing.T) {
 // --- WAN detail tests ---
 
 func TestGetWAN(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30)
 
 	detail, found, err := svc.GetWAN(context.Background(), "unifi.internet-1")
@@ -1431,8 +1416,8 @@ func TestGetWAN(t *testing.T) {
 }
 
 func TestGetWANNotFound(t *testing.T) {
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30)
 
 	_, found, err := svc.GetWAN(context.Background(), "unifi.nonexistent")
@@ -1468,8 +1453,8 @@ func TestMapDeviceType(t *testing.T) {
 // --- SSID list tests ---
 
 func TestListSSIDs(t *testing.T) {
-	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	wlans := testhelpers.LoadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	// Two clients on "hamster-iot", one on "hamster"
 	clients := []adapters.UniFiSta{
 		{MAC: "aa:bb:cc:dd:ee:01", IsWired: false, ESSID: new("hamster-iot")},
@@ -1541,9 +1526,9 @@ func TestListSSIDsEmpty(t *testing.T) {
 // --- SSID detail tests ---
 
 func TestGetSSID(t *testing.T) {
-	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
-	devices := loadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	wlans := testhelpers.LoadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := []adapters.UniFiSta{
 		{MAC: "aa:bb:cc:dd:ee:01", Name: new("Device A"), IsWired: false, ESSID: new("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
 		{MAC: "aa:bb:cc:dd:ee:02", Name: new("Device B"), IsWired: false, ESSID: new("hamster-iot"), ApMAC: "bb:bb:bb:bb:bb:03"},
@@ -1583,8 +1568,8 @@ func TestGetSSID(t *testing.T) {
 }
 
 func TestGetSSIDNotFound(t *testing.T) {
-	wlans := loadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
-	networks := loadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	wlans := testhelpers.LoadFixture[[]adapters.UniFiWlanConf](t, "testdata/unifi-wlanconf.json")
+	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		wlanConf: wlans, networkConf: networks, clients: []adapters.UniFiSta{}, devices: []adapters.UniFiDevice{},
 	}}, 30)

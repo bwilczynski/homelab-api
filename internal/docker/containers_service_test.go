@@ -2,11 +2,10 @@ package docker
 
 import (
 	"context"
-	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
 // mockBackend implements DockerBackend for testing.
@@ -46,25 +45,9 @@ func (m *mockBackend) ListDockerImages() (*adapters.DSMDockerImageListResponse, 
 	return m.imagesResp, nil
 }
 
-func loadFixture[T any](t *testing.T, path string) T {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v", path, err)
-	}
-	// The fixture is a full Synology response envelope; extract .data
-	var envelope struct {
-		Data T `json:"data"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		t.Fatalf("parse fixture %s: %v", path, err)
-	}
-	return envelope.Data
-}
-
 func TestListContainers(t *testing.T) {
-	listResp := loadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
-	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+	listResp := testhelpers.LoadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
@@ -112,8 +95,8 @@ func TestListContainers(t *testing.T) {
 }
 
 func TestListContainersWithDeviceFilter(t *testing.T) {
-	listResp := loadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
-	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+	listResp := testhelpers.LoadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
@@ -142,8 +125,8 @@ func TestListContainersWithDeviceFilter(t *testing.T) {
 }
 
 func TestGetContainer(t *testing.T) {
-	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
-	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+	detailResp := testhelpers.LoadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
@@ -170,8 +153,8 @@ func TestGetContainer(t *testing.T) {
 }
 
 func TestGetContainerDetailFields(t *testing.T) {
-	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
-	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+	detailResp := testhelpers.LoadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
@@ -275,8 +258,8 @@ func TestGetContainerDetailFields(t *testing.T) {
 }
 
 func TestGetContainerStatusFields(t *testing.T) {
-	detailResp := loadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
-	resourcesResp := loadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+	detailResp := testhelpers.LoadFixture[adapters.DSMContainerDetailResponse](t, "testdata/container_detail.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,

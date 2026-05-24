@@ -8,10 +8,11 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
+	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
 func TestListImages(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
 	result, err := svc.ListImages(context.Background(), nil)
@@ -39,7 +40,7 @@ func TestListImages(t *testing.T) {
 }
 
 func TestListImagesDeviceFilter(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
 
 	device := "nas-01"
@@ -78,7 +79,7 @@ func TestListImagesEmpty(t *testing.T) {
 }
 
 func TestGetImage(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
 
 	detail, err := svc.GetImage(context.Background(), "nas-01.aabbccddeeff")
@@ -137,7 +138,7 @@ func TestGetImageDescriptionOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestGetImageNotFound(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
 
 	_, err := svc.GetImage(context.Background(), "nas-01.000000000000")

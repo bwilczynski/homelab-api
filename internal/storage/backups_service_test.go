@@ -2,12 +2,13 @@ package storage
 
 import (
 	"context"
-	"log/slog"
 	"fmt"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
 type mockBackupBackend struct {
@@ -38,8 +39,8 @@ func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTarg
 }
 
 func TestListBackupTasks(t *testing.T) {
-	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
-	taskStatus := loadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
+	tasks := testhelpers.LoadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+	taskStatus := testhelpers.LoadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
 
 	svc := NewService(
 		map[string]StorageBackend{},
@@ -76,7 +77,7 @@ func TestListBackupTasks(t *testing.T) {
 }
 
 func TestListBackupTasksWithDeviceFilter(t *testing.T) {
-	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+	tasks := testhelpers.LoadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 
 	svc := NewService(
 		map[string]StorageBackend{},
@@ -124,10 +125,10 @@ func TestListBackupTasksEmpty(t *testing.T) {
 }
 
 func TestGetBackupTask(t *testing.T) {
-	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
-	taskDetail := loadFixture[adapters.DSMBackupTaskDetailResponse](t, "testdata/backup_task_detail.json")
-	taskStatus := loadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
-	target := loadFixture[adapters.DSMBackupTargetResponse](t, "testdata/backup_target.json")
+	tasks := testhelpers.LoadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+	taskDetail := testhelpers.LoadFixture[adapters.DSMBackupTaskDetailResponse](t, "testdata/backup_task_detail.json")
+	taskStatus := testhelpers.LoadFixture[adapters.DSMBackupTaskStatusResponse](t, "testdata/backup_task_status.json")
+	target := testhelpers.LoadFixture[adapters.DSMBackupTargetResponse](t, "testdata/backup_target.json")
 
 	svc := NewService(
 		map[string]StorageBackend{},
@@ -188,7 +189,7 @@ func TestGetBackupTask(t *testing.T) {
 }
 
 func TestGetBackupTaskNotFound(t *testing.T) {
-	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+	tasks := testhelpers.LoadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 
 	svc := NewService(
 		map[string]StorageBackend{},
@@ -316,7 +317,7 @@ func TestParseBackupTime(t *testing.T) {
 }
 
 func TestListBackupTasksStatusError(t *testing.T) {
-	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+	tasks := testhelpers.LoadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 
 	svc := NewService(
 		map[string]StorageBackend{},
@@ -344,7 +345,7 @@ func TestListBackupTasksStatusError(t *testing.T) {
 }
 
 func TestGetBackupTaskEnrichmentErrors(t *testing.T) {
-	tasks := loadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
+	tasks := testhelpers.LoadFixture[adapters.DSMBackupTaskListResponse](t, "testdata/backup_tasks.json")
 
 	svc := NewService(
 		map[string]StorageBackend{},

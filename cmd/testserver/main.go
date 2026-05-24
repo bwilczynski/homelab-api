@@ -5,7 +5,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -21,23 +20,8 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
+	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
-
-// loadFixture reads a JSON file and extracts the .data field from the
-// Synology/UniFi response envelope ({"data": T, ...}).
-func loadFixture[T any](path string) T {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		panic(fmt.Sprintf("read fixture %s: %v", path, err))
-	}
-	var envelope struct {
-		Data T `json:"data"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		panic(fmt.Sprintf("parse fixture %s: %v", path, err))
-	}
-	return envelope.Data
-}
 
 // docker.DockerBackend
 type mockContainerBackend struct {
@@ -197,11 +181,11 @@ func main() {
 	r := chi.NewRouter()
 
 	// Docker containers
-	containerList := new(loadFixture[adapters.DSMContainerListResponse](base + "/docker/testdata/container_list.json"))
+	containerList := new(testhelpers.MustLoadFixture[adapters.DSMContainerListResponse](base + "/docker/testdata/container_list.json"))
 	cb := &mockContainerBackend{
 		list:      containerList,
-		detail:    new(loadFixture[adapters.DSMContainerDetailResponse](base + "/docker/testdata/container_detail.json")),
-		resources: new(loadFixture[adapters.DSMContainerResourceResponse](base + "/docker/testdata/container_resources.json")),
+		detail:    new(testhelpers.MustLoadFixture[adapters.DSMContainerDetailResponse](base + "/docker/testdata/container_detail.json")),
+		resources: new(testhelpers.MustLoadFixture[adapters.DSMContainerResourceResponse](base + "/docker/testdata/container_resources.json")),
 	}
 	dockerSvc := docker.NewService(map[string]docker.DockerBackend{"nas-01": cb})
 	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
@@ -211,13 +195,13 @@ func main() {
 
 	// System
 	dsm := &mockDSMBackend{
-		info:       new(loadFixture[adapters.DSMSystemInfoResponse](base + "/system/testdata/dsm-system-info.json")),
-		util:       new(loadFixture[adapters.DSMSystemUtilizationResponse](base + "/system/testdata/dsm-system-utilization.json")),
-		volumes:    new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/system/testdata/dsm-storage-volumes.json")),
+		info:       new(testhelpers.MustLoadFixture[adapters.DSMSystemInfoResponse](base + "/system/testdata/dsm-system-info.json")),
+		util:       new(testhelpers.MustLoadFixture[adapters.DSMSystemUtilizationResponse](base + "/system/testdata/dsm-system-utilization.json")),
+		volumes:    new(testhelpers.MustLoadFixture[adapters.DSMStorageVolumeResponse](base + "/system/testdata/dsm-storage-volumes.json")),
 		containers: containerList,
 	}
 	unifiHealth := &mockUniFiHealthBackend{
-		health: loadFixture[[]adapters.UniFiSubsystemHealth](base + "/system/testdata/unifi-health.json"),
+		health: testhelpers.MustLoadFixture[[]adapters.UniFiSubsystemHealth](base + "/system/testdata/unifi-health.json"),
 	}
 	systemSvc := system.NewService(
 		map[string]system.DSMBackendConfig{"nas-01": {Backend: dsm, DockerEnabled: true}},
@@ -242,13 +226,13 @@ func main() {
 
 	// Storage (volumes + backups)
 	sb := &mockStorageBackend{
-		volumes: new(loadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
+		volumes: new(testhelpers.MustLoadFixture[adapters.DSMStorageVolumeResponse](base + "/storage/testdata/storage_volumes.json")),
 	}
 	bb := &mockBackupBackend{
-		tasks:      new(loadFixture[adapters.DSMBackupTaskListResponse](base + "/storage/testdata/backup_tasks.json")),
-		taskDetail: new(loadFixture[adapters.DSMBackupTaskDetailResponse](base + "/storage/testdata/backup_task_detail.json")),
-		taskStatus: new(loadFixture[adapters.DSMBackupTaskStatusResponse](base + "/storage/testdata/backup_task_status.json")),
-		target:     new(loadFixture[adapters.DSMBackupTargetResponse](base + "/storage/testdata/backup_target.json")),
+		tasks:      new(testhelpers.MustLoadFixture[adapters.DSMBackupTaskListResponse](base + "/storage/testdata/backup_tasks.json")),
+		taskDetail: new(testhelpers.MustLoadFixture[adapters.DSMBackupTaskDetailResponse](base + "/storage/testdata/backup_task_detail.json")),
+		taskStatus: new(testhelpers.MustLoadFixture[adapters.DSMBackupTaskStatusResponse](base + "/storage/testdata/backup_task_status.json")),
+		target:     new(testhelpers.MustLoadFixture[adapters.DSMBackupTargetResponse](base + "/storage/testdata/backup_target.json")),
 	}
 	storageSvc := storage.NewService(map[string]storage.StorageBackend{"nas-01": sb}, map[string]storage.BackupBackend{"nas-01": bb}, logger)
 	storage.HandlerWithOptions(storage.NewStrictHandler(storage.NewHandler(storageSvc), nil), storage.ChiServerOptions{
@@ -258,10 +242,10 @@ func main() {
 
 	// Network
 	nb := &mockNetworkBackend{
-		devices:        loadFixture[[]adapters.UniFiDevice](base + "/network/testdata/unifi-devices.json"),
-		clients:        loadFixture[[]adapters.UniFiSta](base + "/network/testdata/unifi-clients.json"),
-		activeClients:  loadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-active.json"),
-		offlineClients: loadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-history.json"),
+		devices:        testhelpers.MustLoadFixture[[]adapters.UniFiDevice](base + "/network/testdata/unifi-devices.json"),
+		clients:        testhelpers.MustLoadFixture[[]adapters.UniFiSta](base + "/network/testdata/unifi-clients.json"),
+		activeClients:  testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-active.json"),
+		offlineClients: testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-history.json"),
 	}
 	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{

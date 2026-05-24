@@ -7,10 +7,11 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
+	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
 func TestListNetworks(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
 
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
 	result, err := svc.ListNetworks(context.Background(), nil)
@@ -38,7 +39,7 @@ func TestListNetworks(t *testing.T) {
 }
 
 func TestListNetworksDeviceFilter(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
 
 	device := "nas-01"
@@ -77,7 +78,7 @@ func TestListNetworksEmpty(t *testing.T) {
 }
 
 func TestGetNetwork(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
 
 	id := "nas-01." + resp.Networks[0].Name
@@ -123,7 +124,7 @@ func TestGetNetworkHostNetworkOptionalFields(t *testing.T) {
 }
 
 func TestGetNetworkNotFound(t *testing.T) {
-	resp := loadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
+	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
 
 	_, err := svc.GetNetwork(context.Background(), "nas-01.does_not_exist")
