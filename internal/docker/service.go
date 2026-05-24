@@ -2,6 +2,7 @@ package docker
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -25,17 +26,18 @@ type deviceBackend struct {
 // Service implements Docker domain business logic.
 type Service struct {
 	backends []deviceBackend
+	logger   *slog.Logger
 	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
 }
 
 // NewService creates a new Docker service with one or more backends.
-func NewService(backends map[string]DockerBackend, monitor ...adapters.AvailabilityChecker) *Service {
+func NewService(backends map[string]DockerBackend, logger *slog.Logger, monitor ...adapters.AvailabilityChecker) *Service {
 	dbs := make([]deviceBackend, 0, len(backends))
 	for device, backend := range backends {
 		dbs = append(dbs, deviceBackend{device: device, backend: backend})
 	}
 	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
-	svc := &Service{backends: dbs}
+	svc := &Service{backends: dbs, logger: logger}
 	if len(monitor) > 0 {
 		svc.monitor = monitor[0]
 	}

@@ -134,7 +134,7 @@ func main() {
 	for name, client := range synologyClients {
 		dockerBackends[name] = client
 	}
-	dockerSvc := docker.NewService(dockerBackends, monitor)
+	dockerSvc := docker.NewService(dockerBackends, logger, monitor)
 	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []docker.MiddlewareFunc{scopeMw},
@@ -167,7 +167,7 @@ func main() {
 			break
 		}
 	}
-	networkSvc := network.NewService(networkBackends, historyDays, monitor)
+	networkSvc := network.NewService(networkBackends, historyDays, logger, monitor)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       protected,
 		Middlewares:      []network.MiddlewareFunc{scopeMw},

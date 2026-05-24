@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 func TestListImages(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
 
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}}, slog.Default())
 	result, err := svc.ListImages(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -41,7 +42,7 @@ func TestListImages(t *testing.T) {
 
 func TestListImagesDeviceFilter(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}}, slog.Default())
 
 	device := "nas-01"
 	result, err := svc.ListImages(context.Background(), &device)
@@ -65,7 +66,7 @@ func TestListImagesDeviceFilter(t *testing.T) {
 func TestListImagesEmpty(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		imagesResp: &adapters.DSMDockerImageListResponse{Images: []adapters.DSMDockerImageItem{}},
-	}})
+	}}, slog.Default())
 	result, err := svc.ListImages(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -80,7 +81,7 @@ func TestListImagesEmpty(t *testing.T) {
 
 func TestGetImage(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}}, slog.Default())
 
 	detail, err := svc.GetImage(context.Background(), "nas-01.aabbccddeeff")
 	if err != nil {
@@ -126,7 +127,7 @@ func TestGetImageDescriptionOmittedWhenEmpty(t *testing.T) {
 				},
 			},
 		},
-	}})
+	}}, slog.Default())
 
 	detail, err := svc.GetImage(context.Background(), "nas-01.aabbccddeeff")
 	if err != nil {
@@ -139,7 +140,7 @@ func TestGetImageDescriptionOmittedWhenEmpty(t *testing.T) {
 
 func TestGetImageNotFound(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerImageListResponse](t, "testdata/image_list.json")
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{imagesResp: &resp}}, slog.Default())
 
 	_, err := svc.GetImage(context.Background(), "nas-01.000000000000")
 	if err == nil {
@@ -151,7 +152,7 @@ func TestGetImageNotFound(t *testing.T) {
 }
 
 func TestGetImageInvalidID(t *testing.T) {
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}}, slog.Default())
 
 	_, err := svc.GetImage(context.Background(), "invalid-no-dot")
 	if err == nil {

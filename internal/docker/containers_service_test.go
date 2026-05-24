@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
@@ -52,7 +53,7 @@ func TestListContainers(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
 		resourcesResp: &resourcesResp,
-	}})
+	}}, slog.Default())
 
 	result, err := svc.ListContainers(context.Background(), nil)
 	if err != nil {
@@ -101,7 +102,7 @@ func TestListContainersWithDeviceFilter(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		listResp:      &listResp,
 		resourcesResp: &resourcesResp,
-	}})
+	}}, slog.Default())
 
 	// Filter for matching device
 	device := "nas-01"
@@ -131,7 +132,7 @@ func TestGetContainer(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
-	}})
+	}}, slog.Default())
 
 	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
@@ -159,7 +160,7 @@ func TestGetContainerDetailFields(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
-	}})
+	}}, slog.Default())
 
 	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
@@ -264,7 +265,7 @@ func TestGetContainerStatusFields(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		detailResp:    &detailResp,
 		resourcesResp: &resourcesResp,
-	}})
+	}}, slog.Default())
 
 	c, err := svc.GetContainer(context.Background(), "nas-01.immich_server")
 	if err != nil {
@@ -290,7 +291,7 @@ func TestGetContainerStatusFields(t *testing.T) {
 }
 
 func TestGetContainerInvalidID(t *testing.T) {
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}}, slog.Default())
 
 	_, err := svc.GetContainer(context.Background(), "invalid-id")
 	if err == nil {
@@ -356,7 +357,7 @@ func TestListContainersEmptyList(t *testing.T) {
 		resourcesResp: &adapters.DSMContainerResourceResponse{
 			Resources: []adapters.DSMContainerResource{},
 		},
-	}})
+	}}, slog.Default())
 
 	result, err := svc.ListContainers(context.Background(), nil)
 	if err != nil {

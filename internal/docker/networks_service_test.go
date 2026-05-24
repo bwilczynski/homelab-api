@@ -3,6 +3,7 @@ package docker
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
@@ -13,7 +14,7 @@ import (
 func TestListNetworks(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
 
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}}, slog.Default())
 	result, err := svc.ListNetworks(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -40,7 +41,7 @@ func TestListNetworks(t *testing.T) {
 
 func TestListNetworksDeviceFilter(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}}, slog.Default())
 
 	device := "nas-01"
 	result, err := svc.ListNetworks(context.Background(), &device)
@@ -64,7 +65,7 @@ func TestListNetworksDeviceFilter(t *testing.T) {
 func TestListNetworksEmpty(t *testing.T) {
 	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{
 		networksResp: &adapters.DSMDockerNetworkListResponse{Networks: []adapters.DSMDockerNetworkItem{}},
-	}})
+	}}, slog.Default())
 	result, err := svc.ListNetworks(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -79,7 +80,7 @@ func TestListNetworksEmpty(t *testing.T) {
 
 func TestGetNetwork(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}}, slog.Default())
 
 	id := "nas-01." + resp.Networks[0].Name
 	detail, err := svc.GetNetwork(context.Background(), id)
@@ -106,7 +107,7 @@ func TestGetNetworkHostNetworkOptionalFields(t *testing.T) {
 				{ID: "abc123", Name: "host", Driver: "host", Gateway: "", Subnet: "", IPRange: "", Containers: []string{}},
 			},
 		},
-	}})
+	}}, slog.Default())
 
 	detail, err := svc.GetNetwork(context.Background(), "nas-01.host")
 	if err != nil {
@@ -125,7 +126,7 @@ func TestGetNetworkHostNetworkOptionalFields(t *testing.T) {
 
 func TestGetNetworkNotFound(t *testing.T) {
 	resp := testhelpers.LoadFixture[adapters.DSMDockerNetworkListResponse](t, "testdata/network_list.json")
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{networksResp: &resp}}, slog.Default())
 
 	_, err := svc.GetNetwork(context.Background(), "nas-01.does_not_exist")
 	if err == nil {
@@ -137,7 +138,7 @@ func TestGetNetworkNotFound(t *testing.T) {
 }
 
 func TestGetNetworkInvalidID(t *testing.T) {
-	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}})
+	svc := NewService(map[string]DockerBackend{"nas-01": &mockBackend{}}, slog.Default())
 
 	_, err := svc.GetNetwork(context.Background(), "invalid-no-dot")
 	if err == nil {

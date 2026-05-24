@@ -187,7 +187,7 @@ func main() {
 		detail:    new(testhelpers.MustLoadFixture[adapters.DSMContainerDetailResponse](base + "/docker/testdata/container_detail.json")),
 		resources: new(testhelpers.MustLoadFixture[adapters.DSMContainerResourceResponse](base + "/docker/testdata/container_resources.json")),
 	}
-	dockerSvc := docker.NewService(map[string]docker.DockerBackend{"nas-01": cb})
+	dockerSvc := docker.NewService(map[string]docker.DockerBackend{"nas-01": cb}, slog.Default())
 	docker.HandlerWithOptions(docker.NewStrictHandler(docker.NewHandler(dockerSvc), nil), docker.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
@@ -247,7 +247,7 @@ func main() {
 		activeClients:  testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-active.json"),
 		offlineClients: testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-history.json"),
 	}
-	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30)
+	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30, slog.Default())
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
