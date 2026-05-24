@@ -30,19 +30,47 @@ func NewHandler(svc *Service) *ServerHandler {
 	return &ServerHandler{svc: svc}
 }
 
+func internalServerError(detail string) InternalServerErrorApplicationProblemPlusJSONResponse {
+	resp := InternalServerErrorApplicationProblemPlusJSONResponse{
+		Type:   apierrors.URNInternalServerError,
+		Title:  apierrors.TitleInternalServerError,
+		Status: 500,
+	}
+	if detail != "" {
+		resp.Detail = &detail
+	}
+	return resp
+}
+
+func notFound(detail string) NotFoundApplicationProblemPlusJSONResponse {
+	resp := NotFoundApplicationProblemPlusJSONResponse{
+		Type:   apierrors.URNNotFound,
+		Title:  apierrors.TitleNotFound,
+		Status: 404,
+	}
+	if detail != "" {
+		resp.Detail = &detail
+	}
+	return resp
+}
+
+func badRequest(detail string) BadRequestApplicationProblemPlusJSONResponse {
+	resp := BadRequestApplicationProblemPlusJSONResponse{
+		Type:   apierrors.URNBadRequest,
+		Title:  apierrors.TitleBadRequest,
+		Status: 400,
+	}
+	if detail != "" {
+		resp.Detail = &detail
+	}
+	return resp
+}
+
 // GetSystemHealth implements StrictServerInterface.
 func (h *ServerHandler) GetSystemHealth(ctx context.Context, request GetSystemHealthRequestObject) (GetSystemHealthResponseObject, error) {
 	health, err := h.svc.GetSystemHealth(ctx)
 	if err != nil {
-		detail := err.Error()
-		return GetSystemHealth500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return GetSystemHealth500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return GetSystemHealth200JSONResponse(health), nil
 }
@@ -51,15 +79,7 @@ func (h *ServerHandler) GetSystemHealth(ctx context.Context, request GetSystemHe
 func (h *ServerHandler) ListSystemInfo(ctx context.Context, request ListSystemInfoRequestObject) (ListSystemInfoResponseObject, error) {
 	result, err := h.svc.ListSystemInfo(ctx, request.Params.Device)
 	if err != nil {
-		detail := err.Error()
-		return ListSystemInfo500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListSystemInfo500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListSystemInfo200JSONResponse(result), nil
 }
@@ -68,15 +88,7 @@ func (h *ServerHandler) ListSystemInfo(ctx context.Context, request ListSystemIn
 func (h *ServerHandler) ListSystemUtilization(ctx context.Context, request ListSystemUtilizationRequestObject) (ListSystemUtilizationResponseObject, error) {
 	result, err := h.svc.ListSystemUtilization(ctx, request.Params.Device)
 	if err != nil {
-		detail := err.Error()
-		return ListSystemUtilization500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListSystemUtilization500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListSystemUtilization200JSONResponse(result), nil
 }
@@ -84,38 +96,14 @@ func (h *ServerHandler) ListSystemUtilization(ctx context.Context, request ListS
 // ListSystemUpdates implements StrictServerInterface.
 func (h *ServerHandler) ListSystemUpdates(ctx context.Context, request ListSystemUpdatesRequestObject) (ListSystemUpdatesResponseObject, error) {
 	if s := request.Params.Status; s != nil && !s.Valid() {
-		detail := "Invalid value for parameter 'status': must be one of upToDate, updateAvailable, unknown."
-		return ListSystemUpdates400ApplicationProblemPlusJSONResponse{
-			BadRequestApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNBadRequest,
-				Title:  apierrors.TitleBadRequest,
-				Status: 400,
-				Detail: &detail,
-			},
-		}, nil
+		return ListSystemUpdates400ApplicationProblemPlusJSONResponse{badRequest("Invalid value for parameter 'status': must be one of upToDate, updateAvailable, unknown.")}, nil
 	}
 	if t := request.Params.Type; t != nil && !t.Valid() {
-		detail := "Invalid value for parameter 'type': must be one of container."
-		return ListSystemUpdates400ApplicationProblemPlusJSONResponse{
-			BadRequestApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNBadRequest,
-				Title:  apierrors.TitleBadRequest,
-				Status: 400,
-				Detail: &detail,
-			},
-		}, nil
+		return ListSystemUpdates400ApplicationProblemPlusJSONResponse{badRequest("Invalid value for parameter 'type': must be one of container.")}, nil
 	}
 	result, err := h.svc.ListSystemUpdates(ctx, request.Params.Status, request.Params.Type)
 	if err != nil {
-		detail := err.Error()
-		return ListSystemUpdates500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListSystemUpdates500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListSystemUpdates200JSONResponse(result), nil
 }
@@ -124,24 +112,10 @@ func (h *ServerHandler) ListSystemUpdates(ctx context.Context, request ListSyste
 func (h *ServerHandler) GetSystemUpdate(ctx context.Context, request GetSystemUpdateRequestObject) (GetSystemUpdateResponseObject, error) {
 	detail, err := h.svc.GetSystemUpdate(ctx, request.UpdateId)
 	if err != nil {
-		d := err.Error()
-		return GetSystemUpdate500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &d,
-			},
-		}, nil
+		return GetSystemUpdate500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	if detail == nil {
-		return GetSystemUpdate404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  apierrors.TitleNotFound,
-				Status: 404,
-			},
-		}, nil
+		return GetSystemUpdate404ApplicationProblemPlusJSONResponse{notFound("")}, nil
 	}
 	return systemUpdateDetailResponse{*detail}, nil
 }
@@ -150,15 +124,7 @@ func (h *ServerHandler) GetSystemUpdate(ctx context.Context, request GetSystemUp
 func (h *ServerHandler) CheckSystemUpdates(ctx context.Context, request CheckSystemUpdatesRequestObject) (CheckSystemUpdatesResponseObject, error) {
 	result, err := h.svc.CheckSystemUpdates(ctx)
 	if err != nil {
-		detail := err.Error()
-		return CheckSystemUpdates500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return CheckSystemUpdates500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return CheckSystemUpdates200JSONResponse(result), nil
 }

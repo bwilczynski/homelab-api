@@ -58,19 +58,38 @@ func NewHandler(svc *Service) *ServerHandler {
 	return &ServerHandler{svc: svc}
 }
 
+func internalServerError(detail string) InternalServerErrorApplicationProblemPlusJSONResponse {
+	return InternalServerErrorApplicationProblemPlusJSONResponse{
+		Type:   apierrors.URNInternalServerError,
+		Title:  apierrors.TitleInternalServerError,
+		Status: 500,
+		Detail: &detail,
+	}
+}
+
+func notFound(detail string) NotFoundApplicationProblemPlusJSONResponse {
+	return NotFoundApplicationProblemPlusJSONResponse{
+		Type:   apierrors.URNNotFound,
+		Title:  apierrors.TitleNotFound,
+		Status: 404,
+		Detail: &detail,
+	}
+}
+
+func badRequest(detail string) BadRequestApplicationProblemPlusJSONResponse {
+	return BadRequestApplicationProblemPlusJSONResponse{
+		Type:   apierrors.URNBadRequest,
+		Title:  apierrors.TitleBadRequest,
+		Status: 400,
+		Detail: &detail,
+	}
+}
+
 // ListNetworkDevices implements StrictServerInterface.
 func (h *ServerHandler) ListNetworkDevices(ctx context.Context, request ListNetworkDevicesRequestObject) (ListNetworkDevicesResponseObject, error) {
 	result, err := h.svc.ListDevices(ctx)
 	if err != nil {
-		detail := err.Error()
-		return ListNetworkDevices500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListNetworkDevices500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListNetworkDevices200JSONResponse(result), nil
 }
@@ -79,36 +98,13 @@ func (h *ServerHandler) ListNetworkDevices(ctx context.Context, request ListNetw
 func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetworkDeviceRequestObject) (GetNetworkDeviceResponseObject, error) {
 	detail, found, err := h.svc.GetDevice(ctx, request.DeviceId)
 	if err != nil {
-		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
-			return GetNetworkDevice404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse{
-					Type:   apierrors.URNNotFound,
-					Title:  apierrors.TitleNotFound,
-					Status: 404,
-					Detail: &msg,
-				},
-			}, nil
+			return GetNetworkDevice404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
-		return GetNetworkDevice500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &msg,
-			},
-		}, nil
+		return GetNetworkDevice500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	if !found {
-		msg := "Network device not found: " + request.DeviceId
-		return GetNetworkDevice404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  apierrors.TitleNotFound,
-				Status: 404,
-				Detail: &msg,
-			},
-		}, nil
+		return GetNetworkDevice404ApplicationProblemPlusJSONResponse{notFound("Network device not found: " + request.DeviceId)}, nil
 	}
 	return networkDeviceDetailResponse{detail: detail}, nil
 }
@@ -118,29 +114,13 @@ func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetw
 	var status string
 	if request.Params.Status != nil {
 		if !request.Params.Status.Valid() {
-			detail := "Invalid value for parameter status: " + string(*request.Params.Status)
-			return ListNetworkClients400ApplicationProblemPlusJSONResponse{
-				BadRequestApplicationProblemPlusJSONResponse{
-					Type:   apierrors.URNBadRequest,
-					Title:  apierrors.TitleBadRequest,
-					Status: 400,
-					Detail: &detail,
-				},
-			}, nil
+			return ListNetworkClients400ApplicationProblemPlusJSONResponse{badRequest("Invalid value for parameter status: " + string(*request.Params.Status))}, nil
 		}
 		status = string(*request.Params.Status)
 	}
 	result, err := h.svc.ListClients(ctx, status)
 	if err != nil {
-		detail := err.Error()
-		return ListNetworkClients500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListNetworkClients500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListNetworkClients200JSONResponse(result), nil
 }
@@ -149,36 +129,13 @@ func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetw
 func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetworkClientRequestObject) (GetNetworkClientResponseObject, error) {
 	detail, found, err := h.svc.GetClient(ctx, request.ClientId)
 	if err != nil {
-		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
-			return GetNetworkClient404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse{
-					Type:   apierrors.URNNotFound,
-					Title:  apierrors.TitleNotFound,
-					Status: 404,
-					Detail: &msg,
-				},
-			}, nil
+			return GetNetworkClient404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
-		return GetNetworkClient500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &msg,
-			},
-		}, nil
+		return GetNetworkClient500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	if !found {
-		msg := "Network client not found: " + request.ClientId
-		return GetNetworkClient404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  apierrors.TitleNotFound,
-				Status: 404,
-				Detail: &msg,
-			},
-		}, nil
+		return GetNetworkClient404ApplicationProblemPlusJSONResponse{notFound("Network client not found: " + request.ClientId)}, nil
 	}
 	return networkClientDetailResponse{detail: detail}, nil
 }
@@ -187,15 +144,7 @@ func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetwork
 func (h *ServerHandler) ListSsids(ctx context.Context, _ ListSsidsRequestObject) (ListSsidsResponseObject, error) {
 	result, err := h.svc.ListSSIDs(ctx)
 	if err != nil {
-		detail := err.Error()
-		return ListSsids500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListSsids500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListSsids200JSONResponse(result), nil
 }
@@ -204,36 +153,13 @@ func (h *ServerHandler) ListSsids(ctx context.Context, _ ListSsidsRequestObject)
 func (h *ServerHandler) GetSsid(ctx context.Context, request GetSsidRequestObject) (GetSsidResponseObject, error) {
 	detail, found, err := h.svc.GetSSID(ctx, request.SsidId)
 	if err != nil {
-		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
-			return GetSsid404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse{
-					Type:   apierrors.URNNotFound,
-					Title:  apierrors.TitleNotFound,
-					Status: 404,
-					Detail: &msg,
-				},
-			}, nil
+			return GetSsid404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
-		return GetSsid500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &msg,
-			},
-		}, nil
+		return GetSsid500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	if !found {
-		msg := "SSID not found: " + request.SsidId
-		return GetSsid404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  apierrors.TitleNotFound,
-				Status: 404,
-				Detail: &msg,
-			},
-		}, nil
+		return GetSsid404ApplicationProblemPlusJSONResponse{notFound("SSID not found: " + request.SsidId)}, nil
 	}
 	return GetSsid200JSONResponse(detail), nil
 }
@@ -242,15 +168,7 @@ func (h *ServerHandler) GetSsid(ctx context.Context, request GetSsidRequestObjec
 func (h *ServerHandler) ListVlans(ctx context.Context, _ ListVlansRequestObject) (ListVlansResponseObject, error) {
 	result, err := h.svc.ListVLANs(ctx)
 	if err != nil {
-		detail := err.Error()
-		return ListVlans500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListVlans500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListVlans200JSONResponse(result), nil
 }
@@ -259,36 +177,13 @@ func (h *ServerHandler) ListVlans(ctx context.Context, _ ListVlansRequestObject)
 func (h *ServerHandler) GetVlan(ctx context.Context, request GetVlanRequestObject) (GetVlanResponseObject, error) {
 	detail, found, err := h.svc.GetVLAN(ctx, request.VlanId)
 	if err != nil {
-		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
-			return GetVlan404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse{
-					Type:   apierrors.URNNotFound,
-					Title:  apierrors.TitleNotFound,
-					Status: 404,
-					Detail: &msg,
-				},
-			}, nil
+			return GetVlan404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
-		return GetVlan500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &msg,
-			},
-		}, nil
+		return GetVlan500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	if !found {
-		msg := "VLAN not found: " + request.VlanId
-		return GetVlan404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  apierrors.TitleNotFound,
-				Status: 404,
-				Detail: &msg,
-			},
-		}, nil
+		return GetVlan404ApplicationProblemPlusJSONResponse{notFound("VLAN not found: " + request.VlanId)}, nil
 	}
 	return GetVlan200JSONResponse(detail), nil
 }
@@ -297,15 +192,7 @@ func (h *ServerHandler) GetVlan(ctx context.Context, request GetVlanRequestObjec
 func (h *ServerHandler) ListWans(ctx context.Context, _ ListWansRequestObject) (ListWansResponseObject, error) {
 	result, err := h.svc.ListWANs(ctx)
 	if err != nil {
-		detail := err.Error()
-		return ListWans500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return ListWans500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return ListWans200JSONResponse(result), nil
 }
@@ -314,36 +201,13 @@ func (h *ServerHandler) ListWans(ctx context.Context, _ ListWansRequestObject) (
 func (h *ServerHandler) GetWan(ctx context.Context, request GetWanRequestObject) (GetWanResponseObject, error) {
 	detail, found, err := h.svc.GetWAN(ctx, request.WanId)
 	if err != nil {
-		msg := err.Error()
 		if errors.Is(err, apierrors.ErrNotFound) {
-			return GetWan404ApplicationProblemPlusJSONResponse{
-				NotFoundApplicationProblemPlusJSONResponse{
-					Type:   apierrors.URNNotFound,
-					Title:  apierrors.TitleNotFound,
-					Status: 404,
-					Detail: &msg,
-				},
-			}, nil
+			return GetWan404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
-		return GetWan500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &msg,
-			},
-		}, nil
+		return GetWan500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	if !found {
-		msg := "WAN not found: " + request.WanId
-		return GetWan404ApplicationProblemPlusJSONResponse{
-			NotFoundApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNNotFound,
-				Title:  apierrors.TitleNotFound,
-				Status: 404,
-				Detail: &msg,
-			},
-		}, nil
+		return GetWan404ApplicationProblemPlusJSONResponse{notFound("WAN not found: " + request.WanId)}, nil
 	}
 	return GetWan200JSONResponse(detail), nil
 }
@@ -353,15 +217,7 @@ func (h *ServerHandler) GetNetworkTopology(ctx context.Context, request GetNetwo
 	includeClients := request.Params.IncludeClients != nil && *request.Params.IncludeClients
 	result, err := h.svc.GetTopology(ctx, includeClients)
 	if err != nil {
-		detail := err.Error()
-		return GetNetworkTopology500ApplicationProblemPlusJSONResponse{
-			InternalServerErrorApplicationProblemPlusJSONResponse{
-				Type:   apierrors.URNInternalServerError,
-				Title:  apierrors.TitleInternalServerError,
-				Status: 500,
-				Detail: &detail,
-			},
-		}, nil
+		return GetNetworkTopology500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
 	return GetNetworkTopology200JSONResponse(result), nil
 }
