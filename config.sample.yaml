@@ -71,3 +71,7 @@ updates:
     # cAdvisor: GCR image
     - image: gcr.io/cadvisor/cadvisor
       source: google/cadvisor
+    # Forgejo: releases on Codeberg (not GitHub) — use type: codeberg
+    # - image: codeberg.org/forgejo/forgejo
+    #   source: forgejo/forgejo
+    #   type: codeberg

@@ -31,7 +31,7 @@ func TestFetchLatestRelease(t *testing.T) {
 	}))
 	overrideGitHubClient(t, srv)
 
-	release, err := fetchLatestRelease("dani-garcia/vaultwarden")
+	release, err := fetchLatestRelease("dani-garcia/vaultwarden", githubBaseURL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestFetchLatestRelease_NotFound(t *testing.T) {
 	}))
 	overrideGitHubClient(t, srv)
 
-	_, err := fetchLatestRelease("no-such/repo")
+	_, err := fetchLatestRelease("no-such/repo", githubBaseURL)
 	if err == nil {
 		t.Error("expected error for 404 response")
 	}
@@ -70,9 +70,9 @@ func TestFetchReleases_Deduplicates(t *testing.T) {
 	}))
 	overrideGitHubClient(t, srv)
 
-	repos := map[string]struct{}{
-		"dani-garcia/vaultwarden": {},
-		"grafana/grafana":         {},
+	repos := map[string]string{
+		"dani-garcia/vaultwarden": githubBaseURL,
+		"grafana/grafana":         githubBaseURL,
 	}
 	results := fetchReleases(repos, slog.Default())
 

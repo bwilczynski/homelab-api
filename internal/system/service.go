@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"log/slog"
 	"sort"
 	"sync"
@@ -41,18 +42,25 @@ type unifiEntry struct {
 	unifi      UniFiBackend
 }
 
+// imageSource holds the resolved release source for a container image.
+type imageSource struct {
+	repo      string // "owner/repo"
+	apiBase   string // API base URL, e.g. "https://api.github.com" or "https://codeberg.org/api/v1"
+	sourceURL string // human-facing URL, e.g. "https://github.com/owner/repo"
+}
+
 // Service implements system domain business logic.
 type Service struct {
 	dsmBackends    []dsmEntry
 	unifiBackends  []unifiEntry
 	monitor        adapters.AvailabilityChecker // optional; nil means all backends available
-	sources        map[string]string            // image (without tag) → GitHub "owner/repo"
+	sources        map[string]imageSource       // image (without tag) → release source
 	updateCacheTTL time.Duration
 	logger         *slog.Logger
 	warnedImages   map[string]bool // images already warned about missing source
 	mu             sync.RWMutex
 	ghCache        *githubReleasesCache
-	refreshMu      sync.Mutex // serialises GitHub fetches to prevent stampede
+	refreshMu      sync.Mutex // serialises release fetches to prevent stampede
 }
 
 // NewService creates a new system service with one or more DSM and UniFi backends.
@@ -71,9 +79,15 @@ func NewService(dsmBackends map[string]DSMBackendConfig, unifiBackends map[strin
 	}
 	sort.Slice(unifis, func(i, j int) bool { return unifis[i].controller < unifis[j].controller })
 
-	srcMap := make(map[string]string, len(updatesCfg.Sources))
+	srcMap := make(map[string]imageSource, len(updatesCfg.Sources))
 	for _, s := range updatesCfg.Sources {
-		srcMap[s.Image] = s.Source
+		apiBase := githubBaseURL
+		sourceURL := fmt.Sprintf("https://github.com/%s", s.Source)
+		if s.Type == "codeberg" {
+			apiBase = codebergBaseURL
+			sourceURL = fmt.Sprintf("https://codeberg.org/%s", s.Source)
+		}
+		srcMap[s.Image] = imageSource{repo: s.Source, apiBase: apiBase, sourceURL: sourceURL}
 	}
 
 	ttl := updatesCfg.CheckInterval.Duration

@@ -42,17 +42,18 @@ type Dex struct {
 	URL string `yaml:"url"` // internal Dex address, e.g. http://dex:5556
 }
 
-// ImageSourceConfig maps a container image (without tag) to its GitHub release source.
+// ImageSourceConfig maps a container image (without tag) to its release source.
 // Containers with version tags are discovered automatically from running backends;
-// this config provides the GitHub repo to use when checking for newer versions.
+// this config provides the repo and host to use when checking for newer versions.
 type ImageSourceConfig struct {
 	Image  string `yaml:"image"`  // image reference without tag, e.g. "ghcr.io/dani-garcia/vaultwarden"
-	Source string `yaml:"source"` // GitHub repo "owner/repo", e.g. "dani-garcia/vaultwarden"
+	Source string `yaml:"source"` // repo "owner/repo", e.g. "dani-garcia/vaultwarden"
+	Type   string `yaml:"type"`   // release host: "github" (default) or "codeberg"
 }
 
 // UpdatesConfig holds configuration for the software update tracking feature.
 type UpdatesConfig struct {
-	Sources       []ImageSourceConfig `yaml:"sources"`        // image → GitHub source mappings
+	Sources       []ImageSourceConfig `yaml:"sources"`        // image → release source mappings
 	CheckInterval Duration            `yaml:"check_interval"` // how often to refresh from upstream (default: 1h)
 }
 

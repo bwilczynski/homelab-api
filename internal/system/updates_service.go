@@ -75,13 +75,14 @@ func (s *Service) getUpdates(ctx context.Context) ([]ContainerSystemUpdateDetail
 	return s.buildUpdateItems(ctx, false)
 }
 
-// containerCandidate holds pre-resolved data for a container before GitHub lookup.
+// containerCandidate holds pre-resolved data for a container before release lookup.
 type containerCandidate struct {
 	device    string
 	name      string
 	image     string
 	tag       string
-	repo      string // GitHub "owner/repo"; empty if unresolved
+	repo      string // "owner/repo"; empty if unresolved
+	apiBase   string // API base URL for the release host
 	sourceURL string
 }
 
@@ -93,7 +94,7 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 
 	// Phase 1: always scan DSM live so CurrentVersion reflects the running container.
 	var candidates []containerCandidate
-	repos := make(map[string]struct{})
+	repos := make(map[string]string) // "owner/repo" → API base URL
 
 	for _, de := range s.dsmBackends {
 		if !de.dockerEnabled {
@@ -112,23 +113,23 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 				continue
 			}
 
-			githubRepo, sourceURL := s.resolveSource(image)
-			if githubRepo == "" && !s.warnedImages[image] {
+			repo, apiBase, sourceURL := s.resolveSource(image)
+			if repo == "" && !s.warnedImages[image] {
 				s.warnedImages[image] = true
-				s.logger.Warn("no GitHub source for container image; update status will be unknown",
+				s.logger.Warn("no release source configured for container image; update status will be unknown",
 					"container", c.Name,
 					"image", image,
 					"hint", "add an entry under updates.sources in config.yaml",
 				)
 			}
-			if githubRepo != "" {
-				repos[githubRepo] = struct{}{}
+			if repo != "" {
+				repos[repo] = apiBase
 			}
 
 			candidates = append(candidates, containerCandidate{
 				device: de.device, name: c.Name,
 				image: image, tag: tag,
-				repo: githubRepo, sourceURL: sourceURL,
+				repo: repo, apiBase: apiBase, sourceURL: sourceURL,
 			})
 		}
 	}
@@ -171,11 +172,12 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 	return items, nil
 }
 
-// getOrFetchReleases returns GitHub release data for the given repos.
+// getOrFetchReleases returns release data for the given repos.
+// repos maps "owner/repo" to the API base URL for that repo's host.
 // When forceGitHub is false it serves from the in-memory cache if still within the TTL.
 // Failed fetches preserve the previously cached release for the affected repo so that
 // a rate-limit or network error does not downgrade a known status to unknown.
-func (s *Service) getOrFetchReleases(repos map[string]struct{}, forceGitHub bool) map[string]*GitHubRelease {
+func (s *Service) getOrFetchReleases(repos map[string]string, forceGitHub bool) map[string]*GitHubRelease {
 	if !forceGitHub {
 		s.mu.RLock()
 		if s.ghCache != nil && time.Since(s.ghCache.fetchedAt) < s.updateCacheTTL {
@@ -221,16 +223,16 @@ func (s *Service) getOrFetchReleases(repos map[string]struct{}, forceGitHub bool
 	return merged
 }
 
-// resolveSource returns the GitHub "owner/repo" and a source URL for the given image.
-// It first checks the explicit sources map, then falls back to ghcr.io auto-derivation.
-func (s *Service) resolveSource(image string) (githubRepo string, sourceURL string) {
-	if repo, ok := s.sources[image]; ok {
-		return repo, fmt.Sprintf("https://github.com/%s", repo)
+// resolveSource returns the "owner/repo", API base URL, and source URL for the given image.
+// It first checks the explicit sources map, then falls back to ghcr.io auto-derivation (GitHub).
+func (s *Service) resolveSource(image string) (repo, apiBase, sourceURL string) {
+	if src, ok := s.sources[image]; ok {
+		return src.repo, src.apiBase, src.sourceURL
 	}
 	if repo, ok := githubRepoFromGHCR(image); ok {
-		return repo, fmt.Sprintf("https://github.com/%s", repo)
+		return repo, githubBaseURL, fmt.Sprintf("https://github.com/%s", repo)
 	}
-	return "", "https://github.com"
+	return "", "", "https://github.com"
 }
 
 // githubRepoFromGHCR derives a GitHub "owner/repo" from a ghcr.io image reference.

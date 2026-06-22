@@ -17,22 +17,24 @@ type GitHubRelease struct {
 }
 
 var (
-	githubClient  = &http.Client{Timeout: 10 * time.Second}
-	githubBaseURL = "https://api.github.com"
+	githubClient    = &http.Client{Timeout: 10 * time.Second}
+	githubBaseURL   = "https://api.github.com"
+	codebergBaseURL = "https://codeberg.org/api/v1"
 )
 
-// fetchReleases fetches the latest GitHub release for each unique repo concurrently.
+// fetchReleases fetches the latest release for each unique repo concurrently.
+// repos maps "owner/repo" to the API base URL for that repo's host.
 // Returns a map from "owner/repo" to the release; repos that fail are omitted and logged.
-func fetchReleases(repos map[string]struct{}, logger *slog.Logger) map[string]*GitHubRelease {
+func fetchReleases(repos map[string]string, logger *slog.Logger) map[string]*GitHubRelease {
 	results := make(map[string]*GitHubRelease, len(repos))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	for repo := range repos {
+	for repo, apiBase := range repos {
 		wg.Add(1)
-		go func(repo string) {
+		go func(repo, apiBase string) {
 			defer wg.Done()
-			release, err := fetchLatestRelease(repo)
+			release, err := fetchLatestRelease(repo, apiBase)
 			mu.Lock()
 			if err == nil {
 				results[repo] = release
@@ -40,16 +42,16 @@ func fetchReleases(repos map[string]struct{}, logger *slog.Logger) map[string]*G
 				logger.Warn("failed to fetch latest release", "repo", repo, "err", err)
 			}
 			mu.Unlock()
-		}(repo)
+		}(repo, apiBase)
 	}
 	wg.Wait()
 	return results
 }
 
-// fetchLatestRelease calls the GitHub releases API for the given "owner/repo"
+// fetchLatestRelease calls the releases API for the given "owner/repo" at the given apiBase
 // and returns the latest release metadata.
-func fetchLatestRelease(repo string) (*GitHubRelease, error) {
-	url := fmt.Sprintf("%s/repos/%s/releases/latest", githubBaseURL, repo)
+func fetchLatestRelease(repo, apiBase string) (*GitHubRelease, error) {
+	url := fmt.Sprintf("%s/repos/%s/releases/latest", apiBase, repo)
 	resp, err := githubClient.Get(url) //nolint:noctx
 	if err != nil {
 		return nil, fmt.Errorf("fetch release for %s: %w", repo, err)
