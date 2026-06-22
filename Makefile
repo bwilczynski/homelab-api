@@ -15,7 +15,7 @@ build: ## Build the server binary
 	go build -ldflags "-X main.apiVersion=$(API_VERSION) -X main.serverVersion=$(SERVER_VERSION)" -o $(BINARY) ./cmd/server
 
 run: ## Run the server locally (loads .env if present)
-	$(if $(wildcard .env),set -a && . ./.env && set +a &&) go run ./cmd/server
+	$(if $(wildcard .env),set -a && . ./.env && set +a &&) go run -ldflags "-X main.apiVersion=$(API_VERSION) -X main.serverVersion=$(SERVER_VERSION)" ./cmd/server
 
 generate: bundle ## Generate server stubs from the bundled spec
 	@mkdir -p internal/system internal/docker internal/storage internal/network
