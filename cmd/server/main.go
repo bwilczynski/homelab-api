@@ -27,6 +27,12 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/system"
 )
 
+// Injected at build time via -ldflags; defaults to "dev" for local runs.
+var (
+	apiVersion    = "dev"
+	serverVersion = "dev"
+)
+
 const shutdownTimeout = 10 * time.Second
 
 func main() {
@@ -98,6 +104,18 @@ func main() {
 		_ = json.NewEncoder(w).Encode(response{
 			Enabled: cfg.Auth.Enabled,
 			Issuer:  cfg.Auth.Issuer,
+		})
+	})
+
+	r.Get("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		type response struct {
+			APIVersion    string `json:"apiVersion"`
+			ServerVersion string `json:"serverVersion"`
+		}
+		_ = json.NewEncoder(w).Encode(response{
+			APIVersion:    apiVersion,
+			ServerVersion: serverVersion,
 		})
 	})
 
