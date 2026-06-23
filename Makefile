@@ -3,6 +3,8 @@ SPEC_FILE   := $(SPEC_REPO)/dist/openapi.bundled.yaml
 BINARY      := bin/server
 TESTSERVER  := bin/testserver
 OAPI_CODEGEN := go tool oapi-codegen
+API_VERSION    := $(shell grep '^  version:' spec/openapi/openapi.yaml | awk '{print $$2}')
+SERVER_VERSION := $(shell git describe --tags --always 2>/dev/null || echo dev)
 
 .PHONY: help build run generate bundle lint test tidy build-testserver contract-test
 
@@ -10,10 +12,10 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
 
 build: ## Build the server binary
-	go build -o $(BINARY) ./cmd/server
+	go build -ldflags "-X main.apiVersion=$(API_VERSION) -X main.serverVersion=$(SERVER_VERSION)" -o $(BINARY) ./cmd/server
 
 run: ## Run the server locally (loads .env if present)
-	$(if $(wildcard .env),set -a && . ./.env && set +a &&) go run ./cmd/server
+	$(if $(wildcard .env),set -a && . ./.env && set +a &&) go run -ldflags "-X main.apiVersion=$(API_VERSION) -X main.serverVersion=$(SERVER_VERSION)" ./cmd/server
 
 generate: bundle ## Generate server stubs from the bundled spec
 	@mkdir -p internal/system internal/docker internal/storage internal/network
