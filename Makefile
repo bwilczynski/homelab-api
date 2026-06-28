@@ -18,11 +18,12 @@ run: ## Run the server locally (loads .env if present)
 	$(if $(wildcard .env),set -a && . ./.env && set +a &&) go run -ldflags "-X main.apiVersion=$(API_VERSION) -X main.serverVersion=$(SERVER_VERSION)" ./cmd/server
 
 generate: bundle ## Generate server stubs from the bundled spec
-	@mkdir -p internal/system internal/docker internal/storage internal/network
+	@mkdir -p internal/system internal/docker internal/storage internal/network internal/meta
 	$(OAPI_CODEGEN) --config oapi-codegen-system.yaml $(SPEC_FILE)
 	$(OAPI_CODEGEN) --config oapi-codegen-docker.yaml $(SPEC_FILE)
 	$(OAPI_CODEGEN) --config oapi-codegen-storage.yaml $(SPEC_FILE)
 	$(OAPI_CODEGEN) --config oapi-codegen-network.yaml $(SPEC_FILE)
+	$(OAPI_CODEGEN) --config oapi-codegen-meta.yaml $(SPEC_FILE)
 
 bundle: ## Bundle the OpenAPI spec from the submodule (set SKIP_BUNDLE=true to skip)
 ifndef SKIP_BUNDLE
