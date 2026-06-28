@@ -2,26 +2,24 @@
 set -euo pipefail
 source "$(dirname "$0")/../.env"
 
-COOKIE_JAR=$(mktemp)
 RESPONSES_DIR="$(dirname "$0")/responses"
 
-curl -s ${INSECURE_TLS:+-k} -c "${COOKIE_JAR}" -X POST "https://${UNIFI_HOST}/api/login" \
-  -H "Content-Type: application/json" \
-  -d "{\"username\":\"${UNIFI_USER}\",\"password\":\"${UNIFI_PASS}\"}" > /dev/null
-
-echo "=== /stat/sta (active clients) ===" >&2
-curl -s ${INSECURE_TLS:+-k} -b "${COOKIE_JAR}" "https://${UNIFI_HOST}/api/s/default/stat/sta" \
-  | tee "${RESPONSES_DIR}/unifi-sta-raw.json" | jq 'del(.data[].mac,.data[]."_id") | {count: (.data|length), keys: (.data[0]|keys), sample: .data[0]}' 2>/dev/null || true
+echo "=== /proxy/network/stat/sta (active clients v1) ===" >&2
+curl -s -k -H "X-API-KEY: ${UNIFI_API_KEY}" \
+  "https://${UNIFI_HOST}/proxy/network/api/s/default/stat/sta" \
+  | tee "${RESPONSES_DIR}/unifi-sta-raw.json" \
+  | jq '{count: (.data|length), keys: (.data[0]|keys)}' 2>/dev/null || true
 
 echo "" >&2
-echo "=== /rest/user (all known clients) ===" >&2
-curl -s ${INSECURE_TLS:+-k} -b "${COOKIE_JAR}" "https://${UNIFI_HOST}/api/s/default/rest/user" \
-  | tee "${RESPONSES_DIR}/unifi-rest-user-raw.json" | jq 'del(.data[].mac,.data[]."_id") | {count: (.data|length), keys: (.data[0]|keys), sample: .data[0]}' 2>/dev/null || true
+echo "=== /proxy/network/v2/clients/active ===" >&2
+curl -s -k -H "X-API-KEY: ${UNIFI_API_KEY}" \
+  "https://${UNIFI_HOST}/proxy/network/v2/api/site/default/clients/active?includeTrafficUsage=false&includeUnifiDevices=false" \
+  | tee "${RESPONSES_DIR}/unifi-v2-active-raw.json" \
+  | jq '{count: length, keys: (.[0]|keys)}' 2>/dev/null || true
 
 echo "" >&2
-echo "=== /stat/alluser (all users with stats) ===" >&2
-curl -s ${INSECURE_TLS:+-k} -b "${COOKIE_JAR}" "https://${UNIFI_HOST}/api/s/default/stat/alluser" \
-  | tee "${RESPONSES_DIR}/unifi-alluser-raw.json" | jq 'del(.data[].mac,.data[]."_id") | {count: (.data|length), keys: (.data[0]|keys), sample: .data[0]}' 2>/dev/null || true
-
-curl -s ${INSECURE_TLS:+-k} -b "${COOKIE_JAR}" -X POST "https://${UNIFI_HOST}/api/logout" > /dev/null
-rm -f "${COOKIE_JAR}"
+echo "=== /proxy/network/v2/clients/history ===" >&2
+curl -s -k -H "X-API-KEY: ${UNIFI_API_KEY}" \
+  "https://${UNIFI_HOST}/proxy/network/v2/api/site/default/clients/history?onlyNonBlocked=true&withinHours=720" \
+  | tee "${RESPONSES_DIR}/unifi-v2-history-raw.json" \
+  | jq '{count: length, keys: (.[0]|keys)}' 2>/dev/null || true
