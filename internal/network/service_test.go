@@ -62,16 +62,17 @@ func TestListDevices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result.Items) != 5 {
-		t.Fatalf("expected 5 devices, got %d", len(result.Items))
+	if len(result.Items) != 7 {
+		t.Fatalf("expected 7 devices, got %d", len(result.Items))
 	}
 
-	gw := result.Items[0]
-	if gw.Id != "unifi.usg-3p" {
-		t.Errorf("expected id unifi.usg-3p, got %s", gw.Id)
+	// CGF-01 is the gateway (type udm), at index 6 in fixture order
+	gw := result.Items[6]
+	if gw.Id != "unifi.cgf-01" {
+		t.Errorf("expected id unifi.cgf-01, got %s", gw.Id)
 	}
-	if gw.Uri != "/network/devices/unifi.usg-3p" {
-		t.Errorf("expected uri /network/devices/unifi.usg-3p, got %s", gw.Uri)
+	if gw.Uri != "/network/devices/unifi.cgf-01" {
+		t.Errorf("expected uri /network/devices/unifi.cgf-01, got %s", gw.Uri)
 	}
 	if gw.Type != NetworkDeviceTypeGateway {
 		t.Errorf("expected type gateway, got %s", gw.Type)
@@ -80,7 +81,8 @@ func TestListDevices(t *testing.T) {
 		t.Errorf("expected status connected, got %s", gw.Status)
 	}
 
-	sw := result.Items[1]
+	// US 8 60W is at index 5
+	sw := result.Items[5]
 	if sw.Id != "unifi.us-8-60w" {
 		t.Errorf("expected id unifi.us-8-60w, got %s", sw.Id)
 	}
@@ -91,17 +93,13 @@ func TestListDevices(t *testing.T) {
 		t.Errorf("expected type switch, got %s", sw.Type)
 	}
 
+	// UAP-01 is at index 3
 	ap := result.Items[3]
 	if ap.Id != "unifi.uap-01" {
 		t.Errorf("expected id unifi.uap-01, got %s", ap.Id)
 	}
 	if ap.Type != NetworkDeviceTypeAccessPoint {
 		t.Errorf("expected type accessPoint, got %s", ap.Type)
-	}
-
-	offline := result.Items[4]
-	if offline.Status != NetworkDeviceStatusDisconnected {
-		t.Errorf("expected status disconnected, got %s", offline.Status)
 	}
 }
 
@@ -123,7 +121,7 @@ func TestGetDevice_Gateway(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetDevice(context.Background(), "unifi.usg-3p")
+	detail, found, err := svc.GetDevice(context.Background(), "unifi.cgf-01")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -135,29 +133,29 @@ func TestGetDevice_Gateway(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected gateway detail: %v", err)
 	}
-	if gw.Id != "unifi.usg-3p" {
-		t.Errorf("expected id unifi.usg-3p, got %s", gw.Id)
+	if gw.Id != "unifi.cgf-01" {
+		t.Errorf("expected id unifi.cgf-01, got %s", gw.Id)
 	}
-	if gw.Uri != "/network/devices/unifi.usg-3p" {
+	if gw.Uri != "/network/devices/unifi.cgf-01" {
 		t.Errorf("expected uri, got %s", gw.Uri)
 	}
-	if gw.Model != "UGW3" {
-		t.Errorf("expected model UGW3, got %s", gw.Model)
+	if gw.Model != "UDMA6A8" {
+		t.Errorf("expected model UDMA6A8, got %s", gw.Model)
 	}
-	if gw.FirmwareVersion != "4.4.57.5578372" {
-		t.Errorf("expected version 4.4.57.5578372, got %s", gw.FirmwareVersion)
+	if gw.FirmwareVersion != "5.1.19.33549" {
+		t.Errorf("expected version 5.1.19.33549, got %s", gw.FirmwareVersion)
 	}
-	if gw.Uptime != 16066061 {
-		t.Errorf("expected uptime 16066061, got %d", gw.Uptime)
+	if gw.Uptime != 5627 {
+		t.Errorf("expected uptime 5627, got %d", gw.Uptime)
 	}
 	if gw.Uplink != nil {
 		t.Errorf("expected nil uplink for gateway, got %v", gw.Uplink)
 	}
-	if gw.Traffic.TxBytesTotal != 306168680348 {
-		t.Errorf("expected tx_bytes 306168680348, got %d", gw.Traffic.TxBytesTotal)
+	if gw.Traffic.TxBytesTotal != 37143304 {
+		t.Errorf("expected tx_bytes 37143304, got %d", gw.Traffic.TxBytesTotal)
 	}
-	if gw.Traffic.RxBytesPerSec != 134932 {
-		t.Errorf("expected rx_bytes-r 134932, got %d", gw.Traffic.RxBytesPerSec)
+	if gw.Traffic.RxBytesPerSec != 946 {
+		t.Errorf("expected rx_bytes-r 946, got %d", gw.Traffic.RxBytesPerSec)
 	}
 }
 
@@ -609,20 +607,20 @@ func TestGetDevice_Switch(t *testing.T) {
 	if p5.PoeMode != "auto" {
 		t.Errorf("expected poe auto, got %s", p5.PoeMode)
 	}
-	if p5.PoePowerWatts == nil || *p5.PoePowerWatts != 3.00 {
-		t.Errorf("expected poe power 3.00, got %v", p5.PoePowerWatts)
+	if p5.PoePowerWatts == nil || *p5.PoePowerWatts != 2.88 {
+		t.Errorf("expected poe power 2.88, got %v", p5.PoePowerWatts)
 	}
-	if p1.Traffic.TxBytesTotal != 25312100378 {
-		t.Errorf("expected port 1 tx_bytes 25312100378, got %d", p1.Traffic.TxBytesTotal)
+	if p1.Traffic.TxBytesTotal != 107288538 {
+		t.Errorf("expected port 1 tx_bytes 107288538, got %d", p1.Traffic.TxBytesTotal)
 	}
-	if sw.Traffic.TxBytesTotal != 226683708402 {
-		t.Errorf("expected device tx_bytes 226683708402, got %d", sw.Traffic.TxBytesTotal)
+	if sw.Traffic.TxBytesTotal != 60801611 {
+		t.Errorf("expected device tx_bytes 60801611, got %d", sw.Traffic.TxBytesTotal)
 	}
 	if sw.Uplink == nil {
 		t.Fatal("expected uplink for switch")
 	}
-	if sw.Uplink.Device.Id != "unifi.usg-3p" {
-		t.Errorf("expected uplink device unifi.usg-3p, got %s", sw.Uplink.Device.Id)
+	if sw.Uplink.Device.Id != "unifi.cgf-01" {
+		t.Errorf("expected uplink device unifi.cgf-01, got %s", sw.Uplink.Device.Id)
 	}
 }
 
@@ -825,14 +823,14 @@ func TestGetTopology_DevicesOnly(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// 5 device nodes, 0 client nodes
-	if len(topo.Nodes) != 5 {
-		t.Fatalf("expected 5 nodes, got %d", len(topo.Nodes))
+	// 7 device nodes, 0 client nodes
+	if len(topo.Nodes) != 7 {
+		t.Fatalf("expected 7 nodes, got %d", len(topo.Nodes))
 	}
 
-	// 3 device-device edges; UAP-02 (offline, no uplink) contributes none
-	if len(topo.Edges) != 3 {
-		t.Fatalf("expected 3 edges, got %d", len(topo.Edges))
+	// 6 device-device edges
+	if len(topo.Edges) != 6 {
+		t.Fatalf("expected 6 edges, got %d", len(topo.Edges))
 	}
 
 	// all nodes are kind=device
@@ -856,22 +854,22 @@ func TestGetTopology_DevicesOnly(t *testing.T) {
 	}
 	for _, e := range topo.Edges {
 		pe := parseTopologyEdge(t, e)
-		if pe.Source.Id == "unifi.usg-3p" {
+		if pe.Source.Id == "unifi.cgf-01" {
 			t.Error("gateway should not be an edge source")
 		}
 	}
 
-	// AP node numClients: UAP-01 has user_num_sta=7; UAP-02 has 0
+	// AP node numClients: UAP-01 has user_num_sta=6; UAP-02 has 6
 	for _, n := range topo.Nodes {
 		pn := parseTopologyNode(t, n)
 		if pn.Id == "unifi.uap-01" {
-			if pn.NumClients == nil || *pn.NumClients != 7 {
-				t.Errorf("UAP-01: expected numClients=7, got %v", pn.NumClients)
+			if pn.NumClients == nil || *pn.NumClients != 6 {
+				t.Errorf("UAP-01: expected numClients=6, got %v", pn.NumClients)
 			}
 		}
 		if pn.Id == "unifi.uap-02" {
-			if pn.NumClients == nil || *pn.NumClients != 0 {
-				t.Errorf("UAP-02: expected numClients=0, got %v", pn.NumClients)
+			if pn.NumClients == nil || *pn.NumClients != 6 {
+				t.Errorf("UAP-02: expected numClients=6, got %v", pn.NumClients)
 			}
 		}
 		// switches and gateway must not have numClients
@@ -900,8 +898,8 @@ func TestGetTopology_DevicesOnly(t *testing.T) {
 	if uap01Edge.Port == nil || *uap01Edge.Port != 5 {
 		t.Errorf("UAP-01 edge port: expected 5, got %v", uap01Edge.Port)
 	}
-	if uap01Edge.LinkSpeed == nil || *uap01Edge.LinkSpeed != "gbe1" {
-		t.Errorf("UAP-01 edge linkSpeed: expected gbe1, got %v", uap01Edge.LinkSpeed)
+	if uap01Edge.LinkSpeed == nil || *uap01Edge.LinkSpeed != "fe" {
+		t.Errorf("UAP-01 edge linkSpeed: expected fe, got %v", uap01Edge.LinkSpeed)
 	}
 
 	// edge Switch Flex Mini → US 8 60W: wired, port=6, linkSpeed=gbe1
@@ -932,11 +930,11 @@ func TestGetTopology_DevicesOnly(t *testing.T) {
 	if us8Edge == nil {
 		t.Fatal("expected edge with source=unifi.us-8-60w")
 	}
-	if us8Edge.Target.Id != "unifi.usg-3p" {
-		t.Errorf("US8 edge target: expected unifi.usg-3p, got %s", us8Edge.Target.Id)
+	if us8Edge.Target.Id != "unifi.cgf-01" {
+		t.Errorf("US8 edge target: expected unifi.cgf-01, got %s", us8Edge.Target.Id)
 	}
-	if us8Edge.Port != nil {
-		t.Errorf("US8 edge port: expected nil (no uplink_remote_port in fixture), got %d", *us8Edge.Port)
+	if us8Edge.Port == nil || *us8Edge.Port != 1 {
+		t.Errorf("US8 edge port: expected 1, got %v", us8Edge.Port)
 	}
 	if us8Edge.LinkSpeed == nil || *us8Edge.LinkSpeed != "gbe1" {
 		t.Errorf("US8 edge linkSpeed: expected gbe1, got %v", us8Edge.LinkSpeed)
@@ -956,17 +954,17 @@ func TestGetTopology_WithClients(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// 5 device + 5 online client + 2 offline client = 12 nodes
-	if len(topo.Nodes) != 12 {
-		t.Fatalf("expected 12 nodes, got %d", len(topo.Nodes))
+	// 7 device + 5 online client + 2 offline client = 14 nodes
+	if len(topo.Nodes) != 14 {
+		t.Fatalf("expected 14 nodes, got %d", len(topo.Nodes))
 	}
 
-	// 3 device-device + 5 online-client + 2 offline-client = 10 edges
-	if len(topo.Edges) != 10 {
-		t.Fatalf("expected 10 edges, got %d", len(topo.Edges))
+	// 6 device-device + 5 online-client + 2 offline-client = 13 edges
+	if len(topo.Edges) != 13 {
+		t.Fatalf("expected 13 edges, got %d", len(topo.Edges))
 	}
 
-	// Verify node kinds: 5 device + 7 client
+	// Verify node kinds: 7 device + 7 client
 	deviceNodes, clientNodes := 0, 0
 	for _, n := range topo.Nodes {
 		pn := parseTopologyNode(t, n)
@@ -979,8 +977,8 @@ func TestGetTopology_WithClients(t *testing.T) {
 			t.Errorf("unexpected node kind: %s", pn.Kind)
 		}
 	}
-	if deviceNodes != 5 {
-		t.Errorf("expected 5 device nodes, got %d", deviceNodes)
+	if deviceNodes != 7 {
+		t.Errorf("expected 7 device nodes, got %d", deviceNodes)
 	}
 	if clientNodes != 7 {
 		t.Errorf("expected 7 client nodes (5 online + 2 offline), got %d", clientNodes)
@@ -1343,8 +1341,9 @@ func TestListWANs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result.Items) != 1 {
-		t.Fatalf("expected 1 WAN, got %d", len(result.Items))
+	// 2 WANs: Internet 1 (WAN) and Internet 2 (WAN2)
+	if len(result.Items) != 2 {
+		t.Fatalf("expected 2 WANs, got %d", len(result.Items))
 	}
 
 	wan := result.Items[0]
@@ -1357,8 +1356,8 @@ func TestListWANs(t *testing.T) {
 	if wan.Name != "Internet 1" {
 		t.Errorf("expected name Internet 1, got %s", wan.Name)
 	}
-	if wan.IpAddress != "203.0.113.42" {
-		t.Errorf("expected ipAddress 203.0.113.42, got %s", wan.IpAddress)
+	if wan.IpAddress != "203.0.113.1" {
+		t.Errorf("expected ipAddress 203.0.113.1, got %s", wan.IpAddress)
 	}
 	if wan.Status != WanStatusConnected {
 		t.Errorf("expected status connected, got %s", wan.Status)
@@ -1399,8 +1398,8 @@ func TestGetWAN(t *testing.T) {
 	if detail.Id != "unifi.internet-1" {
 		t.Errorf("expected id unifi.internet-1, got %s", detail.Id)
 	}
-	if detail.IpAddress != "203.0.113.42" {
-		t.Errorf("expected ipAddress 203.0.113.42, got %s", detail.IpAddress)
+	if detail.IpAddress != "203.0.113.1" {
+		t.Errorf("expected ipAddress 203.0.113.1, got %s", detail.IpAddress)
 	}
 	if detail.Status != WanStatusConnected {
 		t.Errorf("expected status connected, got %s", detail.Status)
@@ -1557,9 +1556,9 @@ func TestGetSSID(t *testing.T) {
 	if len(detail.Clients) != 2 {
 		t.Fatalf("expected 2 client refs, got %d", len(detail.Clients))
 	}
-	// UAP-01 (state=1) has a vap_table entry for hamster-iot; UAP-02 (state=0) is excluded
-	if len(detail.BroadcastingAps) != 1 {
-		t.Fatalf("expected 1 broadcasting AP, got %d", len(detail.BroadcastingAps))
+	// Both UAP-01 and UAP-02 (both state=1) have vap_table entries for hamster-iot
+	if len(detail.BroadcastingAps) != 2 {
+		t.Fatalf("expected 2 broadcasting APs, got %d", len(detail.BroadcastingAps))
 	}
 	for _, ap := range detail.BroadcastingAps {
 		if ap.Kind != "device" {

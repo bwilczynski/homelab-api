@@ -23,6 +23,7 @@ type Backend struct {
 	Host        string      `yaml:"host"`
 	Username    string      `yaml:"username"`
 	Password    string      `yaml:"password"`
+	APIKey      string      `yaml:"api_key"`     // optional; UniFi only — API key auth (alternative to username/password)
 	AuthVersion string      `yaml:"auth_version"` // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
 	InsecureTLS       bool        `yaml:"insecure_tls"`        // optional; skip TLS certificate verification (defaults to false)
 	ClientHistoryDays int         `yaml:"client_history_days"` // optional; UniFi only — how many days of offline client history to include (default: 30)
@@ -138,11 +139,15 @@ func (c *Config) validate() error {
 		if b.Host == "" {
 			return fmt.Errorf("backend %q: host is required", b.Name)
 		}
-		if b.Username == "" {
-			return fmt.Errorf("backend %q: username is required", b.Name)
-		}
-		if b.Password == "" {
-			return fmt.Errorf("backend %q: password is required", b.Name)
+		if b.Type == BackendTypeUniFi && b.APIKey != "" {
+			// API key auth: no username/password required
+		} else {
+			if b.Username == "" {
+				return fmt.Errorf("backend %q: username is required", b.Name)
+			}
+			if b.Password == "" {
+				return fmt.Errorf("backend %q: password is required", b.Name)
+			}
 		}
 	}
 

@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 )
@@ -301,7 +300,7 @@ func buildOfflineClientEdge(controller string, c adapters.UniFiClientV2, macToDe
 func clientRefV2(controller string, c adapters.UniFiClientV2) NetworkClientRef {
 	name := clientNameV2(c)
 	mac := normalizeMac(c.MAC)
-	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	prefix := macHexPrefix(mac, c.ID)
 	id := fmt.Sprintf("%s.%s-%s", controller, toKebab(name), prefix)
 	return NetworkClientRef{
 		Kind: NetworkClientRefKindClient,

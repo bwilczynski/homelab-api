@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"sync"
 	"time"
 )
 
@@ -15,11 +16,14 @@ type UniFiClient struct {
 	host        string
 	user        string
 	pass        string
+	apiKey      string
 	insecureTLS bool
 	client      *http.Client
+	mu          sync.RWMutex // guards loggedIn
+	loggedIn    bool         // legacy mode only; true when cookie jar holds a live session
 }
 
-// NewUniFiClient creates a new UniFi Controller API client.
+// NewUniFiClient creates a new UniFi Controller API client using username/password session auth.
 // Set insecureTLS to true to skip TLS certificate verification (opt-in).
 func NewUniFiClient(host, user, pass string, insecureTLS bool) *UniFiClient {
 	jar, _ := cookiejar.New(nil)
@@ -30,6 +34,19 @@ func NewUniFiClient(host, user, pass string, insecureTLS bool) *UniFiClient {
 		insecureTLS: insecureTLS,
 		client: &http.Client{
 			Jar:       jar,
+			Transport: tlsTransport(insecureTLS),
+		},
+	}
+}
+
+// NewUniFiClientWithAPIKey creates a new UniFi Controller API client using API key auth.
+// The key is sent as the X-API-KEY header; no session login is performed.
+func NewUniFiClientWithAPIKey(host, apiKey string, insecureTLS bool) *UniFiClient {
+	return &UniFiClient{
+		host:        host,
+		apiKey:      apiKey,
+		insecureTLS: insecureTLS,
+		client: &http.Client{
 			Transport: tlsTransport(insecureTLS),
 		},
 	}
@@ -60,8 +77,9 @@ func (c *UniFiClient) Ping() error {
 	return nil
 }
 
-// login authenticates with the UniFi Controller and stores the session cookie.
-func (c *UniFiClient) login() error {
+// loginLocked authenticates with the UniFi Controller using session auth.
+// Must be called while holding c.mu (write lock). Sets c.loggedIn on success.
+func (c *UniFiClient) loginLocked() error {
 	body, _ := json.Marshal(map[string]string{
 		"username": c.user,
 		"password": c.pass,
@@ -79,16 +97,100 @@ func (c *UniFiClient) login() error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unifi login: status %d", resp.StatusCode)
 	}
+	c.loggedIn = true
 	return nil
 }
 
+// ensureSession returns once a valid session exists in the cookie jar.
+// Uses double-checked locking: fast path for already-logged-in calls.
+func (c *UniFiClient) ensureSession() error {
+	c.mu.RLock()
+	loggedIn := c.loggedIn
+	c.mu.RUnlock()
+	if loggedIn {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.loggedIn {
+		return nil
+	}
+	return c.loginLocked()
+}
+
+// invalidateSession marks the session as invalid so the next ensureSession call
+// will re-authenticate. The lock is released before any network I/O.
+func (c *UniFiClient) invalidateSession() {
+	c.mu.Lock()
+	c.loggedIn = false
+	c.mu.Unlock()
+}
+
+// maybeLogin ensures a session exists when using session-based auth.
+// It is a no-op when the client is configured with an API key.
+func (c *UniFiClient) maybeLogin() error {
+	if c.apiKey != "" {
+		return nil
+	}
+	return c.ensureSession()
+}
+
+// pathPrefix returns the URL prefix for the Network application API.
+// UniFi OS (API key mode) proxies the Network app at /proxy/network/.
+// Legacy standalone controllers expose the API directly with no prefix.
+func (c *UniFiClient) pathPrefix() string {
+	if c.apiKey != "" {
+		return "/proxy/network"
+	}
+	return ""
+}
+
 // get performs an authenticated GET request against the UniFi API and decodes the response.
+// For legacy session auth, it retries once after re-authenticating on a 401 response.
 func (c *UniFiClient) get(path string, out any) error {
-	resp, err := c.client.Get(fmt.Sprintf("https://%s%s", c.host, path))
+	if err := c.maybeLogin(); err != nil {
+		return err
+	}
+
+	doRequest := func() (*http.Response, error) {
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s%s", c.host, path), nil)
+		if err != nil {
+			return nil, fmt.Errorf("unifi request: %w", err)
+		}
+		if c.apiKey != "" {
+			req.Header.Set("X-API-KEY", c.apiKey)
+		}
+		return c.client.Do(req)
+	}
+
+	resp, err := doRequest()
 	if err != nil {
 		return fmt.Errorf("unifi request: %w", err)
 	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		if c.apiKey != "" {
+			return fmt.Errorf("unifi request: invalid API key (401)")
+		}
+		c.invalidateSession()
+		if err := c.ensureSession(); err != nil {
+			return fmt.Errorf("unifi re-auth: %w", err)
+		}
+		resp, err = doRequest()
+		if err != nil {
+			return fmt.Errorf("unifi request: %w", err)
+		}
+		if resp.StatusCode == http.StatusUnauthorized {
+			resp.Body.Close()
+			return fmt.Errorf("unifi request: unauthorized after re-auth")
+		}
+	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("unifi request: status %d", resp.StatusCode)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -202,11 +304,8 @@ type UniFiNetworkConf struct {
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
 func (c *UniFiClient) GetDevices() ([]UniFiDevice, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	var result unifiResponse[[]UniFiDevice]
-	if err := c.get("/api/s/default/stat/device", &result); err != nil {
+	if err := c.get(c.pathPrefix()+"/api/s/default/stat/device", &result); err != nil {
 		return nil, err
 	}
 	return result.Data, nil
@@ -233,11 +332,8 @@ type UniFiSta struct {
 
 // GetClients retrieves currently active client devices from the UniFi Controller.
 func (c *UniFiClient) GetClients() ([]UniFiSta, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	var result unifiResponse[[]UniFiSta]
-	if err := c.get("/api/s/default/stat/sta", &result); err != nil {
+	if err := c.get(c.pathPrefix()+"/api/s/default/stat/sta", &result); err != nil {
 		return nil, err
 	}
 	return result.Data, nil
@@ -270,18 +366,18 @@ func (c *UniFiClient) getV2(path string, out any) error {
 	return c.get(path, out)
 }
 
-// fetchActiveClients calls the v2 active clients endpoint. Caller must have already called login().
+// fetchActiveClients calls the v2 active clients endpoint.
 func (c *UniFiClient) fetchActiveClients() ([]UniFiClientV2, error) {
 	var result []UniFiClientV2
-	if err := c.getV2("/v2/api/site/default/clients/active?includeTrafficUsage=false&includeUnifiDevices=false", &result); err != nil {
+	if err := c.getV2(c.pathPrefix()+"/v2/api/site/default/clients/active?includeTrafficUsage=false&includeUnifiDevices=false", &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-// fetchOfflineClients calls the v2 history clients endpoint. Caller must have already called login().
+// fetchOfflineClients calls the v2 history clients endpoint.
 func (c *UniFiClient) fetchOfflineClients(historyDays int) ([]UniFiClientV2, error) {
-	path := fmt.Sprintf("/v2/api/site/default/clients/history?onlyNonBlocked=true&withinHours=%d", historyDays*24)
+	path := fmt.Sprintf(c.pathPrefix()+"/v2/api/site/default/clients/history?onlyNonBlocked=true&withinHours=%d", historyDays*24)
 	var result []UniFiClientV2
 	if err := c.getV2(path, &result); err != nil {
 		return nil, err
@@ -291,26 +387,17 @@ func (c *UniFiClient) fetchOfflineClients(historyDays int) ([]UniFiClientV2, err
 
 // GetActiveClients retrieves currently connected clients from the UniFi Controller v2 API.
 func (c *UniFiClient) GetActiveClients() ([]UniFiClientV2, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	return c.fetchActiveClients()
 }
 
 // GetOfflineClients retrieves recently disconnected clients from the UniFi Controller v2 API.
 // historyDays controls how far back to look (passed as withinHours=historyDays*24).
 func (c *UniFiClient) GetOfflineClients(historyDays int) ([]UniFiClientV2, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	return c.fetchOfflineClients(historyDays)
 }
 
 // GetAllClients retrieves all clients (active and history) with a single login.
 func (c *UniFiClient) GetAllClients(historyDays int) ([]UniFiClientV2, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	active, err := c.fetchActiveClients()
 	if err != nil {
 		return nil, fmt.Errorf("fetch active clients: %w", err)
@@ -332,12 +419,8 @@ type UniFiSubsystemHealth struct {
 
 // GetHealth retrieves the health status of all UniFi subsystems.
 func (c *UniFiClient) GetHealth() ([]UniFiSubsystemHealth, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
-
 	var result unifiResponse[[]UniFiSubsystemHealth]
-	if err := c.get("/api/s/default/stat/health", &result); err != nil {
+	if err := c.get(c.pathPrefix()+"/api/s/default/stat/health", &result); err != nil {
 		return nil, err
 	}
 	return result.Data, nil
@@ -345,11 +428,8 @@ func (c *UniFiClient) GetHealth() ([]UniFiSubsystemHealth, error) {
 
 // GetWlanConf retrieves all WiFi network configurations from the UniFi Controller.
 func (c *UniFiClient) GetWlanConf() ([]UniFiWlanConf, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	var result unifiResponse[[]UniFiWlanConf]
-	if err := c.get("/api/s/default/rest/wlanconf", &result); err != nil {
+	if err := c.get(c.pathPrefix()+"/api/s/default/rest/wlanconf", &result); err != nil {
 		return nil, err
 	}
 	return result.Data, nil
@@ -357,11 +437,8 @@ func (c *UniFiClient) GetWlanConf() ([]UniFiWlanConf, error) {
 
 // GetNetworkConf retrieves all network configurations (VLANs + WAN) from the UniFi Controller.
 func (c *UniFiClient) GetNetworkConf() ([]UniFiNetworkConf, error) {
-	if err := c.login(); err != nil {
-		return nil, err
-	}
 	var result unifiResponse[[]UniFiNetworkConf]
-	if err := c.get("/api/s/default/rest/networkconf", &result); err != nil {
+	if err := c.get(c.pathPrefix()+"/api/s/default/rest/networkconf", &result); err != nil {
 		return nil, err
 	}
 	return result.Data, nil
