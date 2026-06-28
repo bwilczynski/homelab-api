@@ -25,7 +25,17 @@ Bring both endpoints under the contract-first approach by defining them in the O
 
 Both endpoints are public (`security: []`) — no bearer token required. `/meta/auth` must be public because clients need it to determine auth configuration before they can authenticate.
 
-## Spec Changes (`spec/` submodule)
+## Delivery Sequence
+
+The spec and implementation are in separate repositories. Changes must land in this order:
+
+1. **Open a PR in `homelab-api-spec`** with all spec changes (tag, path files, schemas). The repo's CI runs `make lint` (Redocly + Spectral). The PR must pass all checks before merging.
+2. **After the spec PR merges**, update the `spec/` submodule pointer in this repo to the new commit (`git -C spec pull && git add spec`).
+3. **Run `make generate`** to regenerate stubs from the updated bundled spec.
+4. **Implement and wire** the `internal/meta/` package and update `cmd/server/main.go`.
+5. **Open a PR in this repo** with the submodule bump, generated stubs (excluded from commit per `.gitignore`), and implementation files.
+
+## Spec Changes (`spec/` submodule — `homelab-api-spec` repo)
 
 ### Tag
 
