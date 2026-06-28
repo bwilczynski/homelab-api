@@ -11,11 +11,21 @@
       "is_wired": false,
       "status": "online",
       "last_uplink_name": "UAP-01",
-      "last_uplink_mac": "aa:bb:cc:dd:00:04",
+      "last_uplink_mac": "aa:bb:cc:dd:04:01",
       "uptime": 27075,
       "essid": "homelab",
       "signal": -69,
-      "last_seen": 0
+      "last_seen": 0,
+      "anomalies": -1,
+      "authorized": true,
+      "blocked": false,
+      "noted": false,
+      "type": "CLIENT",
+      "virtual_network_override_enabled": false,
+      "is_allowed_in_visual_programming": false,
+      "is_mlo": false,
+      "network_members_group_ids": [],
+      "tags": []
     },
     {
       "id": "aabbcc000002",
@@ -28,11 +38,21 @@
       "is_wired": true,
       "status": "online",
       "last_uplink_name": "Switch Living Room",
-      "last_uplink_mac": "aa:bb:cc:dd:00:02",
+      "last_uplink_mac": "aa:bb:cc:dd:06:01",
       "uptime": 1024199,
       "essid": null,
       "signal": null,
-      "last_seen": 0
+      "last_seen": 0,
+      "anomalies": -1,
+      "authorized": true,
+      "blocked": false,
+      "noted": false,
+      "type": "CLIENT",
+      "virtual_network_override_enabled": false,
+      "is_allowed_in_visual_programming": false,
+      "is_mlo": false,
+      "network_members_group_ids": [],
+      "tags": []
     },
     {
       "id": "aabbcc000003",
@@ -45,11 +65,21 @@
       "is_wired": false,
       "status": "online",
       "last_uplink_name": "UAP-01",
-      "last_uplink_mac": "aa:bb:cc:dd:00:04",
+      "last_uplink_mac": "aa:bb:cc:dd:04:01",
       "uptime": 86400,
       "essid": "homelab-iot",
       "signal": -58,
-      "last_seen": 0
+      "last_seen": 0,
+      "anomalies": -1,
+      "authorized": true,
+      "blocked": false,
+      "noted": false,
+      "type": "CLIENT",
+      "virtual_network_override_enabled": false,
+      "is_allowed_in_visual_programming": false,
+      "is_mlo": false,
+      "network_members_group_ids": [],
+      "tags": []
     }
   ]
 }

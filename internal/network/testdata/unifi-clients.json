@@ -15,7 +15,7 @@
       "sw_mac": "",
       "sw_port": 0,
       "last_uplink_name": "",
-      "ap_mac": "aa:bb:cc:dd:00:04",
+      "ap_mac": "aa:bb:cc:dd:04:01",
       "wired_rate_mbps": 0
     },
     {
@@ -29,7 +29,7 @@
       "signal": null,
       "rssi": null,
       "uptime": 1024199,
-      "sw_mac": "aa:bb:cc:dd:00:02",
+      "sw_mac": "aa:bb:cc:dd:06:01",
       "sw_port": 3,
       "last_uplink_name": "Switch Living Room",
       "ap_mac": "",
@@ -49,7 +49,7 @@
       "sw_mac": "",
       "sw_port": 0,
       "last_uplink_name": "",
-      "ap_mac": "aa:bb:cc:dd:00:04",
+      "ap_mac": "aa:bb:cc:dd:04:01",
       "wired_rate_mbps": 0
     },
     {
@@ -66,7 +66,7 @@
       "sw_mac": "",
       "sw_port": 0,
       "last_uplink_name": "",
-      "ap_mac": "aa:bb:cc:dd:00:04",
+      "ap_mac": "aa:bb:cc:dd:04:01",
       "wired_rate_mbps": 0
     },
     {
@@ -80,7 +80,7 @@
       "signal": null,
       "rssi": null,
       "uptime": 988376,
-      "sw_mac": "aa:bb:cc:dd:00:04",
+      "sw_mac": "aa:bb:cc:dd:04:01",
       "sw_port": 6,
       "last_uplink_name": "Switch Office",
       "ap_mac": "",
