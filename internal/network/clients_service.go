@@ -59,7 +59,7 @@ func clientNameV2(c adapters.UniFiClientV2) string {
 func clientToListV2(controller string, c adapters.UniFiClientV2) NetworkClient {
 	name := clientNameV2(c)
 	mac := normalizeMac(c.MAC)
-	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	prefix := macHexPrefix(mac, c.ID)
 	id := fmt.Sprintf("%s.%s-%s", controller, toKebab(name), prefix)
 
 	var ip string
@@ -126,7 +126,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 	for _, c := range offline {
 		name := clientNameV2(c)
 		mac := normalizeMac(c.MAC)
-		prefix := strings.ReplaceAll(mac, ":", "")[:2]
+		prefix := macHexPrefix(mac, c.ID)
 		if fmt.Sprintf("%s-%s", toKebab(name), prefix) == suffix {
 			detail, err := clientToDetailV2(controller, c, macToDevice)
 			if err != nil {
@@ -141,7 +141,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 func clientToDetailV2(controller string, c adapters.UniFiClientV2, macToDevice map[string]adapters.UniFiDevice) (NetworkClientDetail, error) {
 	name := clientNameV2(c)
 	mac := normalizeMac(c.MAC)
-	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	prefix := macHexPrefix(mac, c.ID)
 	id := fmt.Sprintf("%s.%s-%s", controller, toKebab(name), prefix)
 
 	var ip *string
@@ -284,8 +284,23 @@ func clientToDetail(controller string, sta adapters.UniFiSta, macToDevice map[st
 // clientSuffix returns the composite ID suffix for a client: {kebab-name}-{mac-prefix}.
 func clientSuffix(sta adapters.UniFiSta) string {
 	mac := normalizeMac(sta.MAC)
-	prefix := strings.ReplaceAll(mac, ":", "")[:2]
+	prefix := macHexPrefix(mac, "")
 	return fmt.Sprintf("%s-%s", toKebab(clientName(sta)), prefix)
+}
+
+// macHexPrefix returns the first two hex characters from a normalised MAC address
+// (colons stripped). When the MAC is absent, it falls back to the first two
+// characters of fallbackID. Returns "xx" if both are empty.
+func macHexPrefix(mac, fallbackID string) string {
+	hex := strings.ReplaceAll(mac, ":", "")
+	if len(hex) >= 2 {
+		return hex[:2]
+	}
+	id := strings.ReplaceAll(fallbackID, "-", "")
+	if len(id) >= 2 {
+		return id[:2]
+	}
+	return "xx"
 }
 
 func clientName(sta adapters.UniFiSta) string {
