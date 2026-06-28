@@ -15,11 +15,12 @@ type UniFiClient struct {
 	host        string
 	user        string
 	pass        string
+	apiKey      string
 	insecureTLS bool
 	client      *http.Client
 }
 
-// NewUniFiClient creates a new UniFi Controller API client.
+// NewUniFiClient creates a new UniFi Controller API client using username/password session auth.
 // Set insecureTLS to true to skip TLS certificate verification (opt-in).
 func NewUniFiClient(host, user, pass string, insecureTLS bool) *UniFiClient {
 	jar, _ := cookiejar.New(nil)
@@ -30,6 +31,19 @@ func NewUniFiClient(host, user, pass string, insecureTLS bool) *UniFiClient {
 		insecureTLS: insecureTLS,
 		client: &http.Client{
 			Jar:       jar,
+			Transport: tlsTransport(insecureTLS),
+		},
+	}
+}
+
+// NewUniFiClientWithAPIKey creates a new UniFi Controller API client using API key auth.
+// The key is sent as the X-API-KEY header; no session login is performed.
+func NewUniFiClientWithAPIKey(host, apiKey string, insecureTLS bool) *UniFiClient {
+	return &UniFiClient{
+		host:        host,
+		apiKey:      apiKey,
+		insecureTLS: insecureTLS,
+		client: &http.Client{
 			Transport: tlsTransport(insecureTLS),
 		},
 	}
@@ -82,9 +96,26 @@ func (c *UniFiClient) login() error {
 	return nil
 }
 
+// maybeLogin authenticates with the controller when using session-based auth.
+// It is a no-op when the client is configured with an API key.
+func (c *UniFiClient) maybeLogin() error {
+	if c.apiKey != "" {
+		return nil
+	}
+	return c.login()
+}
+
 // get performs an authenticated GET request against the UniFi API and decodes the response.
 func (c *UniFiClient) get(path string, out any) error {
-	resp, err := c.client.Get(fmt.Sprintf("https://%s%s", c.host, path))
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("https://%s%s", c.host, path), nil)
+	if err != nil {
+		return fmt.Errorf("unifi request: %w", err)
+	}
+	if c.apiKey != "" {
+		req.Header.Set("X-API-KEY", c.apiKey)
+	}
+
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("unifi request: %w", err)
 	}
@@ -202,7 +233,7 @@ type UniFiNetworkConf struct {
 
 // GetDevices retrieves all managed network devices from the UniFi Controller.
 func (c *UniFiClient) GetDevices() ([]UniFiDevice, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	var result unifiResponse[[]UniFiDevice]
@@ -233,7 +264,7 @@ type UniFiSta struct {
 
 // GetClients retrieves currently active client devices from the UniFi Controller.
 func (c *UniFiClient) GetClients() ([]UniFiSta, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	var result unifiResponse[[]UniFiSta]
@@ -291,7 +322,7 @@ func (c *UniFiClient) fetchOfflineClients(historyDays int) ([]UniFiClientV2, err
 
 // GetActiveClients retrieves currently connected clients from the UniFi Controller v2 API.
 func (c *UniFiClient) GetActiveClients() ([]UniFiClientV2, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	return c.fetchActiveClients()
@@ -300,7 +331,7 @@ func (c *UniFiClient) GetActiveClients() ([]UniFiClientV2, error) {
 // GetOfflineClients retrieves recently disconnected clients from the UniFi Controller v2 API.
 // historyDays controls how far back to look (passed as withinHours=historyDays*24).
 func (c *UniFiClient) GetOfflineClients(historyDays int) ([]UniFiClientV2, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	return c.fetchOfflineClients(historyDays)
@@ -308,7 +339,7 @@ func (c *UniFiClient) GetOfflineClients(historyDays int) ([]UniFiClientV2, error
 
 // GetAllClients retrieves all clients (active and history) with a single login.
 func (c *UniFiClient) GetAllClients(historyDays int) ([]UniFiClientV2, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	active, err := c.fetchActiveClients()
@@ -332,7 +363,7 @@ type UniFiSubsystemHealth struct {
 
 // GetHealth retrieves the health status of all UniFi subsystems.
 func (c *UniFiClient) GetHealth() ([]UniFiSubsystemHealth, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 
@@ -345,7 +376,7 @@ func (c *UniFiClient) GetHealth() ([]UniFiSubsystemHealth, error) {
 
 // GetWlanConf retrieves all WiFi network configurations from the UniFi Controller.
 func (c *UniFiClient) GetWlanConf() ([]UniFiWlanConf, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	var result unifiResponse[[]UniFiWlanConf]
@@ -357,7 +388,7 @@ func (c *UniFiClient) GetWlanConf() ([]UniFiWlanConf, error) {
 
 // GetNetworkConf retrieves all network configurations (VLANs + WAN) from the UniFi Controller.
 func (c *UniFiClient) GetNetworkConf() ([]UniFiNetworkConf, error) {
-	if err := c.login(); err != nil {
+	if err := c.maybeLogin(); err != nil {
 		return nil, err
 	}
 	var result unifiResponse[[]UniFiNetworkConf]
