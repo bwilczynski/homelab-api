@@ -26,7 +26,11 @@ func buildClients(cfg *config.Config, logger *slog.Logger) (map[string]*adapters
 			}
 			synologyClients[b.Name] = adapters.NewSynologyClient(b.Name, b.Host, b.Username, b.Password, b.AuthVersion, b.InsecureTLS, logger, loc)
 		case config.BackendTypeUniFi:
-			unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password, b.InsecureTLS)
+			if b.APIKey != "" {
+				unifiClients[b.Name] = adapters.NewUniFiClientWithAPIKey(b.Host, b.APIKey, b.InsecureTLS)
+			} else {
+				unifiClients[b.Name] = adapters.NewUniFiClient(b.Host, b.Username, b.Password, b.InsecureTLS)
+			}
 		}
 	}
 	return synologyClients, unifiClients

@@ -32,12 +32,19 @@ backends:
   #   username: admin
   #   password: ${NAS02_PASS}
 
+  # UniFi with API key (recommended for UniFi Cloud Gateway / UniFi OS):
   - name: unifi
     type: unifi
     host: 192.168.1.1
-    username: admin
-    password: ${UNIFI_PASS}
+    api_key: ${UNIFI_API_KEY}
     # client_history_days: 30  # optional; how many days of offline client history to include (default: 30)
+
+  # UniFi with username/password (legacy controllers):
+  # - name: unifi
+  #   type: unifi
+  #   host: 192.168.1.1
+  #   username: admin
+  #   password: ${UNIFI_PASS}
 
 # Software update tracking configuration.
 # All containers with a version tag are discovered automatically from running backends.
