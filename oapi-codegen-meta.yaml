@@ -1,0 +1,9 @@
+package: meta
+generate:
+  chi-server: true
+  strict-server: true
+  models: true
+output: internal/meta/api.gen.go
+output-options:
+  include-tags:
+    - meta

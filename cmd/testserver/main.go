@@ -17,6 +17,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/docker"
+	"github.com/bwilczynski/homelab-api/internal/meta"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
@@ -253,6 +254,16 @@ func main() {
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
 	})
+
+	// Meta (auth, version)
+	metaSvc := meta.NewService("test", "test", false, "")
+	meta.HandlerWithOptions(
+		meta.NewStrictHandler(meta.NewHandler(metaSvc), nil),
+		meta.ChiServerOptions{
+			BaseRouter:       r,
+			ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+		},
+	)
 
 	addr := ":" + port()
 	logger.Info("starting test server", "addr", addr)

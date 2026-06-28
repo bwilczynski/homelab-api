@@ -22,6 +22,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/config"
 	"github.com/bwilczynski/homelab-api/internal/docker"
 	"github.com/bwilczynski/homelab-api/internal/health"
+	"github.com/bwilczynski/homelab-api/internal/meta"
 	"github.com/bwilczynski/homelab-api/internal/network"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
@@ -79,6 +80,8 @@ func main() {
 
 	discoverAPIs(synologyClients)
 
+	metaSvc := meta.NewService(apiVersion, serverVersion, cfg.Auth.Enabled, cfg.Auth.Issuer)
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -95,27 +98,34 @@ func main() {
 		RecoverPanics: true,
 	}))
 
-	r.Get("/.well-known/homelab", func(w http.ResponseWriter, r *http.Request) {
+	meta.HandlerWithOptions(
+		meta.NewStrictHandler(meta.NewHandler(metaSvc), nil),
+		meta.ChiServerOptions{
+			BaseRouter:       r,
+			ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,
+		},
+	)
+
+	r.Get("/.well-known/homelab", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		type response struct {
-			Enabled bool   `json:"enabled"`
-			Issuer  string `json:"issuer,omitempty"`
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</meta/auth>; rel="successor-version"`)
+		enabled, issuer := metaSvc.GetAuth()
+		resp := meta.AuthDiscovery{Enabled: enabled}
+		if issuer != "" {
+			resp.Issuer = &issuer
 		}
-		_ = json.NewEncoder(w).Encode(response{
-			Enabled: cfg.Auth.Enabled,
-			Issuer:  cfg.Auth.Issuer,
-		})
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 
-	r.Get("/version", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/version", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		type response struct {
-			APIVersion    string `json:"apiVersion"`
-			ServerVersion string `json:"serverVersion"`
-		}
-		_ = json.NewEncoder(w).Encode(response{
-			APIVersion:    apiVersion,
-			ServerVersion: serverVersion,
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</meta/version>; rel="successor-version"`)
+		apiVer, serverVer := metaSvc.GetVersion()
+		_ = json.NewEncoder(w).Encode(meta.Version{
+			ApiVersion:    apiVer,
+			ServerVersion: serverVer,
 		})
 	})
 
