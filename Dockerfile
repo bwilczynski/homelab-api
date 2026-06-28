@@ -7,13 +7,14 @@ RUN npx --yes @redocly/cli@1.25.15 bundle spec/openapi/openapi.yaml -o spec/dist
 
 FROM golang:1.26-alpine AS builder
 WORKDIR /build
+ARG SERVER_VERSION=dev
 RUN apk add --no-cache make
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=spec /build/spec/dist/openapi.bundled.yaml spec/dist/openapi.bundled.yaml
 RUN SKIP_BUNDLE=true make generate
-RUN make build
+RUN make build SERVER_VERSION=${SERVER_VERSION}
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=builder /build/bin/server /server
