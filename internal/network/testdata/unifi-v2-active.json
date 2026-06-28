@@ -15,17 +15,7 @@
       "uptime": 27075,
       "essid": "homelab",
       "signal": -69,
-      "last_seen": 0,
-      "anomalies": -1,
-      "authorized": true,
-      "blocked": false,
-      "noted": false,
-      "type": "CLIENT",
-      "virtual_network_override_enabled": false,
-      "is_allowed_in_visual_programming": false,
-      "is_mlo": false,
-      "network_members_group_ids": [],
-      "tags": []
+      "last_seen": 0
     },
     {
       "id": "aabbcc000002",
@@ -42,17 +32,7 @@
       "uptime": 1024199,
       "essid": null,
       "signal": null,
-      "last_seen": 0,
-      "anomalies": -1,
-      "authorized": true,
-      "blocked": false,
-      "noted": false,
-      "type": "CLIENT",
-      "virtual_network_override_enabled": false,
-      "is_allowed_in_visual_programming": false,
-      "is_mlo": false,
-      "network_members_group_ids": [],
-      "tags": []
+      "last_seen": 0
     },
     {
       "id": "aabbcc000003",
@@ -69,17 +49,7 @@
       "uptime": 86400,
       "essid": "homelab-iot",
       "signal": -58,
-      "last_seen": 0,
-      "anomalies": -1,
-      "authorized": true,
-      "blocked": false,
-      "noted": false,
-      "type": "CLIENT",
-      "virtual_network_override_enabled": false,
-      "is_allowed_in_visual_programming": false,
-      "is_mlo": false,
-      "network_members_group_ids": [],
-      "tags": []
+      "last_seen": 0
     }
   ]
 }
