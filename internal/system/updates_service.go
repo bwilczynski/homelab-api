@@ -140,11 +140,19 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 	// Phase 3: assemble results.
 	items := make([]ContainerSystemUpdateDetail, 0, len(candidates))
 	for _, cc := range candidates {
+		// When no source is configured the status is genuinely unknown.
+		// When a source is configured but the first lookup hasn't succeeded yet,
+		// use Stale so consumers can distinguish the two cases.
+		defaultStatus := Unknown
+		if cc.repo != "" {
+			defaultStatus = Stale
+		}
+
 		item := ContainerSystemUpdateDetail{
 			Id:             cc.device + "." + cc.name,
 			Name:           cc.name,
 			Type:           ContainerSystemUpdateDetailTypeContainer,
-			Status:         Unknown,
+			Status:         defaultStatus,
 			CurrentVersion: cc.tag,
 			LatestVersion:  cc.tag,
 			CheckedAt:      checkedAt,

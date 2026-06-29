@@ -746,6 +746,66 @@ func TestListSystemUpdates_SkipsNonDockerBackend(t *testing.T) {
 	}
 }
 
+func TestListSystemUpdates_StaleWhenSourceConfiguredButLookupFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	overrideGitHubClient(t, srv)
+
+	svc := NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: &mockDSMBackend{
+			conts: &adapters.DSMContainerListResponse{
+				Containers: []adapters.DSMContainer{
+					{Name: "app", Image: "ghcr.io/owner/repo:v1.2.3"},
+				},
+			},
+		}, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+		nil,
+	)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Status != Stale {
+		t.Errorf("expected status Stale when source configured but lookup fails, got %s", result.Items[0].Status)
+	}
+}
+
+func TestListSystemUpdates_UnknownWhenNoSourceConfigured(t *testing.T) {
+	svc := NewService(
+		map[string]DSMBackendConfig{"nas-01": {Backend: &mockDSMBackend{
+			conts: &adapters.DSMContainerListResponse{
+				Containers: []adapters.DSMContainer{
+					// registry.example.com is not ghcr.io and has no explicit source entry.
+					{Name: "app", Image: "registry.example.com/owner/app:v1.2.3"},
+				},
+			},
+		}, DockerEnabled: true}},
+		map[string]UniFiBackend{},
+		config.UpdatesConfig{},
+		slog.Default(),
+		nil,
+	)
+
+	result, err := svc.ListSystemUpdates(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Status != Unknown {
+		t.Errorf("expected status Unknown when no source configured, got %s", result.Items[0].Status)
+	}
+}
+
 // --- Tests: helper functions ---
 
 func TestSplitImageTag(t *testing.T) {
