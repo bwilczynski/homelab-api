@@ -25,16 +25,16 @@ type mockBackupBackend struct {
 func (m *mockBackupBackend) SupportsBackups() bool    { return true }
 func (m *mockBackupBackend) Location() *time.Location { return time.UTC }
 
-func (m *mockBackupBackend) ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error) {
+func (m *mockBackupBackend) ListBackupTasks(ctx context.Context) (*adapters.DSMBackupTaskListResponse, error) {
 	return m.tasks, m.tasksErr
 }
-func (m *mockBackupBackend) GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error) {
+func (m *mockBackupBackend) GetBackupTaskDetail(ctx context.Context, taskID int) (*adapters.DSMBackupTaskDetailResponse, error) {
 	return m.taskDetail, m.detailErr
 }
-func (m *mockBackupBackend) GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error) {
+func (m *mockBackupBackend) GetBackupTaskStatus(ctx context.Context, taskID int) (*adapters.DSMBackupTaskStatusResponse, error) {
 	return m.taskStatus, m.statusErr
 }
-func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error) {
+func (m *mockBackupBackend) GetBackupTarget(ctx context.Context, taskID int) (*adapters.DSMBackupTargetResponse, error) {
 	return m.target, m.targetErr
 }
 

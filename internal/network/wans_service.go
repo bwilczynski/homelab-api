@@ -9,8 +9,8 @@ import (
 
 // WANsBackend is the narrow interface for WAN operations.
 type WANsBackend interface {
-	GetNetworkConf() ([]adapters.UniFiNetworkConf, error)
-	GetDevices() ([]adapters.UniFiDevice, error)
+	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
+	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
 }
 
 // ListWANs returns all WAN interfaces from all backends.
@@ -20,11 +20,11 @@ func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 		if s.monitor != nil && !s.monitor.Available(cb.controller) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf()
+		networks, err := cb.unifi.GetNetworkConf(ctx)
 		if err != nil {
 			return WanList{}, fmt.Errorf("get network conf from %s: %w", cb.controller, err)
 		}
-		devices, err := cb.unifi.GetDevices()
+		devices, err := cb.unifi.GetDevices(ctx)
 		if err != nil {
 			return WanList{}, fmt.Errorf("get devices from %s: %w", cb.controller, err)
 		}
@@ -53,11 +53,11 @@ func (s *Service) GetWAN(ctx context.Context, id string) (WanDetail, bool, error
 	if err != nil {
 		return WanDetail{}, false, nil
 	}
-	networks, err := backend.GetNetworkConf()
+	networks, err := backend.GetNetworkConf(ctx)
 	if err != nil {
 		return WanDetail{}, false, fmt.Errorf("get network conf: %w", err)
 	}
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
 		return WanDetail{}, false, fmt.Errorf("get devices: %w", err)
 	}

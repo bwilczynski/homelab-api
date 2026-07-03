@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -83,6 +84,7 @@ func NewSynologyClient(name, host, user, pass, authVersion string, insecureTLS b
 		logger:      logger,
 		loc:         loc,
 		client: &http.Client{
+			Timeout:   backendRequestTimeout,
 			Transport: tlsTransport(insecureTLS),
 		},
 	}
@@ -118,7 +120,7 @@ func (e *DSMAPIError) Error() string {
 
 // discoverAuth queries the DSM's API info endpoint to find the correct path and
 // maximum supported version for SYNO.API.Auth. The result is cached on the client.
-func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
+func (c *SynologyClient) discoverAuth(ctx context.Context) (*dsmAPIInfo, error) {
 	if c.authInfo != nil {
 		return c.authInfo, nil
 	}
@@ -128,7 +130,7 @@ func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
 		"method":  {"query"},
 		"query":   {"SYNO.API.Auth"},
 	}
-	resp, err := c.rawGet("query.cgi", params)
+	resp, err := c.rawGet(ctx, "query.cgi", params)
 	if err != nil {
 		return nil, fmt.Errorf("discover auth API: %w", err)
 	}
@@ -153,12 +155,16 @@ func (c *SynologyClient) discoverAuth() (*dsmAPIInfo, error) {
 // Ping reports whether the DSM is reachable by making a short-timeout unauthenticated
 // request to the API info endpoint. It satisfies the adapters.HealthChecker interface.
 // If API discovery previously failed, Ping retries it after a successful connectivity check.
-func (c *SynologyClient) Ping() error {
+func (c *SynologyClient) Ping(ctx context.Context) error {
 	cl := &http.Client{
 		Timeout:   3 * time.Second,
 		Transport: tlsTransport(c.insecureTLS),
 	}
-	resp, err := cl.Get(fmt.Sprintf("https://%s/webapi/query.cgi", c.host))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://%s/webapi/query.cgi", c.host), nil)
+	if err != nil {
+		return fmt.Errorf("synology unreachable: %w", err)
+	}
+	resp, err := cl.Do(req)
 	if err != nil {
 		return fmt.Errorf("synology unreachable: %w", err)
 	}
@@ -167,21 +173,21 @@ func (c *SynologyClient) Ping() error {
 	failed := c.discoveryFailed
 	c.mu.RUnlock()
 	if failed {
-		_ = c.DiscoverAPIs() // outcome logged inside DiscoverAPIs; retried on next Ping if still failing
+		_ = c.DiscoverAPIs(ctx) // outcome logged inside DiscoverAPIs; retried on next Ping if still failing
 	}
 	return nil
 }
 
 // DiscoverAPIs queries the DSM for its full API catalogue and caches which APIs are
 // available. Logs the outcome and retries automatically via Ping when the backend recovers.
-func (c *SynologyClient) DiscoverAPIs() error {
+func (c *SynologyClient) DiscoverAPIs(ctx context.Context) error {
 	params := url.Values{
 		"api":     {"SYNO.API.Info"},
 		"version": {"1"},
 		"method":  {"query"},
 		"query":   {"all"},
 	}
-	resp, err := c.rawGet("query.cgi", params)
+	resp, err := c.rawGet(ctx, "query.cgi", params)
 	if err != nil {
 		return c.failDiscovery(fmt.Errorf("discover APIs: %w", err))
 	}
@@ -245,8 +251,8 @@ func (c *SynologyClient) SupportsBackups() bool {
 
 // loginLocked performs the login work. Caller must hold c.mu for writing;
 // this also serializes access to c.authInfo, which is only read/written here.
-func (c *SynologyClient) loginLocked() error {
-	info, err := c.discoverAuth()
+func (c *SynologyClient) loginLocked(ctx context.Context) error {
+	info, err := c.discoverAuth(ctx)
 	if err != nil {
 		return fmt.Errorf("synology login: %w", err)
 	}
@@ -259,7 +265,7 @@ func (c *SynologyClient) loginLocked() error {
 		"passwd":  {c.pass},
 		"format":  {"sid"},
 	}
-	resp, err := c.rawGet(info.path, params)
+	resp, err := c.rawGet(ctx, info.path, params)
 	if err != nil {
 		return fmt.Errorf("synology login: %w", err)
 	}
@@ -283,7 +289,7 @@ func (c *SynologyClient) loginLocked() error {
 
 // ensureSession returns the current SID, logging in if needed. Double-checked
 // locking keeps cached-session calls on the RLock fast path.
-func (c *SynologyClient) ensureSession() (string, error) {
+func (c *SynologyClient) ensureSession(ctx context.Context) (string, error) {
 	c.mu.RLock()
 	sid := c.sid
 	c.mu.RUnlock()
@@ -295,7 +301,7 @@ func (c *SynologyClient) ensureSession() (string, error) {
 	if c.sid != "" {
 		return c.sid, nil
 	}
-	if err := c.loginLocked(); err != nil {
+	if err := c.loginLocked(ctx); err != nil {
 		return "", err
 	}
 	return c.sid, nil
@@ -304,12 +310,12 @@ func (c *SynologyClient) ensureSession() (string, error) {
 // Call makes an authenticated API call and returns the raw data payload.
 // If DSM rejects the session as expired, it invalidates the cached SID,
 // re-authenticates, and retries the call once.
-func (c *SynologyClient) Call(api, method, version string, extra url.Values) (json.RawMessage, error) {
-	sid, err := c.ensureSession()
+func (c *SynologyClient) Call(ctx context.Context, api, method, version string, extra url.Values) (json.RawMessage, error) {
+	sid, err := c.ensureSession(ctx)
 	if err != nil {
 		return nil, err
 	}
-	data, err := c.callWithSID(sid, api, method, version, extra)
+	data, err := c.callWithSID(ctx, sid, api, method, version, extra)
 	if err == nil {
 		return data, nil
 	}
@@ -320,15 +326,15 @@ func (c *SynologyClient) Call(api, method, version string, extra url.Values) (js
 
 	c.logger.Info("synology session expired; re-authenticating", "backend", c.name, "api", api, "code", apiErr.Code)
 	c.invalidateSession(sid)
-	sid, err = c.ensureSession()
+	sid, err = c.ensureSession(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return c.callWithSID(sid, api, method, version, extra)
+	return c.callWithSID(ctx, sid, api, method, version, extra)
 }
 
 // callWithSID performs a single authenticated request using the given SID.
-func (c *SynologyClient) callWithSID(sid, api, method, version string, extra url.Values) (json.RawMessage, error) {
+func (c *SynologyClient) callWithSID(ctx context.Context, sid, api, method, version string, extra url.Values) (json.RawMessage, error) {
 	params := url.Values{
 		"api":     {api},
 		"method":  {method},
@@ -337,7 +343,7 @@ func (c *SynologyClient) callWithSID(sid, api, method, version string, extra url
 	}
 	maps.Copy(params, extra)
 
-	resp, err := c.rawGet("entry.cgi", params)
+	resp, err := c.rawGet(ctx, "entry.cgi", params)
 	if err != nil {
 		return nil, err
 	}
@@ -362,9 +368,13 @@ func (c *SynologyClient) invalidateSession(usedSID string) {
 	c.mu.Unlock()
 }
 
-func (c *SynologyClient) rawGet(endpoint string, params url.Values) (*SynologyResponse, error) {
+func (c *SynologyClient) rawGet(ctx context.Context, endpoint string, params url.Values) (*SynologyResponse, error) {
 	u := fmt.Sprintf("https://%s/webapi/%s?%s", c.host, endpoint, params.Encode())
-	resp, err := c.client.Get(u)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("synology request: %w", err)
+	}
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("synology request: %w", err)
 	}
@@ -587,8 +597,8 @@ type DSMDockerImageItem struct {
 }
 
 // ListContainers retrieves all containers from the DSM Docker API.
-func (c *SynologyClient) ListContainers() (*DSMContainerListResponse, error) {
-	data, err := c.Call("SYNO.Docker.Container", "list", "1", url.Values{
+func (c *SynologyClient) ListContainers(ctx context.Context) (*DSMContainerListResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Docker.Container", "list", "1", url.Values{
 		"limit":  {"0"},
 		"offset": {"0"},
 	})
@@ -603,8 +613,8 @@ func (c *SynologyClient) ListContainers() (*DSMContainerListResponse, error) {
 }
 
 // GetContainer retrieves a single container's details from the DSM Docker API.
-func (c *SynologyClient) GetContainer(name string) (*DSMContainerDetailResponse, error) {
-	data, err := c.Call("SYNO.Docker.Container", "get", "1", url.Values{
+func (c *SynologyClient) GetContainer(ctx context.Context, name string) (*DSMContainerDetailResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Docker.Container", "get", "1", url.Values{
 		"name": {name},
 	})
 	if err != nil {
@@ -618,8 +628,8 @@ func (c *SynologyClient) GetContainer(name string) (*DSMContainerDetailResponse,
 }
 
 // GetContainerResources retrieves resource usage for all containers.
-func (c *SynologyClient) GetContainerResources() (*DSMContainerResourceResponse, error) {
-	data, err := c.Call("SYNO.Docker.Container.Resource", "get", "1", nil)
+func (c *SynologyClient) GetContainerResources(ctx context.Context) (*DSMContainerResourceResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Docker.Container.Resource", "get", "1", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -685,8 +695,8 @@ type DSMDiskStat struct {
 }
 
 // GetSystemInfo retrieves static system information from the DSM.
-func (c *SynologyClient) GetSystemInfo() (*DSMSystemInfoResponse, error) {
-	data, err := c.Call("SYNO.Core.System", "info", "1", nil)
+func (c *SynologyClient) GetSystemInfo(ctx context.Context) (*DSMSystemInfoResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Core.System", "info", "1", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -698,8 +708,8 @@ func (c *SynologyClient) GetSystemInfo() (*DSMSystemInfoResponse, error) {
 }
 
 // GetSystemUtilization retrieves live utilization stats from the DSM.
-func (c *SynologyClient) GetSystemUtilization() (*DSMSystemUtilizationResponse, error) {
-	data, err := c.Call("SYNO.Core.System.Utilization", "get", "1", nil)
+func (c *SynologyClient) GetSystemUtilization(ctx context.Context) (*DSMSystemUtilizationResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Core.System.Utilization", "get", "1", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -754,8 +764,8 @@ type DSMStoragePool struct {
 }
 
 // GetStorageVolumes retrieves the list of storage volumes from the DSM.
-func (c *SynologyClient) GetStorageVolumes() (*DSMStorageVolumeResponse, error) {
-	data, err := c.Call("SYNO.Storage.CGI.Storage", "load_info", "1", nil)
+func (c *SynologyClient) GetStorageVolumes(ctx context.Context) (*DSMStorageVolumeResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Storage.CGI.Storage", "load_info", "1", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -767,32 +777,32 @@ func (c *SynologyClient) GetStorageVolumes() (*DSMStorageVolumeResponse, error) 
 }
 
 // StartContainer starts a container by name.
-func (c *SynologyClient) StartContainer(name string) error {
-	_, err := c.Call("SYNO.Docker.Container", "start", "1", url.Values{
+func (c *SynologyClient) StartContainer(ctx context.Context, name string) error {
+	_, err := c.Call(ctx, "SYNO.Docker.Container", "start", "1", url.Values{
 		"name": {name},
 	})
 	return mapContainerNotFound(name, err)
 }
 
 // StopContainer stops a container by name.
-func (c *SynologyClient) StopContainer(name string) error {
-	_, err := c.Call("SYNO.Docker.Container", "stop", "1", url.Values{
+func (c *SynologyClient) StopContainer(ctx context.Context, name string) error {
+	_, err := c.Call(ctx, "SYNO.Docker.Container", "stop", "1", url.Values{
 		"name": {name},
 	})
 	return mapContainerNotFound(name, err)
 }
 
 // RestartContainer restarts a container by name.
-func (c *SynologyClient) RestartContainer(name string) error {
-	_, err := c.Call("SYNO.Docker.Container", "restart", "1", url.Values{
+func (c *SynologyClient) RestartContainer(ctx context.Context, name string) error {
+	_, err := c.Call(ctx, "SYNO.Docker.Container", "restart", "1", url.Values{
 		"name": {name},
 	})
 	return mapContainerNotFound(name, err)
 }
 
 // ListDockerNetworks retrieves all Docker networks from the DSM API.
-func (c *SynologyClient) ListDockerNetworks() (*DSMDockerNetworkListResponse, error) {
-	data, err := c.Call("SYNO.Docker.Network", "list", "1", nil)
+func (c *SynologyClient) ListDockerNetworks(ctx context.Context) (*DSMDockerNetworkListResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Docker.Network", "list", "1", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -804,9 +814,9 @@ func (c *SynologyClient) ListDockerNetworks() (*DSMDockerNetworkListResponse, er
 }
 
 // ListDockerImages retrieves all Docker images from the DSM API.
-func (c *SynologyClient) ListDockerImages() (*DSMDockerImageListResponse, error) {
+func (c *SynologyClient) ListDockerImages(ctx context.Context) (*DSMDockerImageListResponse, error) {
 	params := url.Values{"limit": {"-1"}, "offset": {"0"}, "show_dsm": {"false"}}
-	data, err := c.Call("SYNO.Docker.Image", "list", "1", params)
+	data, err := c.Call(ctx, "SYNO.Docker.Image", "list", "1", params)
 	if err != nil {
 		return nil, err
 	}
@@ -929,8 +939,8 @@ type DSMBackupTargetResponse struct {
 }
 
 // ListBackupTasks retrieves all backup tasks from the Hyper Backup service.
-func (c *SynologyClient) ListBackupTasks() (*DSMBackupTaskListResponse, error) {
-	data, err := c.Call("SYNO.Backup.Task", "list", "1", nil)
+func (c *SynologyClient) ListBackupTasks(ctx context.Context) (*DSMBackupTaskListResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Backup.Task", "list", "1", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -942,8 +952,8 @@ func (c *SynologyClient) ListBackupTasks() (*DSMBackupTaskListResponse, error) {
 }
 
 // ListScheduledTasks retrieves scheduled tasks from the DSM task scheduler.
-func (c *SynologyClient) ListScheduledTasks() (*DSMTaskSchedulerListResponse, error) {
-	data, err := c.Call("SYNO.Core.TaskScheduler", "list", "2", url.Values{
+func (c *SynologyClient) ListScheduledTasks(ctx context.Context) (*DSMTaskSchedulerListResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Core.TaskScheduler", "list", "2", url.Values{
 		"offset": {"0"},
 		"limit":  {"50"},
 	})
@@ -958,8 +968,8 @@ func (c *SynologyClient) ListScheduledTasks() (*DSMTaskSchedulerListResponse, er
 }
 
 // ListBackupLogs retrieves recent log entries for a specific backup task.
-func (c *SynologyClient) ListBackupLogs(taskID int) (*DSMBackupLogListResponse, error) {
-	data, err := c.Call("SYNO.SDS.Backup.Client.Common.Log", "list", "1", url.Values{
+func (c *SynologyClient) ListBackupLogs(ctx context.Context, taskID int) (*DSMBackupLogListResponse, error) {
+	data, err := c.Call(ctx, "SYNO.SDS.Backup.Client.Common.Log", "list", "1", url.Values{
 		"task_id": {fmt.Sprintf("%d", taskID)},
 		"offset":  {"0"},
 		"limit":   {"100"},
@@ -975,8 +985,8 @@ func (c *SynologyClient) ListBackupLogs(taskID int) (*DSMBackupLogListResponse, 
 }
 
 // GetBackupTaskDetail retrieves detailed task info (source folders, schedule) from SYNO.Backup.Task get.
-func (c *SynologyClient) GetBackupTaskDetail(taskID int) (*DSMBackupTaskDetailResponse, error) {
-	data, err := c.Call("SYNO.Backup.Task", "get", "1", url.Values{
+func (c *SynologyClient) GetBackupTaskDetail(ctx context.Context, taskID int) (*DSMBackupTaskDetailResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Backup.Task", "get", "1", url.Values{
 		"task_id":    {fmt.Sprintf("%d", taskID)},
 		"additional": {`["repository","schedule"]`},
 	})
@@ -991,8 +1001,8 @@ func (c *SynologyClient) GetBackupTaskDetail(taskID int) (*DSMBackupTaskDetailRe
 }
 
 // GetBackupTaskStatus retrieves last/next run times and result from SYNO.Backup.Task status.
-func (c *SynologyClient) GetBackupTaskStatus(taskID int) (*DSMBackupTaskStatusResponse, error) {
-	data, err := c.Call("SYNO.Backup.Task", "status", "1", url.Values{
+func (c *SynologyClient) GetBackupTaskStatus(ctx context.Context, taskID int) (*DSMBackupTaskStatusResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Backup.Task", "status", "1", url.Values{
 		"task_id":    {fmt.Sprintf("%d", taskID)},
 		"blOnline":   {"false"},
 		"additional": {`["last_bkp_time","next_bkp_time","last_bkp_result","is_modified","last_bkp_progress","last_bkp_success_version"]`},
@@ -1008,8 +1018,8 @@ func (c *SynologyClient) GetBackupTaskStatus(taskID int) (*DSMBackupTaskStatusRe
 }
 
 // GetBackupTarget retrieves backup target info (used size, online status) from SYNO.Backup.Target get.
-func (c *SynologyClient) GetBackupTarget(taskID int) (*DSMBackupTargetResponse, error) {
-	data, err := c.Call("SYNO.Backup.Target", "get", "1", url.Values{
+func (c *SynologyClient) GetBackupTarget(ctx context.Context, taskID int) (*DSMBackupTargetResponse, error) {
+	data, err := c.Call(ctx, "SYNO.Backup.Target", "get", "1", url.Values{
 		"task_id":    {fmt.Sprintf("%d", taskID)},
 		"additional": {`["is_online","used_size","check_task_key","check_auth","account_meta"]`},
 	})
