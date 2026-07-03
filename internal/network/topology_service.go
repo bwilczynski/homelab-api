@@ -23,20 +23,20 @@ func (s *Service) GetTopology(ctx context.Context, includeClients bool) (Network
 	var nodes []TopologyNode
 	var edges []TopologyEdge
 
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 
-		devices, err := cb.unifi.GetDevices()
+		devices, err := entry.Backend.GetDevices()
 		if err != nil {
-			return NetworkTopology{}, fmt.Errorf("get unifi devices from %s: %w", cb.controller, err)
+			return NetworkTopology{}, fmt.Errorf("get unifi devices from %s: %w", entry.Name, err)
 		}
 		macToDevice := buildMacToDevice(devices)
 
 		// Pass 1: device nodes + device-device uplink edges.
 		for _, d := range devices {
-			node, err := buildDeviceNode(cb.controller, d)
+			node, err := buildDeviceNode(entry.Name, d)
 			if err != nil {
 				return NetworkTopology{}, fmt.Errorf("build device node: %w", err)
 			}
@@ -44,7 +44,7 @@ func (s *Service) GetTopology(ctx context.Context, includeClients bool) (Network
 
 			if d.Uplink != nil && d.Uplink.UplinkMAC != "" {
 				if upstream, ok := macToDevice[normalizeMac(d.Uplink.UplinkMAC)]; ok {
-					edge, err := buildDeviceUplinkEdge(cb.controller, d, upstream)
+					edge, err := buildDeviceUplinkEdge(entry.Name, d, upstream)
 					if err != nil {
 						return NetworkTopology{}, fmt.Errorf("build uplink edge: %w", err)
 					}
@@ -57,36 +57,36 @@ func (s *Service) GetTopology(ctx context.Context, includeClients bool) (Network
 			continue
 		}
 
-		stas, err := cb.unifi.GetClients()
+		stas, err := entry.Backend.GetClients()
 		if err != nil {
-			return NetworkTopology{}, fmt.Errorf("get unifi clients from %s: %w", cb.controller, err)
+			return NetworkTopology{}, fmt.Errorf("get unifi clients from %s: %w", entry.Name, err)
 		}
 
-		offline, err := cb.unifi.GetOfflineClients(s.historyDays)
+		offline, err := entry.Backend.GetOfflineClients(s.historyDays)
 		if err != nil {
-			return NetworkTopology{}, fmt.Errorf("get offline clients from %s: %w", cb.controller, err)
+			return NetworkTopology{}, fmt.Errorf("get offline clients from %s: %w", entry.Name, err)
 		}
 
 		// Pass 2: online client nodes + edges.
 		for _, sta := range stas {
-			node, err := buildOnlineClientNode(cb.controller, sta)
+			node, err := buildOnlineClientNode(entry.Name, sta)
 			if err != nil {
 				return NetworkTopology{}, fmt.Errorf("build client node: %w", err)
 			}
 			nodes = append(nodes, node)
-			if edge := buildOnlineClientEdge(cb.controller, sta, macToDevice); edge != nil {
+			if edge := buildOnlineClientEdge(entry.Name, sta, macToDevice); edge != nil {
 				edges = append(edges, *edge)
 			}
 		}
 
 		// Pass 3: offline client nodes + edges.
 		for _, c := range offline {
-			node, err := buildOfflineClientNode(cb.controller, c)
+			node, err := buildOfflineClientNode(entry.Name, c)
 			if err != nil {
 				return NetworkTopology{}, fmt.Errorf("build offline client node: %w", err)
 			}
 			nodes = append(nodes, node)
-			if edge := buildOfflineClientEdge(cb.controller, c, macToDevice); edge != nil {
+			if edge := buildOfflineClientEdge(entry.Name, c, macToDevice); edge != nil {
 				edges = append(edges, *edge)
 			}
 		}

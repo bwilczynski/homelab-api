@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
+	"github.com/bwilczynski/homelab-api/internal/registry"
 )
 
 // UniFiBackend is the combined interface satisfied by the UniFi adapter.
@@ -22,14 +22,9 @@ type UniFiBackend interface {
 	WANsBackend
 }
 
-type controllerBackend struct {
-	controller string
-	unifi      UniFiBackend
-}
-
 // Service implements network domain business logic.
 type Service struct {
-	backends    []controllerBackend
+	backends    []registry.Entry[UniFiBackend]
 	logger      *slog.Logger
 	monitor     adapters.AvailabilityChecker // optional; nil means all backends available
 	historyDays int
@@ -38,21 +33,15 @@ type Service struct {
 // NewService creates a new network service with one or more UniFi backends.
 // monitor may be nil; when non-nil, unreachable backends are skipped.
 func NewService(backends map[string]UniFiBackend, historyDays int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
-	cbs := make([]controllerBackend, 0, len(backends))
-	for controller, unifi := range backends {
-		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi})
-	}
-	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
-	return &Service{backends: cbs, historyDays: historyDays, logger: logger, monitor: monitor}
+	return &Service{backends: registry.New(backends), historyDays: historyDays, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {
-	for _, cb := range s.backends {
-		if cb.controller == controller {
-			return cb.unifi, nil
-		}
+	backend, ok := registry.Find(s.backends, controller)
+	if !ok {
+		return nil, fmt.Errorf("unknown controller %q: %w", controller, apierrors.ErrNotFound)
 	}
-	return nil, fmt.Errorf("unknown controller %q: %w", controller, apierrors.ErrNotFound)
+	return backend, nil
 }
 
 // toKebab converts a display name to kebab-case (lowercase, spaces and special chars → hyphens).
@@ -66,11 +55,11 @@ func toKebab(name string) string {
 
 // parseID splits a composite ID "{controller}.{suffix}" into its parts.
 func parseID(id string) (controller, suffix string, ok bool) {
-	dot := strings.IndexByte(id, '.')
-	if dot <= 0 || dot == len(id)-1 {
+	controller, suffix, err := apierrors.ParseCompositeID(id, "ID", "controller.suffix")
+	if err != nil {
 		return "", "", false
 	}
-	return id[:dot], id[dot+1:], true
+	return controller, suffix, true
 }
 
 func normalizeMac(mac string) string {

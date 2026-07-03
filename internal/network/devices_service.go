@@ -16,16 +16,16 @@ type DevicesBackend interface {
 // ListDevices retrieves all managed network devices from all backends.
 func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 	var items []NetworkDevice
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		raw, err := cb.unifi.GetDevices()
+		raw, err := entry.Backend.GetDevices()
 		if err != nil {
-			return NetworkDeviceList{}, fmt.Errorf("get unifi devices from %s: %w", cb.controller, err)
+			return NetworkDeviceList{}, fmt.Errorf("get unifi devices from %s: %w", entry.Name, err)
 		}
 		for _, d := range raw {
-			items = append(items, deviceToList(cb.controller, d))
+			items = append(items, deviceToList(entry.Name, d))
 		}
 	}
 	if items == nil {

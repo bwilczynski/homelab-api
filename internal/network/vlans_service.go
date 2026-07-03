@@ -17,19 +17,19 @@ type VLANsBackend interface {
 // ListVLANs returns all LAN networks from all backends as a flat list.
 func (s *Service) ListVLANs(ctx context.Context) (VlanList, error) {
 	var items []Vlan
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf()
+		networks, err := entry.Backend.GetNetworkConf()
 		if err != nil {
-			return VlanList{}, fmt.Errorf("get network conf from %s: %w", cb.controller, err)
+			return VlanList{}, fmt.Errorf("get network conf from %s: %w", entry.Name, err)
 		}
 		for _, n := range networks {
 			if !isLanNetwork(n) {
 				continue
 			}
-			items = append(items, networkToVlan(cb.controller, n))
+			items = append(items, networkToVlan(entry.Name, n))
 		}
 	}
 	if items == nil {

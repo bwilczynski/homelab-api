@@ -3,12 +3,12 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
+	"github.com/bwilczynski/homelab-api/internal/registry"
 )
 
 // BackupBackend defines the adapter interface for backup operations.
@@ -21,59 +21,44 @@ type BackupBackend interface {
 	GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error)
 }
 
-type backupDeviceBackend struct {
-	device  string
-	backend BackupBackend
-}
-
-func newBackupDeviceBackends(backends map[string]BackupBackend) []backupDeviceBackend {
-	dbs := make([]backupDeviceBackend, 0, len(backends))
-	for device, backend := range backends {
-		dbs = append(dbs, backupDeviceBackend{device: device, backend: backend})
-	}
-	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
-	return dbs
-}
-
 func (s *Service) findBackupBackend(device string) (BackupBackend, error) {
-	for _, db := range s.backupBackends {
-		if db.device == device {
-			if !db.backend.SupportsBackups() {
-				return nil, fmt.Errorf("device %q does not support backups: %w", device, apierrors.ErrNotFound)
-			}
-			return db.backend, nil
-		}
+	backend, ok := registry.Find(s.backupBackends, device)
+	if !ok {
+		return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 	}
-	return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
+	if !backend.SupportsBackups() {
+		return nil, fmt.Errorf("device %q does not support backups: %w", device, apierrors.ErrNotFound)
+	}
+	return backend, nil
 }
 
 // ListBackupTasks returns backup tasks from all (or a filtered) backends.
 func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTaskList, error) {
 	var items []BackupTask
-	for _, db := range s.backupBackends {
-		if device != nil && *device != db.device {
+	for _, entry := range s.backupBackends {
+		if device != nil && *device != entry.Name {
 			continue
 		}
-		if !db.backend.SupportsBackups() {
+		if !entry.Backend.SupportsBackups() {
 			continue
 		}
-		if s.monitor != nil && !s.monitor.Available(db.device) {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 
-		tasks, err := db.backend.ListBackupTasks()
+		tasks, err := entry.Backend.ListBackupTasks()
 		if err != nil {
-			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
+			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", entry.Name, err)
 		}
 		for _, t := range tasks.TaskList {
-			status, err := db.backend.GetBackupTaskStatus(t.TaskID)
+			status, err := entry.Backend.GetBackupTaskStatus(t.TaskID)
 			if err != nil {
 				s.logger.Warn("backup task status lookup failed",
-					"device", db.device, "task_id", t.TaskID, "err", err)
+					"device", entry.Name, "task_id", t.TaskID, "err", err)
 			}
 			items = append(items, BackupTask{
-				Device:     db.device,
-				Id:         fmt.Sprintf("%s.%d", db.device, t.TaskID),
+				Device:     entry.Name,
+				Id:         fmt.Sprintf("%s.%d", entry.Name, t.TaskID),
 				Name:       t.Name,
 				Status:     mapBackupStatus(t.State),
 				LastResult: mapBackupResult(status),
@@ -208,11 +193,7 @@ func mapBackupResult(status *adapters.DSMBackupTaskStatusResponse) BackupTaskRes
 
 // parseTaskID splits a composite ID "device.taskId" into its parts.
 func parseTaskID(id string) (device, taskID string, err error) {
-	parts := strings.SplitN(id, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid task ID %q: expected format device.taskId: %w", id, apierrors.ErrNotFound)
-	}
-	return parts[0], parts[1], nil
+	return apierrors.ParseCompositeID(id, "task ID", "device.taskId")
 }
 
 // mapBackupStatus converts a DSM backup task state string to BackupTaskStatus.

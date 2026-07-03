@@ -16,17 +16,17 @@ type WANsBackend interface {
 // ListWANs returns all WAN interfaces from all backends.
 func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 	var items []Wan
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf()
+		networks, err := entry.Backend.GetNetworkConf()
 		if err != nil {
-			return WanList{}, fmt.Errorf("get network conf from %s: %w", cb.controller, err)
+			return WanList{}, fmt.Errorf("get network conf from %s: %w", entry.Name, err)
 		}
-		devices, err := cb.unifi.GetDevices()
+		devices, err := entry.Backend.GetDevices()
 		if err != nil {
-			return WanList{}, fmt.Errorf("get devices from %s: %w", cb.controller, err)
+			return WanList{}, fmt.Errorf("get devices from %s: %w", entry.Name, err)
 		}
 		gateway := findGateway(devices)
 		for _, n := range networks {
@@ -34,7 +34,7 @@ func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 				continue
 			}
 			iface := resolveWanIface(gateway, n.WanNetworkGroup)
-			items = append(items, buildWan(cb.controller, n, iface, gateway))
+			items = append(items, buildWan(entry.Name, n, iface, gateway))
 		}
 	}
 	if items == nil {

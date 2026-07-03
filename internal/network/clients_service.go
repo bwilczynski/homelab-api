@@ -19,25 +19,25 @@ type ClientsBackend interface {
 // ListClients retrieves clients from all backends. status filters by "online", "offline", or "" for all.
 func (s *Service) ListClients(ctx context.Context, status string) (NetworkClientList, error) {
 	var items []NetworkClient
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 		var raw []adapters.UniFiClientV2
 		var err error
 		switch status {
 		case "online":
-			raw, err = cb.unifi.GetActiveClients()
+			raw, err = entry.Backend.GetActiveClients()
 		case "offline":
-			raw, err = cb.unifi.GetOfflineClients(s.historyDays)
+			raw, err = entry.Backend.GetOfflineClients(s.historyDays)
 		default:
-			raw, err = cb.unifi.GetAllClients(s.historyDays)
+			raw, err = entry.Backend.GetAllClients(s.historyDays)
 		}
 		if err != nil {
-			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", cb.controller, err)
+			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", entry.Name, err)
 		}
 		for _, c := range raw {
-			items = append(items, clientToListV2(cb.controller, c))
+			items = append(items, clientToListV2(entry.Name, c))
 		}
 	}
 	if items == nil {

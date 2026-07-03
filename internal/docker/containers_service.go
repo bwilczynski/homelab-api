@@ -22,25 +22,25 @@ type ContainersBackend interface {
 // ListContainers returns all containers with their resource usage from all backends.
 func (s *Service) ListContainers(ctx context.Context, device *string) (ContainerList, error) {
 	var items []Container
-	for _, db := range s.backends {
-		if device != nil && *device != db.device {
+	for _, entry := range s.backends {
+		if device != nil && *device != entry.Name {
 			continue
 		}
-		if !db.backend.SupportsContainers() {
+		if !entry.Backend.SupportsContainers() {
 			continue
 		}
-		if s.monitor != nil && !s.monitor.Available(db.device) {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 
-		containers, err := db.backend.ListContainers()
+		containers, err := entry.Backend.ListContainers()
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
+			return ContainerList{}, fmt.Errorf("list containers from %s: %w", entry.Name, err)
 		}
 
-		resources, err := db.backend.GetContainerResources()
+		resources, err := entry.Backend.GetContainerResources()
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+			return ContainerList{}, fmt.Errorf("get container resources from %s: %w", entry.Name, err)
 		}
 
 		resourceMap := make(map[string]adapters.DSMContainerResource, len(resources.Resources))
@@ -49,7 +49,7 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 		}
 
 		for _, c := range containers.Containers {
-			items = append(items, mapContainer(db.device, c, resourceMap[c.Name], 0))
+			items = append(items, mapContainer(entry.Name, c, resourceMap[c.Name], 0))
 		}
 	}
 	if items == nil {

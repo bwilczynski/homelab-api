@@ -21,11 +21,11 @@ type SSIDsBackend interface {
 func (s *Service) ListSSIDs(_ context.Context) (SsidList, error) {
 	var items []Ssid
 
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		controller, backend := cb.controller, cb.unifi
+		controller, backend := entry.Name, entry.Backend
 		wlans, err := backend.GetWlanConf()
 		if err != nil {
 			return SsidList{}, fmt.Errorf("get wlan conf from %s: %w", controller, err)

@@ -16,22 +16,22 @@ type NetworksBackend interface {
 // ListNetworks returns all Docker networks from all backends.
 func (s *Service) ListNetworks(ctx context.Context, device *string) (DockerNetworkList, error) {
 	var items []DockerNetwork
-	for _, db := range s.backends {
-		if device != nil && *device != db.device {
+	for _, entry := range s.backends {
+		if device != nil && *device != entry.Name {
 			continue
 		}
-		if !db.backend.SupportsContainers() {
+		if !entry.Backend.SupportsContainers() {
 			continue
 		}
-		if s.monitor != nil && !s.monitor.Available(db.device) {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		raw, err := db.backend.ListDockerNetworks()
+		raw, err := entry.Backend.ListDockerNetworks()
 		if err != nil {
-			return DockerNetworkList{}, fmt.Errorf("list docker networks from %s: %w", db.device, err)
+			return DockerNetworkList{}, fmt.Errorf("list docker networks from %s: %w", entry.Name, err)
 		}
 		for _, n := range raw.Networks {
-			items = append(items, mapDockerNetwork(db.device, n))
+			items = append(items, mapDockerNetwork(entry.Name, n))
 		}
 	}
 	if items == nil {
