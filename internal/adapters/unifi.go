@@ -86,16 +86,17 @@ func (c *UniFiClient) Ping(ctx context.Context) error {
 
 // loginLocked authenticates with the UniFi Controller using session auth.
 // Must be called while holding c.mu (write lock). Sets c.loggedIn on success.
-func (c *UniFiClient) loginLocked() error {
+func (c *UniFiClient) loginLocked(ctx context.Context) error {
 	body, _ := json.Marshal(map[string]string{
 		"username": c.user,
 		"password": c.pass,
 	})
-	resp, err := c.client.Post(
-		fmt.Sprintf("https://%s/api/login", c.host),
-		"application/json",
-		bytes.NewReader(body),
-	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("https://%s/api/login", c.host), bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("unifi login: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("unifi login: %w", err)
 	}
@@ -110,7 +111,7 @@ func (c *UniFiClient) loginLocked() error {
 
 // ensureSession returns once a valid session exists in the cookie jar.
 // Uses double-checked locking: fast path for already-logged-in calls.
-func (c *UniFiClient) ensureSession() error {
+func (c *UniFiClient) ensureSession(ctx context.Context) error {
 	c.mu.RLock()
 	loggedIn := c.loggedIn
 	c.mu.RUnlock()
@@ -122,7 +123,7 @@ func (c *UniFiClient) ensureSession() error {
 	if c.loggedIn {
 		return nil
 	}
-	return c.loginLocked()
+	return c.loginLocked(ctx)
 }
 
 // invalidateSession marks the session as invalid so the next ensureSession call
@@ -135,11 +136,11 @@ func (c *UniFiClient) invalidateSession() {
 
 // maybeLogin ensures a session exists when using session-based auth.
 // It is a no-op when the client is configured with an API key.
-func (c *UniFiClient) maybeLogin() error {
+func (c *UniFiClient) maybeLogin(ctx context.Context) error {
 	if c.apiKey != "" {
 		return nil
 	}
-	return c.ensureSession()
+	return c.ensureSession(ctx)
 }
 
 // pathPrefix returns the URL prefix for the Network application API.
@@ -155,7 +156,7 @@ func (c *UniFiClient) pathPrefix() string {
 // get performs an authenticated GET request against the UniFi API and decodes the response.
 // For legacy session auth, it retries once after re-authenticating on a 401 response.
 func (c *UniFiClient) get(ctx context.Context, path string, out any) error {
-	if err := c.maybeLogin(); err != nil {
+	if err := c.maybeLogin(ctx); err != nil {
 		return err
 	}
 
@@ -181,7 +182,7 @@ func (c *UniFiClient) get(ctx context.Context, path string, out any) error {
 			return fmt.Errorf("unifi request: invalid API key (401)")
 		}
 		c.invalidateSession()
-		if err := c.ensureSession(); err != nil {
+		if err := c.ensureSession(ctx); err != nil {
 			return fmt.Errorf("unifi re-auth: %w", err)
 		}
 		resp, err = doRequest()
