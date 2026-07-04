@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -36,7 +35,7 @@ func JWTMiddleware(cfg config.Auth, keyFunc jwt.Keyfunc) func(http.Handler) http
 
 			authHeader := r.Header.Get("Authorization")
 			if !strings.HasPrefix(authHeader, "Bearer ") {
-				writeProblem(w, http.StatusUnauthorized, apierrors.URNUnauthorized, apierrors.TitleUnauthorized, "Missing or invalid bearer token.")
+				apierrors.WriteProblem(w, http.StatusUnauthorized, apierrors.URNUnauthorized, apierrors.TitleUnauthorized, "Missing or invalid bearer token.")
 				return
 			}
 			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
@@ -52,7 +51,7 @@ func JWTMiddleware(cfg config.Auth, keyFunc jwt.Keyfunc) func(http.Handler) http
 			var c claims
 			token, err := jwt.ParseWithClaims(tokenStr, &c, keyFunc, opts...)
 			if err != nil || !token.Valid {
-				writeProblem(w, http.StatusUnauthorized, apierrors.URNUnauthorized, apierrors.TitleUnauthorized, "Missing or invalid bearer token.")
+				apierrors.WriteProblem(w, http.StatusUnauthorized, apierrors.URNUnauthorized, apierrors.TitleUnauthorized, "Missing or invalid bearer token.")
 				return
 			}
 
@@ -80,7 +79,7 @@ func ScopeMiddleware(cfg config.Auth) func(http.Handler) http.Handler {
 
 			requiredScopes, ok := r.Context().Value("bearerAuth.Scopes").([]string)
 			if !ok || len(requiredScopes) == 0 {
-				writeProblem(w, http.StatusForbidden, apierrors.URNForbidden, apierrors.TitleForbidden, "No required scopes declared for this operation.")
+				apierrors.WriteProblem(w, http.StatusForbidden, apierrors.URNForbidden, apierrors.TitleForbidden, "No required scopes declared for this operation.")
 				return
 			}
 
@@ -91,7 +90,7 @@ func ScopeMiddleware(cfg config.Auth) func(http.Handler) http.Handler {
 			}
 			for _, required := range requiredScopes {
 				if !scopeSet[required] {
-					writeProblem(w, http.StatusForbidden, apierrors.URNForbidden, apierrors.TitleForbidden,
+					apierrors.WriteProblem(w, http.StatusForbidden, apierrors.URNForbidden, apierrors.TitleForbidden,
 						fmt.Sprintf("Insufficient scopes. Required: %s.", strings.Join(requiredScopes, ", ")))
 					return
 				}
@@ -100,15 +99,4 @@ func ScopeMiddleware(cfg config.Auth) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
-}
-
-func writeProblem(w http.ResponseWriter, status int, urn, title, detail string) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"type":   urn,
-		"title":  title,
-		"status": status,
-		"detail": detail,
-	})
 }

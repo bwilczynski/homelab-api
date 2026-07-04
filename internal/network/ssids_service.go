@@ -22,11 +22,11 @@ type SSIDsBackend interface {
 func (s *Service) ListSSIDs(ctx context.Context) (SsidList, error) {
 	var items []Ssid
 
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		controller, backend := cb.controller, cb.unifi
+		controller, backend := entry.Name, entry.Backend
 		wlans, err := backend.GetWlanConf(ctx)
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
@@ -77,9 +77,9 @@ func (s *Service) ListSSIDs(ctx context.Context) (SsidList, error) {
 
 // GetSSID returns the detail for a single SSID identified by its composite ID.
 func (s *Service) GetSSID(ctx context.Context, id string) (SsidDetail, error) {
-	controller, name, ok := parseID(id)
-	if !ok {
-		return SsidDetail{}, fmt.Errorf("invalid ID %q: expected format controller.suffix: %w", id, apierrors.ErrNotFound)
+	controller, name, err := parseID(id)
+	if err != nil {
+		return SsidDetail{}, err
 	}
 
 	backend, err := s.findBackend(controller)

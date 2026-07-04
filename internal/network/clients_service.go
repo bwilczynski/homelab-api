@@ -20,27 +20,27 @@ type ClientsBackend interface {
 // ListClients retrieves clients from all backends. status filters by "online", "offline", or "" for all.
 func (s *Service) ListClients(ctx context.Context, status string) (NetworkClientList, error) {
 	var items []NetworkClient
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 		var raw []adapters.UniFiClientV2
 		var err error
 		switch status {
 		case "online":
-			raw, err = cb.unifi.GetActiveClients(ctx)
+			raw, err = entry.Backend.GetActiveClients(ctx)
 		case "offline":
-			raw, err = cb.unifi.GetOfflineClients(ctx, s.historyDays)
+			raw, err = entry.Backend.GetOfflineClients(ctx, s.historyDays)
 		default:
-			raw, err = cb.unifi.GetAllClients(ctx, s.historyDays)
+			raw, err = entry.Backend.GetAllClients(ctx, s.historyDays)
 		}
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
-			s.logger.Warn("skipping backend on list clients error", "controller", cb.controller, "err", err)
+			s.logger.Warn("skipping backend on list clients error", "controller", entry.Name, "err", err)
 			continue
 		}
 		for _, c := range raw {
-			items = append(items, clientToListV2(cb.controller, c))
+			items = append(items, clientToListV2(entry.Name, c))
 		}
 	}
 	if items == nil {
@@ -88,9 +88,9 @@ func clientToListV2(controller string, c adapters.UniFiClientV2) NetworkClient {
 
 // GetClient looks up a single client by composite ID and returns its typed detail.
 func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail, error) {
-	controller, suffix, ok := parseID(id)
-	if !ok {
-		return NetworkClientDetail{}, fmt.Errorf("invalid ID %q: expected format controller.suffix: %w", id, apierrors.ErrNotFound)
+	controller, suffix, err := parseID(id)
+	if err != nil {
+		return NetworkClientDetail{}, err
 	}
 
 	backend, err := s.findBackend(controller)

@@ -374,8 +374,8 @@ func TestListClientsPartialBackendFailure(t *testing.T) {
 		t.Fatalf("expected 5 clients from healthy controller, got %d", len(result.Items))
 	}
 	for _, item := range result.Items {
-		controller, _, ok := parseID(item.Id)
-		if !ok || controller != "unifi-1" {
+		controller, _, err := parseID(item.Id)
+		if err != nil || controller != "unifi-1" {
 			t.Errorf("expected all clients from unifi-1, got %s", item.Id)
 		}
 	}

@@ -17,18 +17,18 @@ type DevicesBackend interface {
 // ListDevices retrieves all managed network devices from all backends.
 func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 	var items []NetworkDevice
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		raw, err := cb.unifi.GetDevices(ctx)
+		raw, err := entry.Backend.GetDevices(ctx)
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
-			s.logger.Warn("skipping backend on list devices error", "controller", cb.controller, "err", err)
+			s.logger.Warn("skipping backend on list devices error", "controller", entry.Name, "err", err)
 			continue
 		}
 		for _, d := range raw {
-			items = append(items, deviceToList(cb.controller, d))
+			items = append(items, deviceToList(entry.Name, d))
 		}
 	}
 	if items == nil {
@@ -39,9 +39,9 @@ func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 
 // GetDevice looks up a single device by composite ID and returns its detail.
 func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail, error) {
-	controller, suffix, ok := parseID(id)
-	if !ok {
-		return NetworkDeviceDetail{}, fmt.Errorf("invalid ID %q: expected format controller.suffix: %w", id, apierrors.ErrNotFound)
+	controller, suffix, err := parseID(id)
+	if err != nil {
+		return NetworkDeviceDetail{}, err
 	}
 
 	backend, err := s.findBackend(controller)

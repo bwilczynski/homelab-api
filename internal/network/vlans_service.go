@@ -18,21 +18,21 @@ type VLANsBackend interface {
 // ListVLANs returns all LAN networks from all backends as a flat list.
 func (s *Service) ListVLANs(ctx context.Context) (VlanList, error) {
 	var items []Vlan
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf(ctx)
+		networks, err := entry.Backend.GetNetworkConf(ctx)
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
-			s.logger.Warn("skipping backend on get network conf error", "controller", cb.controller, "err", err)
+			s.logger.Warn("skipping backend on get network conf error", "controller", entry.Name, "err", err)
 			continue
 		}
 		for _, n := range networks {
 			if !isLanNetwork(n) {
 				continue
 			}
-			items = append(items, networkToVlan(cb.controller, n))
+			items = append(items, networkToVlan(entry.Name, n))
 		}
 	}
 	if items == nil {
@@ -43,9 +43,9 @@ func (s *Service) ListVLANs(ctx context.Context) (VlanList, error) {
 
 // GetVLAN looks up a single VLAN by composite ID.
 func (s *Service) GetVLAN(ctx context.Context, id string) (VlanDetail, error) {
-	controller, name, ok := parseID(id)
-	if !ok {
-		return VlanDetail{}, fmt.Errorf("invalid ID %q: expected format controller.suffix: %w", id, apierrors.ErrNotFound)
+	controller, name, err := parseID(id)
+	if err != nil {
+		return VlanDetail{}, err
 	}
 	backend, err := s.findBackend(controller)
 	if err != nil {

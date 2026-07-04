@@ -17,20 +17,20 @@ type WANsBackend interface {
 // ListWANs returns all WAN interfaces from all backends.
 func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 	var items []Wan
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf(ctx)
+		networks, err := entry.Backend.GetNetworkConf(ctx)
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
-			s.logger.Warn("skipping backend on get network conf error", "controller", cb.controller, "err", err)
+			s.logger.Warn("skipping backend on get network conf error", "controller", entry.Name, "err", err)
 			continue
 		}
-		devices, err := cb.unifi.GetDevices(ctx)
+		devices, err := entry.Backend.GetDevices(ctx)
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
-			s.logger.Warn("skipping backend on get devices error", "controller", cb.controller, "err", err)
+			s.logger.Warn("skipping backend on get devices error", "controller", entry.Name, "err", err)
 			continue
 		}
 		gateway := findGateway(devices)
@@ -39,7 +39,7 @@ func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 				continue
 			}
 			iface := resolveWanIface(gateway, n.WanNetworkGroup)
-			items = append(items, buildWan(cb.controller, n, iface, gateway))
+			items = append(items, buildWan(entry.Name, n, iface, gateway))
 		}
 	}
 	if items == nil {
@@ -50,9 +50,9 @@ func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 
 // GetWAN looks up a single WAN interface by composite ID.
 func (s *Service) GetWAN(ctx context.Context, id string) (WanDetail, error) {
-	controller, name, ok := parseID(id)
-	if !ok {
-		return WanDetail{}, fmt.Errorf("invalid ID %q: expected format controller.suffix: %w", id, apierrors.ErrNotFound)
+	controller, name, err := parseID(id)
+	if err != nil {
+		return WanDetail{}, err
 	}
 	backend, err := s.findBackend(controller)
 	if err != nil {

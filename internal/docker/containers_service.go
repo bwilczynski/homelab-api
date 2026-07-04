@@ -22,34 +22,34 @@ type ContainersBackend interface {
 // ListContainers returns all containers with their resource usage from all backends.
 func (s *Service) ListContainers(ctx context.Context, device *string) (ContainerList, error) {
 	var items []Container
-	for _, db := range s.backends {
-		if device != nil && *device != db.device {
+	for _, entry := range s.backends {
+		if device != nil && *device != entry.Name {
 			continue
 		}
-		if !db.backend.SupportsContainers() {
+		if !entry.Backend.SupportsContainers() {
 			continue
 		}
-		if s.monitor != nil && !s.monitor.Available(db.device) {
-			continue
-		}
-
-		containers, err := db.backend.ListContainers(ctx)
-		if err != nil {
-			// If filtering by device, propagate the error; otherwise skip and warn.
-			if device != nil {
-				return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
-			}
-			s.logger.Warn("skipping backend on list containers error", "device", db.device, "err", err)
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 
-		resources, err := db.backend.GetContainerResources(ctx)
+		containers, err := entry.Backend.ListContainers(ctx)
 		if err != nil {
 			// If filtering by device, propagate the error; otherwise skip and warn.
 			if device != nil {
-				return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+				return ContainerList{}, fmt.Errorf("list containers from %s: %w", entry.Name, err)
 			}
-			s.logger.Warn("skipping backend on get container resources error", "device", db.device, "err", err)
+			s.logger.Warn("skipping backend on list containers error", "device", entry.Name, "err", err)
+			continue
+		}
+
+		resources, err := entry.Backend.GetContainerResources(ctx)
+		if err != nil {
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("get container resources from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on get container resources error", "device", entry.Name, "err", err)
 			continue
 		}
 
@@ -59,7 +59,7 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 		}
 
 		for _, c := range containers.Containers {
-			items = append(items, mapContainer(db.device, c, resourceMap[c.Name], 0))
+			items = append(items, mapContainer(entry.Name, c, resourceMap[c.Name], 0))
 		}
 	}
 	if items == nil {
