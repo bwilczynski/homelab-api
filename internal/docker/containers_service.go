@@ -35,12 +35,22 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 
 		containers, err := db.backend.ListContainers()
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on list containers error", "device", db.device, "err", err)
+			continue
 		}
 
 		resources, err := db.backend.GetContainerResources()
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on get container resources error", "device", db.device, "err", err)
+			continue
 		}
 
 		resourceMap := make(map[string]adapters.DSMContainerResource, len(resources.Resources))

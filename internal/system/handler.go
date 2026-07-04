@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
@@ -112,10 +113,10 @@ func (h *ServerHandler) ListSystemUpdates(ctx context.Context, request ListSyste
 func (h *ServerHandler) GetSystemUpdate(ctx context.Context, request GetSystemUpdateRequestObject) (GetSystemUpdateResponseObject, error) {
 	detail, err := h.svc.GetSystemUpdate(ctx, request.UpdateId)
 	if err != nil {
+		if errors.Is(err, apierrors.ErrNotFound) {
+			return GetSystemUpdate404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
+		}
 		return GetSystemUpdate500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if detail == nil {
-		return GetSystemUpdate404ApplicationProblemPlusJSONResponse{notFound("")}, nil
 	}
 	return systemUpdateDetailResponse{*detail}, nil
 }

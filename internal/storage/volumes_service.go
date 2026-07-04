@@ -52,7 +52,12 @@ func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (Volum
 
 		resp, err := db.backend.GetStorageVolumes()
 		if err != nil {
-			return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on list storage volumes error", "device", db.device, "err", err)
+			continue
 		}
 		volumes = append(volumes, mapVolumes(db.device, resp)...)
 	}
@@ -114,7 +119,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 			PoolStatus: mapVolumeStatus(pool.Status),
 		}, nil
 	}
-	return nil, nil
+	return nil, fmt.Errorf("volume not found: %s: %w", volumeID, apierrors.ErrNotFound)
 }
 
 // parseVolumeID splits a composite ID "device.name" into its parts.
