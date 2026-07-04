@@ -63,7 +63,12 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 
 		tasks, err := db.backend.ListBackupTasks(ctx)
 		if err != nil {
-			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on list backup tasks error", "device", db.device, "err", err)
+			continue
 		}
 		for _, t := range tasks.TaskList {
 			status, err := db.backend.GetBackupTaskStatus(ctx, t.TaskID)
@@ -167,7 +172,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 			Folders:    folders,
 		}, nil
 	}
-	return nil, nil
+	return nil, fmt.Errorf("backup task not found: %s: %w", taskID, apierrors.ErrNotFound)
 }
 
 // parseBackupTime parses a DSM backup timestamp in the format "2006/01/02 15:04"

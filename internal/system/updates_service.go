@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // UpdatesDSMBackend is the narrow interface for updates operations.
@@ -54,7 +55,7 @@ func (s *Service) GetSystemUpdate(ctx context.Context, id string) (*SystemUpdate
 			return &detail, nil
 		}
 	}
-	return nil, nil // not found
+	return nil, fmt.Errorf("system update not found: %s: %w", id, apierrors.ErrNotFound)
 }
 
 // CheckSystemUpdates forces a fresh upstream check and returns the full list.

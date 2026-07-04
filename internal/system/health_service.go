@@ -41,7 +41,14 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 
 		subsystems, err := ue.unifi.GetHealth(ctx)
 		if err != nil {
-			return Health{}, fmt.Errorf("get unifi health from %s: %w", ue.controller, err)
+			name := "network"
+			if len(s.unifiBackends) > 1 {
+				name = ue.controller + ":network"
+			}
+			msg := err.Error()
+			components = append(components, ComponentHealth{Name: name, Status: Unhealthy, Message: &msg})
+			overall = Unhealthy
+			continue
 		}
 		for _, sub := range subsystems {
 			if sub.Status == "unknown" {
@@ -80,26 +87,36 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 
 		storageStatus, storageMsg, err := storageHealth(ctx, de.dsm)
 		if err != nil {
-			return Health{}, fmt.Errorf("get storage health from %s: %w", de.device, err)
-		}
-		storageComponent := ComponentHealth{Name: prefix + "storage", Status: storageStatus}
-		if storageMsg != "" {
+			// On error, mark as unhealthy with the error message
+			storageComponent := ComponentHealth{Name: prefix + "storage", Status: Unhealthy}
 			storageComponent.Message = &storageMsg
+			components = append(components, storageComponent)
+			overall = Unhealthy
+		} else {
+			storageComponent := ComponentHealth{Name: prefix + "storage", Status: storageStatus}
+			if storageMsg != "" {
+				storageComponent.Message = &storageMsg
+			}
+			components = append(components, storageComponent)
+			overall = worstStatus(overall, storageStatus)
 		}
-		components = append(components, storageComponent)
-		overall = worstStatus(overall, storageStatus)
 
 		if de.dockerEnabled {
 			containersStatus, containersMsg, err := containersHealth(ctx, de.dsm)
 			if err != nil {
-				return Health{}, fmt.Errorf("get containers health from %s: %w", de.device, err)
-			}
-			containersComponent := ComponentHealth{Name: prefix + "containers", Status: containersStatus}
-			if containersMsg != "" {
+				// On error, mark as unhealthy with the error message
+				containersComponent := ComponentHealth{Name: prefix + "containers", Status: Unhealthy}
 				containersComponent.Message = &containersMsg
+				components = append(components, containersComponent)
+				overall = Unhealthy
+			} else {
+				containersComponent := ComponentHealth{Name: prefix + "containers", Status: containersStatus}
+				if containersMsg != "" {
+					containersComponent.Message = &containersMsg
+				}
+				components = append(components, containersComponent)
+				overall = worstStatus(overall, containersStatus)
 			}
-			components = append(components, containersComponent)
-			overall = worstStatus(overall, containersStatus)
 		}
 	}
 
@@ -118,7 +135,7 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 func storageHealth(ctx context.Context, dsm HealthDSMBackend) (HealthStatus, string, error) {
 	resp, err := dsm.GetStorageVolumes(ctx)
 	if err != nil {
-		return Unhealthy, err.Error(), nil //nolint:nilerr
+		return Unhealthy, err.Error(), err
 	}
 	worst := Healthy
 	var degraded, crashed []string
@@ -145,7 +162,7 @@ func storageHealth(ctx context.Context, dsm HealthDSMBackend) (HealthStatus, str
 func containersHealth(ctx context.Context, dsm HealthDSMBackend) (HealthStatus, string, error) {
 	resp, err := dsm.ListContainers(ctx)
 	if err != nil {
-		return Unhealthy, err.Error(), nil //nolint:nilerr
+		return Unhealthy, err.Error(), err
 	}
 	notRunning := 0
 	for _, c := range resp.Containers {

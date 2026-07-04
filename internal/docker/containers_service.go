@@ -35,12 +35,22 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 
 		containers, err := db.backend.ListContainers(ctx)
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("list containers from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on list containers error", "device", db.device, "err", err)
+			continue
 		}
 
 		resources, err := db.backend.GetContainerResources(ctx)
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("get container resources from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on get container resources error", "device", db.device, "err", err)
+			continue
 		}
 
 		resourceMap := make(map[string]adapters.DSMContainerResource, len(resources.Resources))
@@ -228,12 +238,12 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 	}
 
 	return ContainerDetail{
-		Id:             fmt.Sprintf("%s.%s", device, d.Profile.Name),
-		Device:         device,
-		Name:           d.Profile.Name,
-		Image:          d.Profile.Image,
-		Status:         mapStatus(d.Details.State),
-		RestartCount:   d.Details.RestartCount,
+		Id:           fmt.Sprintf("%s.%s", device, d.Profile.Name),
+		Device:       device,
+		Name:         d.Profile.Name,
+		Image:        d.Profile.Image,
+		Status:       mapStatus(d.Details.State),
+		RestartCount: d.Details.RestartCount,
 		Resources: ContainerResources{
 			CpuPercent:    res.CPU,
 			MemoryBytes:   res.Memory,
@@ -255,4 +265,3 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 		Labels:         &labels,
 	}
 }
-

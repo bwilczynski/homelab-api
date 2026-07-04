@@ -28,7 +28,12 @@ func (s *Service) ListNetworks(ctx context.Context, device *string) (DockerNetwo
 		}
 		raw, err := db.backend.ListDockerNetworks(ctx)
 		if err != nil {
-			return DockerNetworkList{}, fmt.Errorf("list docker networks from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return DockerNetworkList{}, fmt.Errorf("list docker networks from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on list docker networks error", "device", db.device, "err", err)
+			continue
 		}
 		for _, n := range raw.Networks {
 			items = append(items, mapDockerNetwork(db.device, n))

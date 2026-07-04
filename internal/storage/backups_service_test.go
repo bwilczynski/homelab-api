@@ -2,12 +2,14 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
@@ -203,11 +205,14 @@ func TestGetBackupTaskNotFound(t *testing.T) {
 	)
 
 	detail, err := svc.GetBackupTask(context.Background(), "nas-01.999")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for missing task")
 	}
 	if detail != nil {
 		t.Errorf("expected nil for missing task, got %+v", detail)
+	}
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 

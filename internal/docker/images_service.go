@@ -39,7 +39,12 @@ func (s *Service) ListImages(ctx context.Context, device *string) (DockerImageLi
 		}
 		raw, err := db.backend.ListDockerImages(ctx)
 		if err != nil {
-			return DockerImageList{}, fmt.Errorf("list docker images from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return DockerImageList{}, fmt.Errorf("list docker images from %s: %w", db.device, err)
+			}
+			s.logger.Warn("skipping backend on list docker images error", "device", db.device, "err", err)
+			continue
 		}
 		for _, img := range raw.Images {
 			items = append(items, mapDockerImage(db.device, img))

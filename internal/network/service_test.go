@@ -3,10 +3,12 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
@@ -121,12 +123,9 @@ func TestGetDevice_Gateway(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetDevice(context.Background(), "unifi.cgf-01")
+	detail, err := svc.GetDevice(context.Background(), "unifi.cgf-01")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected device to be found")
 	}
 
 	gw, err := detail.AsGatewayDetail()
@@ -167,12 +166,9 @@ func TestGetDevice_Unknown(t *testing.T) {
 	}}
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetDevice(context.Background(), "unifi.weird-box")
+	detail, err := svc.GetDevice(context.Background(), "unifi.weird-box")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected unknown device to be found")
 	}
 
 	u, err := detail.AsUnknownDeviceDetail()
@@ -191,12 +187,12 @@ func TestGetDeviceNotFound(t *testing.T) {
 	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetDevice(context.Background(), "unifi.nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetDevice(context.Background(), "unifi.nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent device")
 	}
-	if found {
-		t.Fatal("expected device not to be found")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -204,12 +200,12 @@ func TestGetDeviceWrongController(t *testing.T) {
 	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetDevice(context.Background(), "other.usg-3p")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetDevice(context.Background(), "other.usg-3p")
+	if err == nil {
+		t.Fatal("expected error for wrong controller")
 	}
-	if found {
-		t.Fatal("expected not found for wrong controller")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -353,6 +349,38 @@ func TestListClientsEmpty(t *testing.T) {
 	}
 }
 
+func TestListClientsPartialBackendFailure(t *testing.T) {
+	// Test that when one controller fails on GetAllClients, results from
+	// the healthy controller are still returned with no error.
+	active := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-active.json")
+	offline := testhelpers.LoadFixture[[]adapters.UniFiClientV2](t, "testdata/unifi-v2-history.json")
+
+	svc := NewService(map[string]UniFiBackend{
+		"unifi-1": &mockUniFi{activeClients: active, offlineClients: offline},
+		"unifi-2": &mockUniFi{
+			activeClients:  []adapters.UniFiClientV2{},
+			offlineClients: []adapters.UniFiClientV2{},
+			err:            errors.New("controller unreachable"),
+		},
+	}, 30, slog.Default(), nil)
+
+	result, err := svc.ListClients(context.Background(), "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should return clients from unifi-1 only (3 active + 2 offline), skipping unifi-2
+	if len(result.Items) != 5 {
+		t.Fatalf("expected 5 clients from healthy controller, got %d", len(result.Items))
+	}
+	for _, item := range result.Items {
+		controller, _, ok := parseID(item.Id)
+		if !ok || controller != "unifi-1" {
+			t.Errorf("expected all clients from unifi-1, got %s", item.Id)
+		}
+	}
+}
+
 // --- client detail tests ---
 
 func TestGetClientWireless(t *testing.T) {
@@ -360,12 +388,9 @@ func TestGetClientWireless(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetClient(context.Background(), "unifi.macbook-pro-3c")
+	detail, err := svc.GetClient(context.Background(), "unifi.macbook-pro-3c")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected client to be found")
 	}
 
 	wireless, err := detail.AsWirelessNetworkClientDetail()
@@ -397,12 +422,9 @@ func TestGetClientWired(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetClient(context.Background(), "unifi.nas-1-68")
+	detail, err := svc.GetClient(context.Background(), "unifi.nas-1-68")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected client to be found")
 	}
 
 	wired, err := detail.AsWiredNetworkClientDetail()
@@ -427,12 +449,12 @@ func TestGetClientNotFound(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{clients: clients}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetClient(context.Background(), "unifi.nobody-00")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetClient(context.Background(), "unifi.nobody-00")
+	if err == nil {
+		t.Fatal("expected error for not found client")
 	}
-	if found {
-		t.Fatal("expected client not to be found")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -445,12 +467,9 @@ func TestGetClientOfflineWired(t *testing.T) {
 		offlineClients: offline,
 	}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetClient(context.Background(), "unifi.host-02-aa")
+	detail, err := svc.GetClient(context.Background(), "unifi.host-02-aa")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected offline wired client to be found")
 	}
 
 	wired, err := detail.AsWiredNetworkClientDetail()
@@ -486,12 +505,9 @@ func TestGetClientOfflineWireless(t *testing.T) {
 		offlineClients: offline,
 	}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetClient(context.Background(), "unifi.kindle-paperwhite-e0")
+	detail, err := svc.GetClient(context.Background(), "unifi.kindle-paperwhite-e0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected offline wireless client to be found")
 	}
 
 	wireless, err := detail.AsWirelessNetworkClientDetail()
@@ -524,12 +540,12 @@ func TestGetClientNotFoundInEither(t *testing.T) {
 		offlineClients: []adapters.UniFiClientV2{},
 	}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetClient(context.Background(), "unifi.nobody-00")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetClient(context.Background(), "unifi.nobody-00")
+	if err == nil {
+		t.Fatal("expected error for not found client")
 	}
-	if found {
-		t.Fatal("expected not found")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -559,12 +575,9 @@ func TestGetDevice_Switch(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	detail, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected switch to be found")
 	}
 
 	sw, err := detail.AsSwitchDetail()
@@ -629,7 +642,7 @@ func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, _, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	detail, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
 	sw, err := detail.AsSwitchDetail()
 	if err != nil {
 		t.Fatalf("expected switch detail: %v", err)
@@ -671,7 +684,7 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, _, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	detail, _ := svc.GetDevice(context.Background(), "unifi.us-8-60w")
 	sw, err := detail.AsSwitchDetail()
 	if err != nil {
 		t.Fatalf("expected switch detail: %v", err)
@@ -707,12 +720,9 @@ func TestGetDevice_AccessPoint(t *testing.T) {
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetDevice(context.Background(), "unifi.uap-01")
+	detail, err := svc.GetDevice(context.Background(), "unifi.uap-01")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected AP to be found")
 	}
 
 	ap, err := detail.AsAccessPointDetail()
@@ -1182,12 +1192,9 @@ func TestGetVLAN_ServerDHCP(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-iot")
+	detail, err := svc.GetVLAN(context.Background(), "unifi.lan-iot")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected LAN-IOT to be found")
 	}
 	if detail.Id != "unifi.lan-iot" {
 		t.Errorf("expected id unifi.lan-iot, got %s", detail.Id)
@@ -1239,12 +1246,9 @@ func TestGetVLAN_RelayDHCP(t *testing.T) {
 		},
 	}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-relay")
+	detail, err := svc.GetVLAN(context.Background(), "unifi.lan-relay")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected LAN-RELAY to be found")
 	}
 	if detail.DhcpMode != DhcpModeRelay {
 		t.Errorf("expected dhcpMode relay, got %s", detail.DhcpMode)
@@ -1264,12 +1268,9 @@ func TestGetVLAN_MultipleDNS(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-int")
+	detail, err := svc.GetVLAN(context.Background(), "unifi.lan-int")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected LAN-INT to be found")
 	}
 	if len(detail.DnsServers) != 2 {
 		t.Fatalf("expected 2 DNS servers, got %d", len(detail.DnsServers))
@@ -1283,12 +1284,9 @@ func TestGetVLAN_NullDNS(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-srv")
+	detail, err := svc.GetVLAN(context.Background(), "unifi.lan-srv")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected LAN-SRV to be found")
 	}
 	if len(detail.DnsServers) != 0 {
 		t.Errorf("expected empty dnsServers for LAN-SRV, got %v", detail.DnsServers)
@@ -1299,12 +1297,9 @@ func TestGetVLAN_UntaggedVLAN1(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetVLAN(context.Background(), "unifi.lan-mgmt")
+	detail, err := svc.GetVLAN(context.Background(), "unifi.lan-mgmt")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected LAN-MGMT to be found")
 	}
 	if detail.VlanId != 1 {
 		t.Errorf("expected vlanId 1 for untagged, got %d", detail.VlanId)
@@ -1321,12 +1316,12 @@ func TestGetVLANNotFound(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{networkConf: networks}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetVLAN(context.Background(), "unifi.nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetVLAN(context.Background(), "unifi.nonexistent")
+	if err == nil {
+		t.Fatal("expected error for not found VLAN")
 	}
-	if found {
-		t.Fatal("expected not found")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -1388,12 +1383,9 @@ func TestGetWAN(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetWAN(context.Background(), "unifi.internet-1")
+	detail, err := svc.GetWAN(context.Background(), "unifi.internet-1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected internet-1 to be found")
 	}
 	if detail.Id != "unifi.internet-1" {
 		t.Errorf("expected id unifi.internet-1, got %s", detail.Id)
@@ -1420,12 +1412,12 @@ func TestGetWANNotFound(t *testing.T) {
 	networks := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, networkConf: networks}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetWAN(context.Background(), "unifi.nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetWAN(context.Background(), "unifi.nonexistent")
+	if err == nil {
+		t.Fatal("expected error for not found WAN")
 	}
-	if found {
-		t.Fatal("expected not found")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -1537,12 +1529,9 @@ func TestGetSSID(t *testing.T) {
 		wlanConf: wlans, networkConf: networks, devices: devices, clients: clients,
 	}}, 30, slog.Default(), nil)
 
-	detail, found, err := svc.GetSSID(context.Background(), "unifi.hamster-iot")
+	detail, err := svc.GetSSID(context.Background(), "unifi.hamster-iot")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected hamster-iot to be found")
 	}
 	if detail.Id != "unifi.hamster-iot" {
 		t.Errorf("expected id unifi.hamster-iot, got %s", detail.Id)
@@ -1574,12 +1563,12 @@ func TestGetSSIDNotFound(t *testing.T) {
 		wlanConf: wlans, networkConf: networks, clients: []adapters.UniFiSta{}, devices: []adapters.UniFiDevice{},
 	}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetSSID(context.Background(), "unifi.nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	_, err := svc.GetSSID(context.Background(), "unifi.nonexistent")
+	if err == nil {
+		t.Fatal("expected error for not found SSID")
 	}
-	if found {
-		t.Fatal("expected not found")
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -1595,12 +1584,9 @@ func TestGetSSIDDisabled(t *testing.T) {
 		devices: []adapters.UniFiDevice{},
 	}}, 30, slog.Default(), nil)
 
-	_, found, err := svc.GetSSID(context.Background(), "unifi.hidden-net")
+	_, err := svc.GetSSID(context.Background(), "unifi.hidden-net")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if !found {
-		t.Fatal("expected disabled SSID to be found by GetSSID")
 	}
 }
 
@@ -1624,4 +1610,3 @@ func TestListSSIDs_MissingNetworkConf(t *testing.T) {
 		t.Errorf("expected vlanId 1 for missing networkconf, got %d", result.Items[0].VlanId)
 	}
 }
-

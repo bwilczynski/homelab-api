@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"testing"
 
@@ -16,27 +17,30 @@ type mockBackend struct {
 	resourcesResp *adapters.DSMContainerResourceResponse
 	networksResp  *adapters.DSMDockerNetworkListResponse
 	imagesResp    *adapters.DSMDockerImageListResponse
+	listErr       error
+	detailErr     error
+	resourcesErr  error
 	startErr      error
 	stopErr       error
 	restartErr    error
 }
 
 func (m *mockBackend) ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error) {
-	return m.listResp, nil
+	return m.listResp, m.listErr
 }
 
 func (m *mockBackend) GetContainer(ctx context.Context, name string) (*adapters.DSMContainerDetailResponse, error) {
-	return m.detailResp, nil
+	return m.detailResp, m.detailErr
 }
 
 func (m *mockBackend) GetContainerResources(ctx context.Context) (*adapters.DSMContainerResourceResponse, error) {
-	return m.resourcesResp, nil
+	return m.resourcesResp, m.resourcesErr
 }
 
-func (m *mockBackend) SupportsContainers() bool                                 { return true }
-func (m *mockBackend) StartContainer(ctx context.Context, name string) error    { return m.startErr }
-func (m *mockBackend) StopContainer(ctx context.Context, name string) error     { return m.stopErr }
-func (m *mockBackend) RestartContainer(ctx context.Context, name string) error  { return m.restartErr }
+func (m *mockBackend) SupportsContainers() bool                                { return true }
+func (m *mockBackend) StartContainer(ctx context.Context, name string) error   { return m.startErr }
+func (m *mockBackend) StopContainer(ctx context.Context, name string) error    { return m.stopErr }
+func (m *mockBackend) RestartContainer(ctx context.Context, name string) error { return m.restartErr }
 
 func (m *mockBackend) ListDockerNetworks(ctx context.Context) (*adapters.DSMDockerNetworkListResponse, error) {
 	return m.networksResp, nil
@@ -384,6 +388,75 @@ func TestMapRestartPolicy(t *testing.T) {
 		got := mapRestartPolicy(tt.input)
 		if got != tt.want {
 			t.Errorf("mapRestartPolicy(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestListContainersPartialBackendFailure(t *testing.T) {
+	// Test that when listing containers across all backends without a device filter,
+	// a failing backend is skipped with a warning and partial results are returned.
+	listResp := testhelpers.LoadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+
+	svc := NewService(map[string]DockerBackend{
+		"nas-01": &mockBackend{
+			listResp:      &listResp,
+			resourcesResp: &resourcesResp,
+		},
+		"nas-02": &mockBackend{
+			listErr: fmt.Errorf("connection timeout"),
+		},
+	}, slog.Default(), nil)
+
+	result, err := svc.ListContainers(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should return containers from nas-01, skipping nas-02
+	if len(result.Items) != 3 {
+		t.Fatalf("expected 3 containers from healthy backend, got %d", len(result.Items))
+	}
+	for _, item := range result.Items {
+		if item.Device != "nas-01" {
+			t.Errorf("expected all containers from nas-01, got device %s", item.Device)
+		}
+	}
+}
+
+func TestListContainersResourcesBackendFailure(t *testing.T) {
+	// Test that when GetContainerResources fails on one backend, results from
+	// the healthy backend are still returned.
+	listResp := testhelpers.LoadFixture[adapters.DSMContainerListResponse](t, "testdata/container_list.json")
+	resourcesResp := testhelpers.LoadFixture[adapters.DSMContainerResourceResponse](t, "testdata/container_resources.json")
+
+	svc := NewService(map[string]DockerBackend{
+		"nas-01": &mockBackend{
+			listResp:      &listResp,
+			resourcesResp: &resourcesResp,
+		},
+		"nas-02": &mockBackend{
+			listResp: &adapters.DSMContainerListResponse{
+				Containers: []adapters.DSMContainer{
+					{Name: "other-app", State: adapters.DSMContainerState{Running: true}},
+				},
+			},
+			resourcesErr: fmt.Errorf("resource unavailable"),
+		},
+	}, slog.Default(), nil)
+
+	result, err := svc.ListContainers(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should return containers from nas-01 only, skipping nas-02 due to resources error
+	if len(result.Items) != 3 {
+		t.Fatalf("expected 3 containers from healthy backend, got %d", len(result.Items))
+	}
+	for _, item := range result.Items {
+		if item.Device != "nas-01" {
+			t.Errorf("expected all containers from nas-01, got device %s", item.Device)
 		}
 	}
 }

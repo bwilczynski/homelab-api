@@ -236,8 +236,8 @@ type UniFiDevice struct {
 
 // UniFiVap is one entry in a device's vap_table — one row per radio per SSID.
 type UniFiVap struct {
-	ID    string `json:"id"`    // wlanconf _id
-	Up    bool   `json:"up"`
+	ID string `json:"id"` // wlanconf _id
+	Up bool   `json:"up"`
 }
 
 type UniFiPortEntry struct {
