@@ -20,6 +20,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/docker"
 	"github.com/bwilczynski/homelab-api/internal/meta"
 	"github.com/bwilczynski/homelab-api/internal/network"
+	"github.com/bwilczynski/homelab-api/internal/routing"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
 	"github.com/bwilczynski/homelab-api/internal/testhelpers"
@@ -186,7 +187,19 @@ func main() {
 		base = "internal"
 	}
 
+	r := newRouter(base, logger)
+
+	addr := ":" + port()
+	logger.Info("starting test server", "addr", addr)
+	if err := http.ListenAndServe(addr, r); err != nil {
+		logger.Error("server failed", "err", err)
+		os.Exit(1)
+	}
+}
+
+func newRouter(base string, logger *slog.Logger) chi.Router {
 	r := chi.NewRouter()
+	r.Use(routing.EscapedPathRouting)
 
 	// Docker containers
 	containerList := new(testhelpers.MustLoadFixture[adapters.DSMContainerListResponse](base + "/docker/testdata/container_list.json"))
@@ -272,12 +285,7 @@ func main() {
 		},
 	)
 
-	addr := ":" + port()
-	logger.Info("starting test server", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		logger.Error("server failed", "err", err)
-		os.Exit(1)
-	}
+	return r
 }
 
 func port() string {
