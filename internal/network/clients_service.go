@@ -30,9 +30,9 @@ func (s *Service) ListClients(ctx context.Context, status string) (NetworkClient
 		case "online":
 			raw, err = entry.Backend.GetActiveClients(ctx)
 		case "offline":
-			raw, err = entry.Backend.GetOfflineClients(ctx, s.historyDays)
+			raw, err = entry.Backend.GetOfflineClients(ctx, s.historyDays[entry.Name])
 		default:
-			raw, err = entry.Backend.GetAllClients(ctx, s.historyDays)
+			raw, err = entry.Backend.GetAllClients(ctx, s.historyDays[entry.Name])
 		}
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
@@ -121,7 +121,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 	}
 
 	// Not found in active clients — check offline history.
-	offline, err := backend.GetOfflineClients(ctx, s.historyDays)
+	offline, err := backend.GetOfflineClients(ctx, s.historyDays[controller])
 	if err != nil {
 		return NetworkClientDetail{}, fmt.Errorf("get unifi offline clients: %w", err)
 	}

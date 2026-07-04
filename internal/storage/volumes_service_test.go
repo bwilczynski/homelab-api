@@ -216,6 +216,7 @@ func TestListStorageVolumesEmpty(t *testing.T) {
 }
 
 func TestMapVolumeStatus(t *testing.T) {
+	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{}, slog.Default(), nil)
 	tests := []struct {
 		status string
 		want   VolumeStatus
@@ -224,11 +225,11 @@ func TestMapVolumeStatus(t *testing.T) {
 		{"degraded", Degraded},
 		{"repairing", Repairing},
 		{"crashed", Crashed},
-		{"unknown", Crashed},
+		{"unknown", Degraded},
 	}
 
 	for _, tt := range tests {
-		got := mapVolumeStatus(tt.status)
+		got := svc.mapVolumeStatus(tt.status)
 		if got != tt.want {
 			t.Errorf("mapVolumeStatus(%q) = %s, want %s", tt.status, got, tt.want)
 		}
@@ -236,6 +237,7 @@ func TestMapVolumeStatus(t *testing.T) {
 }
 
 func TestMapDiskStatus(t *testing.T) {
+	svc := NewService(map[string]StorageBackend{}, map[string]BackupBackend{}, slog.Default(), nil)
 	tests := []struct {
 		status string
 		want   DiskStatus
@@ -244,11 +246,11 @@ func TestMapDiskStatus(t *testing.T) {
 		{"warning", DiskStatusWarning},
 		{"failing", DiskStatusFailing},
 		{"critical", DiskStatusCritical},
-		{"unknown", DiskStatusCritical},
+		{"unknown", DiskStatusWarning},
 	}
 
 	for _, tt := range tests {
-		got := mapDiskStatus(tt.status)
+		got := svc.mapDiskStatus(tt.status)
 		if got != tt.want {
 			t.Errorf("mapDiskStatus(%q) = %s, want %s", tt.status, got, tt.want)
 		}

@@ -42,7 +42,7 @@ func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (Volum
 			s.logger.Warn("skipping backend on list storage volumes error", "device", entry.Name, "err", err)
 			continue
 		}
-		volumes = append(volumes, mapVolumes(entry.Name, resp)...)
+		volumes = append(volumes, s.mapVolumes(entry.Name, resp)...)
 	}
 	if volumes == nil {
 		volumes = []Volume{}
@@ -82,7 +82,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		disksByID[d.ID] = d
 	}
 
-	for _, vol := range mapVolumes(device, resp) {
+	for _, vol := range s.mapVolumes(device, resp) {
 		if vol.Name != name {
 			continue
 		}
@@ -90,7 +90,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		pool := poolByID[raw.PoolPath]
 		return &VolumeDetail{
 			Device:     vol.Device,
-			Disks:      mapDisks(pool, disksByID),
+			Disks:      s.mapDisks(pool, disksByID),
 			FileSystem: vol.FileSystem,
 			Id:         vol.Id,
 			Name:       vol.Name,
@@ -99,7 +99,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 			TotalBytes: vol.TotalBytes,
 			UsedBytes:  vol.UsedBytes,
 			MountPath:  raw.VolPath,
-			PoolStatus: mapVolumeStatus(pool.Status),
+			PoolStatus: s.mapVolumeStatus(pool.Status),
 		}, nil
 	}
 	return nil, fmt.Errorf("volume not found: %s: %w", volumeID, apierrors.ErrNotFound)
@@ -111,7 +111,7 @@ func parseVolumeID(id string) (device, name string, err error) {
 }
 
 // mapVolumes converts a DSM storage response to API Volume models.
-func mapVolumes(device string, resp *adapters.DSMStorageVolumeResponse) []Volume {
+func (s *Service) mapVolumes(device string, resp *adapters.DSMStorageVolumeResponse) []Volume {
 	volumes := make([]Volume, 0, len(resp.Volumes))
 	for _, v := range resp.Volumes {
 		totalBytes, _ := strconv.ParseInt(v.Size.Total, 10, 64)
@@ -122,7 +122,7 @@ func mapVolumes(device string, resp *adapters.DSMStorageVolumeResponse) []Volume
 			Name:       v.ID,
 			FileSystem: v.FsType,
 			RaidType:   v.RaidType,
-			Status:     mapVolumeStatus(v.Status),
+			Status:     s.mapVolumeStatus(v.Status),
 			TotalBytes: totalBytes,
 			UsedBytes:  usedBytes,
 		})
@@ -131,7 +131,7 @@ func mapVolumes(device string, resp *adapters.DSMStorageVolumeResponse) []Volume
 }
 
 // mapDisks converts the DSM pool's disk list to API VolumeDisk models.
-func mapDisks(pool adapters.DSMStoragePool, disksByID map[string]adapters.DSMStorageDisk) []VolumeDisk {
+func (s *Service) mapDisks(pool adapters.DSMStoragePool, disksByID map[string]adapters.DSMStorageDisk) []VolumeDisk {
 	disks := make([]VolumeDisk, 0, len(pool.Disks))
 	for _, diskID := range pool.Disks {
 		if d, ok := disksByID[diskID]; ok {
@@ -139,7 +139,7 @@ func mapDisks(pool adapters.DSMStoragePool, disksByID map[string]adapters.DSMSto
 			disks = append(disks, VolumeDisk{
 				Id:                 d.ID,
 				Model:              d.Model,
-				Status:             mapDiskStatus(d.Status),
+				Status:             s.mapDiskStatus(d.Status),
 				TemperatureCelsius: d.Temp,
 				TotalBytes:         totalBytes,
 			})
@@ -149,7 +149,7 @@ func mapDisks(pool adapters.DSMStoragePool, disksByID map[string]adapters.DSMSto
 }
 
 // mapVolumeStatus converts a DSM volume status string to VolumeStatus.
-func mapVolumeStatus(status string) VolumeStatus {
+func (s *Service) mapVolumeStatus(status string) VolumeStatus {
 	switch status {
 	case "normal":
 		return Normal
@@ -157,13 +157,16 @@ func mapVolumeStatus(status string) VolumeStatus {
 		return Degraded
 	case "repairing":
 		return Repairing
-	default:
+	case "crashed":
 		return Crashed
+	default:
+		s.logger.Warn("unknown DSM volume status", "status", status)
+		return Degraded
 	}
 }
 
 // mapDiskStatus converts a DSM disk status string to DiskStatus.
-func mapDiskStatus(status string) DiskStatus {
+func (s *Service) mapDiskStatus(status string) DiskStatus {
 	switch status {
 	case "normal":
 		return DiskStatusNormal
@@ -171,7 +174,10 @@ func mapDiskStatus(status string) DiskStatus {
 		return DiskStatusWarning
 	case "failing":
 		return DiskStatusFailing
-	default:
+	case "critical":
 		return DiskStatusCritical
+	default:
+		s.logger.Warn("unknown DSM disk status", "status", status)
+		return DiskStatusWarning
 	}
 }

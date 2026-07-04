@@ -256,7 +256,7 @@ func main() {
 		activeClients:  testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-active.json"),
 		offlineClients: testhelpers.MustLoadFixture[[]adapters.UniFiClientV2](base + "/network/testdata/unifi-v2-history.json"),
 	}
-	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, 30, slog.Default(), nil)
+	networkSvc := network.NewService(map[string]network.UniFiBackend{"unifi": nb}, map[string]int{"unifi": 30}, slog.Default(), nil)
 	network.HandlerWithOptions(network.NewStrictHandler(network.NewHandler(networkSvc), nil), network.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: apierrors.ProblemBadRequestHandler,

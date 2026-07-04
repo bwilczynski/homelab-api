@@ -26,13 +26,22 @@ type Service struct {
 	backends    adapters.Registry[UniFiBackend]
 	logger      *slog.Logger
 	monitor     adapters.AvailabilityChecker // optional; nil means all backends available
-	historyDays int
+	historyDays map[string]int               // controller name → days of offline client history
 }
 
 // NewService creates a new network service with one or more UniFi backends.
 // monitor may be nil; when non-nil, unreachable backends are skipped.
-func NewService(backends map[string]UniFiBackend, historyDays int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
-	return &Service{backends: adapters.NewRegistry(backends), historyDays: historyDays, logger: logger, monitor: monitor}
+// historyDays maps controller name to days of offline client history (default 30 if missing/zero).
+func NewService(backends map[string]UniFiBackend, historyDays map[string]int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
+	days := make(map[string]int, len(backends))
+	for controller := range backends {
+		d := historyDays[controller]
+		if d <= 0 {
+			d = 30
+		}
+		days[controller] = d
+	}
+	return &Service{backends: adapters.NewRegistry(backends), historyDays: days, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {

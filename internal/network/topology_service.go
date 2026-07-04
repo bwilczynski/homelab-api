@@ -62,7 +62,7 @@ func (s *Service) GetTopology(ctx context.Context, includeClients bool) (Network
 			return NetworkTopology{}, fmt.Errorf("get unifi clients from %s: %w", entry.Name, err)
 		}
 
-		offline, err := entry.Backend.GetOfflineClients(ctx, s.historyDays)
+		offline, err := entry.Backend.GetOfflineClients(ctx, s.historyDays[entry.Name])
 		if err != nil {
 			return NetworkTopology{}, fmt.Errorf("get offline clients from %s: %w", entry.Name, err)
 		}

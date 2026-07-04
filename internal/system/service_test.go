@@ -980,3 +980,26 @@ func TestParseUptime_InvalidFormat(t *testing.T) {
 		t.Error("expected error for invalid uptime format")
 	}
 }
+
+// --- Tests: mapVolumeStatus (health) ---
+
+func TestMapVolumeStatusHealth(t *testing.T) {
+	svc := NewService(map[string]DSMBackendConfig{}, map[string]UniFiBackend{}, config.UpdatesConfig{}, slog.Default(), nil)
+	tests := []struct {
+		status string
+		want   HealthStatus
+	}{
+		{"normal", Healthy},
+		{"degraded", Degraded},
+		{"repairing", Degraded},
+		{"crashed", Unhealthy},
+		{"unknown", Degraded},
+	}
+
+	for _, tt := range tests {
+		got := svc.mapVolumeStatus(tt.status)
+		if got != tt.want {
+			t.Errorf("mapVolumeStatus(%q) = %s, want %s", tt.status, got, tt.want)
+		}
+	}
+}
