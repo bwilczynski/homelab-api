@@ -21,34 +21,34 @@ type mockUniFi struct {
 	err            error
 }
 
-func (m *mockUniFi) GetDevices() ([]adapters.UniFiDevice, error) {
+func (m *mockUniFi) GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error) {
 	return m.devices, m.err
 }
 
-func (m *mockUniFi) GetClients() ([]adapters.UniFiSta, error) {
+func (m *mockUniFi) GetClients(ctx context.Context) ([]adapters.UniFiSta, error) {
 	return m.clients, m.err
 }
 
-func (m *mockUniFi) GetActiveClients() ([]adapters.UniFiClientV2, error) {
+func (m *mockUniFi) GetActiveClients(ctx context.Context) ([]adapters.UniFiClientV2, error) {
 	return m.activeClients, m.err
 }
 
-func (m *mockUniFi) GetOfflineClients(_ int) ([]adapters.UniFiClientV2, error) {
+func (m *mockUniFi) GetOfflineClients(ctx context.Context, _ int) ([]adapters.UniFiClientV2, error) {
 	return m.offlineClients, m.err
 }
 
-func (m *mockUniFi) GetAllClients(_ int) ([]adapters.UniFiClientV2, error) {
+func (m *mockUniFi) GetAllClients(ctx context.Context, _ int) ([]adapters.UniFiClientV2, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
 	return append(m.activeClients, m.offlineClients...), nil
 }
 
-func (m *mockUniFi) GetWlanConf() ([]adapters.UniFiWlanConf, error) {
+func (m *mockUniFi) GetWlanConf(ctx context.Context) ([]adapters.UniFiWlanConf, error) {
 	return m.wlanConf, m.err
 }
 
-func (m *mockUniFi) GetNetworkConf() ([]adapters.UniFiNetworkConf, error) {
+func (m *mockUniFi) GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error) {
 	return m.networkConf, m.err
 }
 

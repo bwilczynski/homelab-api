@@ -10,7 +10,7 @@ import (
 
 // DevicesBackend is the narrow interface for device operations.
 type DevicesBackend interface {
-	GetDevices() ([]adapters.UniFiDevice, error)
+	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
 }
 
 // ListDevices retrieves all managed network devices from all backends.
@@ -20,7 +20,7 @@ func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 		if s.monitor != nil && !s.monitor.Available(cb.controller) {
 			continue
 		}
-		raw, err := cb.unifi.GetDevices()
+		raw, err := cb.unifi.GetDevices(ctx)
 		if err != nil {
 			return NetworkDeviceList{}, fmt.Errorf("get unifi devices from %s: %w", cb.controller, err)
 		}
@@ -46,12 +46,12 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 		return NetworkDeviceDetail{}, false, nil
 	}
 
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
 		return NetworkDeviceDetail{}, false, fmt.Errorf("get unifi devices: %w", err)
 	}
 
-	clients, err := backend.GetClients()
+	clients, err := backend.GetClients(ctx)
 	if err != nil {
 		return NetworkDeviceDetail{}, false, fmt.Errorf("get unifi clients: %w", err)
 	}

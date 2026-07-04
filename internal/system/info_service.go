@@ -11,7 +11,7 @@ import (
 
 // InfoDSMBackend is the narrow interface for system info operations.
 type InfoDSMBackend interface {
-	GetSystemInfo() (*adapters.DSMSystemInfoResponse, error)
+	GetSystemInfo(ctx context.Context) (*adapters.DSMSystemInfoResponse, error)
 }
 
 // ListSystemInfo queries all DSM backends for static system information.
@@ -25,7 +25,7 @@ func (s *Service) ListSystemInfo(ctx context.Context, device *string) (SystemInf
 			continue
 		}
 
-		info, err := de.dsm.GetSystemInfo()
+		info, err := de.dsm.GetSystemInfo(ctx)
 		if err != nil {
 			return SystemInfoList{}, fmt.Errorf("get system info from %s: %w", de.device, err)
 		}

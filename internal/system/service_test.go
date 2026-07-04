@@ -23,22 +23,22 @@ type mockDSMBackend struct {
 	err      error
 }
 
-func (m *mockDSMBackend) GetSystemInfo() (*adapters.DSMSystemInfoResponse, error) {
+func (m *mockDSMBackend) GetSystemInfo(ctx context.Context) (*adapters.DSMSystemInfoResponse, error) {
 	return m.info, m.err
 }
 
-func (m *mockDSMBackend) GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error) {
+func (m *mockDSMBackend) GetSystemUtilization(ctx context.Context) (*adapters.DSMSystemUtilizationResponse, error) {
 	return m.util, m.err
 }
 
-func (m *mockDSMBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+func (m *mockDSMBackend) GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error) {
 	if m.volumes != nil {
 		return m.volumes, nil
 	}
 	return &adapters.DSMStorageVolumeResponse{}, m.err
 }
 
-func (m *mockDSMBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
+func (m *mockDSMBackend) ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error) {
 	if m.conts != nil {
 		return m.conts, nil
 	}
@@ -50,7 +50,7 @@ type mockUniFiBackend struct {
 	err        error
 }
 
-func (m *mockUniFiBackend) GetHealth() ([]adapters.UniFiSubsystemHealth, error) {
+func (m *mockUniFiBackend) GetHealth(ctx context.Context) ([]adapters.UniFiSubsystemHealth, error) {
 	return m.subsystems, m.err
 }
 

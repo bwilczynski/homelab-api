@@ -10,7 +10,7 @@ import (
 
 // NetworksBackend is the narrow interface for Docker network operations.
 type NetworksBackend interface {
-	ListDockerNetworks() (*adapters.DSMDockerNetworkListResponse, error)
+	ListDockerNetworks(ctx context.Context) (*adapters.DSMDockerNetworkListResponse, error)
 }
 
 // ListNetworks returns all Docker networks from all backends.
@@ -26,7 +26,7 @@ func (s *Service) ListNetworks(ctx context.Context, device *string) (DockerNetwo
 		if s.monitor != nil && !s.monitor.Available(db.device) {
 			continue
 		}
-		raw, err := db.backend.ListDockerNetworks()
+		raw, err := db.backend.ListDockerNetworks(ctx)
 		if err != nil {
 			return DockerNetworkList{}, fmt.Errorf("list docker networks from %s: %w", db.device, err)
 		}
@@ -50,7 +50,7 @@ func (s *Service) GetNetwork(ctx context.Context, networkID string) (*DockerNetw
 	if err != nil {
 		return nil, err
 	}
-	raw, err := backend.ListDockerNetworks()
+	raw, err := backend.ListDockerNetworks(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list docker networks: %w", err)
 	}

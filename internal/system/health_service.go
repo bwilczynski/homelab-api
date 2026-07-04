@@ -11,13 +11,13 @@ import (
 
 // HealthDSMBackend is the narrow interface for health checks on DSM backends.
 type HealthDSMBackend interface {
-	GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error)
-	ListContainers() (*adapters.DSMContainerListResponse, error)
+	GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error)
+	ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error)
 }
 
 // HealthUniFiBackend is the narrow interface for health checks on UniFi backends.
 type HealthUniFiBackend interface {
-	GetHealth() ([]adapters.UniFiSubsystemHealth, error)
+	GetHealth(ctx context.Context) ([]adapters.UniFiSubsystemHealth, error)
 }
 
 // GetSystemHealth queries all backends for health and assembles an aggregate Health model.
@@ -39,7 +39,7 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 			continue
 		}
 
-		subsystems, err := ue.unifi.GetHealth()
+		subsystems, err := ue.unifi.GetHealth(ctx)
 		if err != nil {
 			return Health{}, fmt.Errorf("get unifi health from %s: %w", ue.controller, err)
 		}
@@ -78,7 +78,7 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 			continue
 		}
 
-		storageStatus, storageMsg, err := storageHealth(de.dsm)
+		storageStatus, storageMsg, err := storageHealth(ctx, de.dsm)
 		if err != nil {
 			return Health{}, fmt.Errorf("get storage health from %s: %w", de.device, err)
 		}
@@ -90,7 +90,7 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 		overall = worstStatus(overall, storageStatus)
 
 		if de.dockerEnabled {
-			containersStatus, containersMsg, err := containersHealth(de.dsm)
+			containersStatus, containersMsg, err := containersHealth(ctx, de.dsm)
 			if err != nil {
 				return Health{}, fmt.Errorf("get containers health from %s: %w", de.device, err)
 			}
@@ -115,8 +115,8 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 }
 
 // storageHealth derives a single HealthStatus from DSM volume statuses.
-func storageHealth(dsm HealthDSMBackend) (HealthStatus, string, error) {
-	resp, err := dsm.GetStorageVolumes()
+func storageHealth(ctx context.Context, dsm HealthDSMBackend) (HealthStatus, string, error) {
+	resp, err := dsm.GetStorageVolumes(ctx)
 	if err != nil {
 		return Unhealthy, err.Error(), nil //nolint:nilerr
 	}
@@ -142,8 +142,8 @@ func storageHealth(dsm HealthDSMBackend) (HealthStatus, string, error) {
 }
 
 // containersHealth derives a single HealthStatus from DSM container states.
-func containersHealth(dsm HealthDSMBackend) (HealthStatus, string, error) {
-	resp, err := dsm.ListContainers()
+func containersHealth(ctx context.Context, dsm HealthDSMBackend) (HealthStatus, string, error) {
+	resp, err := dsm.ListContainers(ctx)
 	if err != nil {
 		return Unhealthy, err.Error(), nil //nolint:nilerr
 	}
