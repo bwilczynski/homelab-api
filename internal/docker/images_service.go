@@ -12,7 +12,7 @@ import (
 
 // ImagesBackend is the narrow interface for Docker image operations.
 type ImagesBackend interface {
-	ListDockerImages() (*adapters.DSMDockerImageListResponse, error)
+	ListDockerImages(ctx context.Context) (*adapters.DSMDockerImageListResponse, error)
 }
 
 // imageShortID strips the "sha256:" prefix and returns the first 12 hex characters.
@@ -37,9 +37,14 @@ func (s *Service) ListImages(ctx context.Context, device *string) (DockerImageLi
 		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		raw, err := entry.Backend.ListDockerImages()
+		raw, err := entry.Backend.ListDockerImages(ctx)
 		if err != nil {
-			return DockerImageList{}, fmt.Errorf("list docker images from %s: %w", entry.Name, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return DockerImageList{}, fmt.Errorf("list docker images from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on list docker images error", "device", entry.Name, "err", err)
+			continue
 		}
 		for _, img := range raw.Images {
 			items = append(items, mapDockerImage(entry.Name, img))
@@ -61,7 +66,7 @@ func (s *Service) GetImage(ctx context.Context, imageID string) (*DockerImageDet
 	if err != nil {
 		return nil, err
 	}
-	raw, err := backend.ListDockerImages()
+	raw, err := backend.ListDockerImages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list docker images: %w", err)
 	}

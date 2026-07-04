@@ -14,10 +14,10 @@ import (
 type BackupBackend interface {
 	SupportsBackups() bool
 	Location() *time.Location
-	ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error)
-	GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error)
-	GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error)
-	GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error)
+	ListBackupTasks(ctx context.Context) (*adapters.DSMBackupTaskListResponse, error)
+	GetBackupTaskDetail(ctx context.Context, taskID int) (*adapters.DSMBackupTaskDetailResponse, error)
+	GetBackupTaskStatus(ctx context.Context, taskID int) (*adapters.DSMBackupTaskStatusResponse, error)
+	GetBackupTarget(ctx context.Context, taskID int) (*adapters.DSMBackupTargetResponse, error)
 }
 
 func (s *Service) findBackupBackend(device string) (BackupBackend, error) {
@@ -45,12 +45,17 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 			continue
 		}
 
-		tasks, err := entry.Backend.ListBackupTasks()
+		tasks, err := entry.Backend.ListBackupTasks(ctx)
 		if err != nil {
-			return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", entry.Name, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return BackupTaskList{}, fmt.Errorf("list backup tasks from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on list backup tasks error", "device", entry.Name, "err", err)
+			continue
 		}
 		for _, t := range tasks.TaskList {
-			status, err := entry.Backend.GetBackupTaskStatus(t.TaskID)
+			status, err := entry.Backend.GetBackupTaskStatus(ctx, t.TaskID)
 			if err != nil {
 				s.logger.Warn("backup task status lookup failed",
 					"device", entry.Name, "task_id", t.TaskID, "err", err)
@@ -83,7 +88,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		return nil, err
 	}
 
-	tasks, err := backend.ListBackupTasks()
+	tasks, err := backend.ListBackupTasks(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get backup task from %s: %w", device, err)
 	}
@@ -95,17 +100,17 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		}
 
 		loc := backend.Location()
-		status, err := backend.GetBackupTaskStatus(t.TaskID)
+		status, err := backend.GetBackupTaskStatus(ctx, t.TaskID)
 		if err != nil {
 			s.logger.Warn("backup task status lookup failed",
 				"device", device, "task_id", t.TaskID, "err", err)
 		}
-		detail, err := backend.GetBackupTaskDetail(t.TaskID)
+		detail, err := backend.GetBackupTaskDetail(ctx, t.TaskID)
 		if err != nil {
 			s.logger.Warn("backup task detail lookup failed",
 				"device", device, "task_id", t.TaskID, "err", err)
 		}
-		target, err := backend.GetBackupTarget(t.TaskID)
+		target, err := backend.GetBackupTarget(ctx, t.TaskID)
 		if err != nil {
 			s.logger.Warn("backup target lookup failed",
 				"device", device, "task_id", t.TaskID, "err", err)
@@ -151,7 +156,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 			Folders:    folders,
 		}, nil
 	}
-	return nil, nil
+	return nil, fmt.Errorf("backup task not found: %s: %w", taskID, apierrors.ErrNotFound)
 }
 
 // parseBackupTime parses a DSM backup timestamp in the format "2006/01/02 15:04"

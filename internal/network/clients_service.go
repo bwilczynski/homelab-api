@@ -6,14 +6,15 @@ import (
 	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // ClientsBackend is the narrow interface for client operations.
 type ClientsBackend interface {
-	GetClients() ([]adapters.UniFiSta, error)
-	GetActiveClients() ([]adapters.UniFiClientV2, error)
-	GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error)
-	GetAllClients(historyDays int) ([]adapters.UniFiClientV2, error)
+	GetClients(ctx context.Context) ([]adapters.UniFiSta, error)
+	GetActiveClients(ctx context.Context) ([]adapters.UniFiClientV2, error)
+	GetOfflineClients(ctx context.Context, historyDays int) ([]adapters.UniFiClientV2, error)
+	GetAllClients(ctx context.Context, historyDays int) ([]adapters.UniFiClientV2, error)
 }
 
 // ListClients retrieves clients from all backends. status filters by "online", "offline", or "" for all.
@@ -27,14 +28,16 @@ func (s *Service) ListClients(ctx context.Context, status string) (NetworkClient
 		var err error
 		switch status {
 		case "online":
-			raw, err = entry.Backend.GetActiveClients()
+			raw, err = entry.Backend.GetActiveClients(ctx)
 		case "offline":
-			raw, err = entry.Backend.GetOfflineClients(s.historyDays)
+			raw, err = entry.Backend.GetOfflineClients(ctx, s.historyDays)
 		default:
-			raw, err = entry.Backend.GetAllClients(s.historyDays)
+			raw, err = entry.Backend.GetAllClients(ctx, s.historyDays)
 		}
 		if err != nil {
-			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", entry.Name, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on list clients error", "controller", entry.Name, "err", err)
+			continue
 		}
 		for _, c := range raw {
 			items = append(items, clientToListV2(entry.Name, c))
@@ -84,43 +87,43 @@ func clientToListV2(controller string, c adapters.UniFiClientV2) NetworkClient {
 }
 
 // GetClient looks up a single client by composite ID and returns its typed detail.
-func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail, bool, error) {
-	controller, suffix, ok := parseID(id)
-	if !ok {
-		return NetworkClientDetail{}, false, nil
+func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail, error) {
+	controller, suffix, err := parseID(id)
+	if err != nil {
+		return NetworkClientDetail{}, err
 	}
 
 	backend, err := s.findBackend(controller)
 	if err != nil {
-		return NetworkClientDetail{}, false, nil
+		return NetworkClientDetail{}, err
 	}
 
 	// Fetch devices for cross-reference (device refs in connectedTo).
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
-		return NetworkClientDetail{}, false, fmt.Errorf("get unifi devices: %w", err)
+		return NetworkClientDetail{}, fmt.Errorf("get unifi devices: %w", err)
 	}
 	macToDevice := buildMacToDevice(devices)
 
-	raw, err := backend.GetClients()
+	raw, err := backend.GetClients(ctx)
 	if err != nil {
-		return NetworkClientDetail{}, false, fmt.Errorf("get unifi clients: %w", err)
+		return NetworkClientDetail{}, fmt.Errorf("get unifi clients: %w", err)
 	}
 
 	for _, sta := range raw {
 		if clientSuffix(sta) == suffix {
 			detail, err := clientToDetail(controller, sta, macToDevice)
 			if err != nil {
-				return NetworkClientDetail{}, false, err
+				return NetworkClientDetail{}, err
 			}
-			return detail, true, nil
+			return detail, nil
 		}
 	}
 
 	// Not found in active clients — check offline history.
-	offline, err := backend.GetOfflineClients(s.historyDays)
+	offline, err := backend.GetOfflineClients(ctx, s.historyDays)
 	if err != nil {
-		return NetworkClientDetail{}, false, fmt.Errorf("get unifi offline clients: %w", err)
+		return NetworkClientDetail{}, fmt.Errorf("get unifi offline clients: %w", err)
 	}
 
 	for _, c := range offline {
@@ -130,12 +133,12 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 		if fmt.Sprintf("%s-%s", toKebab(name), prefix) == suffix {
 			detail, err := clientToDetailV2(controller, c, macToDevice)
 			if err != nil {
-				return NetworkClientDetail{}, false, err
+				return NetworkClientDetail{}, err
 			}
-			return detail, true, nil
+			return detail, nil
 		}
 	}
-	return NetworkClientDetail{}, false, nil
+	return NetworkClientDetail{}, fmt.Errorf("Network client not found: %s: %w", id, apierrors.ErrNotFound)
 }
 
 func clientToDetailV2(controller string, c adapters.UniFiClientV2, macToDevice map[string]adapters.UniFiDevice) (NetworkClientDetail, error) {

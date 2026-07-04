@@ -7,18 +7,19 @@ import (
 	"slices"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // SSIDsBackend is the narrow interface for SSID operations.
 type SSIDsBackend interface {
-	GetWlanConf() ([]adapters.UniFiWlanConf, error)
-	GetNetworkConf() ([]adapters.UniFiNetworkConf, error)
-	GetClients() ([]adapters.UniFiSta, error)
-	GetDevices() ([]adapters.UniFiDevice, error)
+	GetWlanConf(ctx context.Context) ([]adapters.UniFiWlanConf, error)
+	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
+	GetClients(ctx context.Context) ([]adapters.UniFiSta, error)
+	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
 }
 
 // ListSSIDs returns all enabled SSIDs across all controllers.
-func (s *Service) ListSSIDs(_ context.Context) (SsidList, error) {
+func (s *Service) ListSSIDs(ctx context.Context) (SsidList, error) {
 	var items []Ssid
 
 	for _, entry := range s.backends {
@@ -26,17 +27,23 @@ func (s *Service) ListSSIDs(_ context.Context) (SsidList, error) {
 			continue
 		}
 		controller, backend := entry.Name, entry.Backend
-		wlans, err := backend.GetWlanConf()
+		wlans, err := backend.GetWlanConf(ctx)
 		if err != nil {
-			return SsidList{}, fmt.Errorf("get wlan conf from %s: %w", controller, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on get wlan conf error", "controller", controller, "err", err)
+			continue
 		}
-		networks, err := backend.GetNetworkConf()
+		networks, err := backend.GetNetworkConf(ctx)
 		if err != nil {
-			return SsidList{}, fmt.Errorf("get network conf from %s: %w", controller, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on get network conf error", "controller", controller, "err", err)
+			continue
 		}
-		clients, err := backend.GetClients()
+		clients, err := backend.GetClients(ctx)
 		if err != nil {
-			return SsidList{}, fmt.Errorf("get clients from %s: %w", controller, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on get clients error", "controller", controller, "err", err)
+			continue
 		}
 
 		networkByID := indexNetworksByID(networks)
@@ -69,32 +76,32 @@ func (s *Service) ListSSIDs(_ context.Context) (SsidList, error) {
 }
 
 // GetSSID returns the detail for a single SSID identified by its composite ID.
-func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error) {
-	controller, name, ok := parseID(id)
-	if !ok {
-		return SsidDetail{}, false, nil
+func (s *Service) GetSSID(ctx context.Context, id string) (SsidDetail, error) {
+	controller, name, err := parseID(id)
+	if err != nil {
+		return SsidDetail{}, err
 	}
 
 	backend, err := s.findBackend(controller)
 	if err != nil {
-		return SsidDetail{}, false, nil
+		return SsidDetail{}, err
 	}
 
-	wlans, err := backend.GetWlanConf()
+	wlans, err := backend.GetWlanConf(ctx)
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("get wlan conf: %w", err)
+		return SsidDetail{}, fmt.Errorf("get wlan conf: %w", err)
 	}
-	networks, err := backend.GetNetworkConf()
+	networks, err := backend.GetNetworkConf(ctx)
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("get network conf: %w", err)
+		return SsidDetail{}, fmt.Errorf("get network conf: %w", err)
 	}
-	clients, err := backend.GetClients()
+	clients, err := backend.GetClients(ctx)
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("get clients: %w", err)
+		return SsidDetail{}, fmt.Errorf("get clients: %w", err)
 	}
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
-		return SsidDetail{}, false, fmt.Errorf("get devices: %w", err)
+		return SsidDetail{}, fmt.Errorf("get devices: %w", err)
 	}
 
 	// Find the WLAN (including disabled ones — direct lookup by kebab name)
@@ -106,7 +113,7 @@ func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error
 		}
 	}
 	if wlan == nil {
-		return SsidDetail{}, false, nil
+		return SsidDetail{}, fmt.Errorf("SSID not found: %s: %w", id, apierrors.ErrNotFound)
 	}
 
 	networkByID := indexNetworksByID(networks)
@@ -136,7 +143,7 @@ func (s *Service) GetSSID(_ context.Context, id string) (SsidDetail, bool, error
 		Clients:          clientRefs,
 		BroadcastingAps:  broadcastingAPs,
 		SecurityProtocol: mapSecurityProtocol(wlan),
-	}, true, nil
+	}, nil
 }
 
 // --- helpers ---

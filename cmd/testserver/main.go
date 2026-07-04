@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -40,28 +41,34 @@ func (m *mockContainerBackend) checkContainer(name string) error {
 	return fmt.Errorf("container %q: %w", name, apierrors.ErrNotFound)
 }
 
-func (m *mockContainerBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
+func (m *mockContainerBackend) ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error) {
 	return m.list, nil
 }
 
-func (m *mockContainerBackend) GetContainer(name string) (*adapters.DSMContainerDetailResponse, error) {
+func (m *mockContainerBackend) GetContainer(ctx context.Context, name string) (*adapters.DSMContainerDetailResponse, error) {
 	if err := m.checkContainer(name); err != nil {
 		return nil, err
 	}
 	return m.detail, nil
 }
 
-func (m *mockContainerBackend) GetContainerResources() (*adapters.DSMContainerResourceResponse, error) {
+func (m *mockContainerBackend) GetContainerResources(ctx context.Context) (*adapters.DSMContainerResourceResponse, error) {
 	return m.resources, nil
 }
-func (m *mockContainerBackend) SupportsContainers() bool           { return true }
-func (m *mockContainerBackend) StartContainer(name string) error   { return m.checkContainer(name) }
-func (m *mockContainerBackend) StopContainer(name string) error    { return m.checkContainer(name) }
-func (m *mockContainerBackend) RestartContainer(name string) error { return m.checkContainer(name) }
-func (m *mockContainerBackend) ListDockerNetworks() (*adapters.DSMDockerNetworkListResponse, error) {
+func (m *mockContainerBackend) SupportsContainers() bool { return true }
+func (m *mockContainerBackend) StartContainer(ctx context.Context, name string) error {
+	return m.checkContainer(name)
+}
+func (m *mockContainerBackend) StopContainer(ctx context.Context, name string) error {
+	return m.checkContainer(name)
+}
+func (m *mockContainerBackend) RestartContainer(ctx context.Context, name string) error {
+	return m.checkContainer(name)
+}
+func (m *mockContainerBackend) ListDockerNetworks(ctx context.Context) (*adapters.DSMDockerNetworkListResponse, error) {
 	return &adapters.DSMDockerNetworkListResponse{}, nil
 }
-func (m *mockContainerBackend) ListDockerImages() (*adapters.DSMDockerImageListResponse, error) {
+func (m *mockContainerBackend) ListDockerImages(ctx context.Context) (*adapters.DSMDockerImageListResponse, error) {
 	return &adapters.DSMDockerImageListResponse{}, nil
 }
 
@@ -73,19 +80,19 @@ type mockDSMBackend struct {
 	containers *adapters.DSMContainerListResponse
 }
 
-func (m *mockDSMBackend) GetSystemInfo() (*adapters.DSMSystemInfoResponse, error) {
+func (m *mockDSMBackend) GetSystemInfo(ctx context.Context) (*adapters.DSMSystemInfoResponse, error) {
 	return m.info, nil
 }
 
-func (m *mockDSMBackend) GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error) {
+func (m *mockDSMBackend) GetSystemUtilization(ctx context.Context) (*adapters.DSMSystemUtilizationResponse, error) {
 	return m.util, nil
 }
 
-func (m *mockDSMBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+func (m *mockDSMBackend) GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error) {
 	return m.volumes, nil
 }
 
-func (m *mockDSMBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
+func (m *mockDSMBackend) ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error) {
 	return m.containers, nil
 }
 
@@ -94,7 +101,7 @@ type mockUniFiHealthBackend struct {
 	health []adapters.UniFiSubsystemHealth
 }
 
-func (m *mockUniFiHealthBackend) GetHealth() ([]adapters.UniFiSubsystemHealth, error) {
+func (m *mockUniFiHealthBackend) GetHealth(ctx context.Context) ([]adapters.UniFiSubsystemHealth, error) {
 	return m.health, nil
 }
 
@@ -103,7 +110,7 @@ type mockStorageBackend struct {
 	volumes *adapters.DSMStorageVolumeResponse
 }
 
-func (m *mockStorageBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+func (m *mockStorageBackend) GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error) {
 	return m.volumes, nil
 }
 
@@ -118,19 +125,19 @@ type mockBackupBackend struct {
 func (m *mockBackupBackend) SupportsBackups() bool    { return true }
 func (m *mockBackupBackend) Location() *time.Location { return time.UTC }
 
-func (m *mockBackupBackend) ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error) {
+func (m *mockBackupBackend) ListBackupTasks(ctx context.Context) (*adapters.DSMBackupTaskListResponse, error) {
 	return m.tasks, nil
 }
 
-func (m *mockBackupBackend) GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error) {
+func (m *mockBackupBackend) GetBackupTaskDetail(ctx context.Context, taskID int) (*adapters.DSMBackupTaskDetailResponse, error) {
 	return m.taskDetail, nil
 }
 
-func (m *mockBackupBackend) GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error) {
+func (m *mockBackupBackend) GetBackupTaskStatus(ctx context.Context, taskID int) (*adapters.DSMBackupTaskStatusResponse, error) {
 	return m.taskStatus, nil
 }
 
-func (m *mockBackupBackend) GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error) {
+func (m *mockBackupBackend) GetBackupTarget(ctx context.Context, taskID int) (*adapters.DSMBackupTargetResponse, error) {
 	return m.target, nil
 }
 
@@ -142,31 +149,31 @@ type mockNetworkBackend struct {
 	offlineClients []adapters.UniFiClientV2
 }
 
-func (m *mockNetworkBackend) GetDevices() ([]adapters.UniFiDevice, error) {
+func (m *mockNetworkBackend) GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error) {
 	return m.devices, nil
 }
 
-func (m *mockNetworkBackend) GetClients() ([]adapters.UniFiSta, error) {
+func (m *mockNetworkBackend) GetClients(ctx context.Context) ([]adapters.UniFiSta, error) {
 	return m.clients, nil
 }
 
-func (m *mockNetworkBackend) GetActiveClients() ([]adapters.UniFiClientV2, error) {
+func (m *mockNetworkBackend) GetActiveClients(ctx context.Context) ([]adapters.UniFiClientV2, error) {
 	return m.activeClients, nil
 }
 
-func (m *mockNetworkBackend) GetOfflineClients(_ int) ([]adapters.UniFiClientV2, error) {
+func (m *mockNetworkBackend) GetOfflineClients(ctx context.Context, _ int) ([]adapters.UniFiClientV2, error) {
 	return m.offlineClients, nil
 }
 
-func (m *mockNetworkBackend) GetAllClients(_ int) ([]adapters.UniFiClientV2, error) {
+func (m *mockNetworkBackend) GetAllClients(ctx context.Context, _ int) ([]adapters.UniFiClientV2, error) {
 	return append(m.activeClients, m.offlineClients...), nil
 }
 
-func (m *mockNetworkBackend) GetWlanConf() ([]adapters.UniFiWlanConf, error) {
+func (m *mockNetworkBackend) GetWlanConf(ctx context.Context) ([]adapters.UniFiWlanConf, error) {
 	return []adapters.UniFiWlanConf{}, nil
 }
 
-func (m *mockNetworkBackend) GetNetworkConf() ([]adapters.UniFiNetworkConf, error) {
+func (m *mockNetworkBackend) GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error) {
 	return []adapters.UniFiNetworkConf{}, nil
 }
 

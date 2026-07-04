@@ -10,9 +10,9 @@ import (
 // TopologyBackend is the narrow interface for topology operations.
 // It is a subset of UniFiBackend, so all existing backends satisfy it.
 type TopologyBackend interface {
-	GetDevices() ([]adapters.UniFiDevice, error)
-	GetClients() ([]adapters.UniFiSta, error)
-	GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error)
+	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
+	GetClients(ctx context.Context) ([]adapters.UniFiSta, error)
+	GetOfflineClients(ctx context.Context, historyDays int) ([]adapters.UniFiClientV2, error)
 }
 
 // GetTopology builds the network topology graph.
@@ -28,7 +28,7 @@ func (s *Service) GetTopology(ctx context.Context, includeClients bool) (Network
 			continue
 		}
 
-		devices, err := entry.Backend.GetDevices()
+		devices, err := entry.Backend.GetDevices(ctx)
 		if err != nil {
 			return NetworkTopology{}, fmt.Errorf("get unifi devices from %s: %w", entry.Name, err)
 		}
@@ -57,12 +57,12 @@ func (s *Service) GetTopology(ctx context.Context, includeClients bool) (Network
 			continue
 		}
 
-		stas, err := entry.Backend.GetClients()
+		stas, err := entry.Backend.GetClients(ctx)
 		if err != nil {
 			return NetworkTopology{}, fmt.Errorf("get unifi clients from %s: %w", entry.Name, err)
 		}
 
-		offline, err := entry.Backend.GetOfflineClients(s.historyDays)
+		offline, err := entry.Backend.GetOfflineClients(ctx, s.historyDays)
 		if err != nil {
 			return NetworkTopology{}, fmt.Errorf("get offline clients from %s: %w", entry.Name, err)
 		}

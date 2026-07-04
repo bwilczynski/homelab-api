@@ -10,7 +10,7 @@ import (
 
 // UtilizationDSMBackend is the narrow interface for utilization operations.
 type UtilizationDSMBackend interface {
-	GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error)
+	GetSystemUtilization(ctx context.Context) (*adapters.DSMSystemUtilizationResponse, error)
 }
 
 // ListSystemUtilization queries all DSM backends for live utilization data.
@@ -24,7 +24,7 @@ func (s *Service) ListSystemUtilization(ctx context.Context, device *string) (Sy
 			continue
 		}
 
-		util, err := de.dsm.GetSystemUtilization()
+		util, err := de.dsm.GetSystemUtilization(ctx)
 		if err != nil {
 			return SystemUtilizationList{}, fmt.Errorf("get system utilization from %s: %w", de.device, err)
 		}

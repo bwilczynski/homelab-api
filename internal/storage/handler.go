@@ -51,9 +51,6 @@ func (h *ServerHandler) GetBackup(ctx context.Context, request GetBackupRequestO
 		}
 		return GetBackup500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
 	}
-	if result == nil {
-		return GetBackup404ApplicationProblemPlusJSONResponse{notFound("backup task not found")}, nil
-	}
 	return GetBackup200JSONResponse(*result), nil
 }
 
@@ -72,9 +69,6 @@ func (h *ServerHandler) GetStorageVolume(ctx context.Context, request GetStorage
 			return GetStorageVolume404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
 		return GetStorageVolume500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if result == nil {
-		return GetStorageVolume404ApplicationProblemPlusJSONResponse{notFound("volume not found")}, nil
 	}
 	return GetStorageVolume200JSONResponse(*result), nil
 }

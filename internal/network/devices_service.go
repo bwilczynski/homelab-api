@@ -6,11 +6,12 @@ import (
 	"strconv"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // DevicesBackend is the narrow interface for device operations.
 type DevicesBackend interface {
-	GetDevices() ([]adapters.UniFiDevice, error)
+	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
 }
 
 // ListDevices retrieves all managed network devices from all backends.
@@ -20,9 +21,11 @@ func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		raw, err := entry.Backend.GetDevices()
+		raw, err := entry.Backend.GetDevices(ctx)
 		if err != nil {
-			return NetworkDeviceList{}, fmt.Errorf("get unifi devices from %s: %w", entry.Name, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on list devices error", "controller", entry.Name, "err", err)
+			continue
 		}
 		for _, d := range raw {
 			items = append(items, deviceToList(entry.Name, d))
@@ -35,25 +38,25 @@ func (s *Service) ListDevices(ctx context.Context) (NetworkDeviceList, error) {
 }
 
 // GetDevice looks up a single device by composite ID and returns its detail.
-func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail, bool, error) {
-	controller, suffix, ok := parseID(id)
-	if !ok {
-		return NetworkDeviceDetail{}, false, nil
+func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail, error) {
+	controller, suffix, err := parseID(id)
+	if err != nil {
+		return NetworkDeviceDetail{}, err
 	}
 
 	backend, err := s.findBackend(controller)
 	if err != nil {
-		return NetworkDeviceDetail{}, false, nil
+		return NetworkDeviceDetail{}, err
 	}
 
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
-		return NetworkDeviceDetail{}, false, fmt.Errorf("get unifi devices: %w", err)
+		return NetworkDeviceDetail{}, fmt.Errorf("get unifi devices: %w", err)
 	}
 
-	clients, err := backend.GetClients()
+	clients, err := backend.GetClients(ctx)
 	if err != nil {
-		return NetworkDeviceDetail{}, false, fmt.Errorf("get unifi clients: %w", err)
+		return NetworkDeviceDetail{}, fmt.Errorf("get unifi clients: %w", err)
 	}
 
 	macToDevice := buildMacToDevice(devices)
@@ -65,12 +68,12 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 		if toKebab(d.Name) == suffix {
 			detail, err := buildDeviceDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, apMacToClients)
 			if err != nil {
-				return NetworkDeviceDetail{}, false, err
+				return NetworkDeviceDetail{}, err
 			}
-			return detail, true, nil
+			return detail, nil
 		}
 	}
-	return NetworkDeviceDetail{}, false, nil
+	return NetworkDeviceDetail{}, fmt.Errorf("Network device not found: %s: %w", id, apierrors.ErrNotFound)
 }
 
 func deviceToList(controller string, d adapters.UniFiDevice) NetworkDevice {

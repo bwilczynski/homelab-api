@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -25,7 +26,7 @@ var (
 // fetchReleases fetches the latest release for each unique repo concurrently.
 // repos maps "owner/repo" to the API base URL for that repo's host.
 // Returns a map from "owner/repo" to the release; repos that fail are omitted and logged.
-func fetchReleases(repos map[string]string, logger *slog.Logger) map[string]*GitHubRelease {
+func fetchReleases(ctx context.Context, repos map[string]string, logger *slog.Logger) map[string]*GitHubRelease {
 	results := make(map[string]*GitHubRelease, len(repos))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -34,7 +35,7 @@ func fetchReleases(repos map[string]string, logger *slog.Logger) map[string]*Git
 		wg.Add(1)
 		go func(repo, apiBase string) {
 			defer wg.Done()
-			release, err := fetchLatestRelease(repo, apiBase)
+			release, err := fetchLatestRelease(ctx, repo, apiBase)
 			mu.Lock()
 			if err == nil {
 				results[repo] = release
@@ -50,9 +51,13 @@ func fetchReleases(repos map[string]string, logger *slog.Logger) map[string]*Git
 
 // fetchLatestRelease calls the releases API for the given "owner/repo" at the given apiBase
 // and returns the latest release metadata.
-func fetchLatestRelease(repo, apiBase string) (*GitHubRelease, error) {
+func fetchLatestRelease(ctx context.Context, repo, apiBase string) (*GitHubRelease, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", apiBase, repo)
-	resp, err := githubClient.Get(url) //nolint:noctx
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("fetch release for %s: %w", repo, err)
+	}
+	resp, err := githubClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch release for %s: %w", repo, err)
 	}

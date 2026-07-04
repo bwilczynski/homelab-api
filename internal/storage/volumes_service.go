@@ -11,7 +11,7 @@ import (
 
 // StorageBackend defines the adapter interface for storage operations.
 type StorageBackend interface {
-	GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error)
+	GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error)
 }
 
 func (s *Service) findStorageBackend(device string) (StorageBackend, error) {
@@ -33,9 +33,14 @@ func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (Volum
 			continue
 		}
 
-		resp, err := entry.Backend.GetStorageVolumes()
+		resp, err := entry.Backend.GetStorageVolumes(ctx)
 		if err != nil {
-			return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", entry.Name, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on list storage volumes error", "device", entry.Name, "err", err)
+			continue
 		}
 		volumes = append(volumes, mapVolumes(entry.Name, resp)...)
 	}
@@ -57,7 +62,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		return nil, err
 	}
 
-	resp, err := backend.GetStorageVolumes()
+	resp, err := backend.GetStorageVolumes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get storage volume: %w", err)
 	}
@@ -97,7 +102,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 			PoolStatus: mapVolumeStatus(pool.Status),
 		}, nil
 	}
-	return nil, nil
+	return nil, fmt.Errorf("volume not found: %s: %w", volumeID, apierrors.ErrNotFound)
 }
 
 // parseVolumeID splits a composite ID "device.name" into its parts.

@@ -11,12 +11,12 @@ import (
 // ContainersBackend is the narrow interface for container operations.
 type ContainersBackend interface {
 	SupportsContainers() bool
-	ListContainers() (*adapters.DSMContainerListResponse, error)
-	GetContainer(name string) (*adapters.DSMContainerDetailResponse, error)
-	GetContainerResources() (*adapters.DSMContainerResourceResponse, error)
-	StartContainer(name string) error
-	StopContainer(name string) error
-	RestartContainer(name string) error
+	ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error)
+	GetContainer(ctx context.Context, name string) (*adapters.DSMContainerDetailResponse, error)
+	GetContainerResources(ctx context.Context) (*adapters.DSMContainerResourceResponse, error)
+	StartContainer(ctx context.Context, name string) error
+	StopContainer(ctx context.Context, name string) error
+	RestartContainer(ctx context.Context, name string) error
 }
 
 // ListContainers returns all containers with their resource usage from all backends.
@@ -33,14 +33,24 @@ func (s *Service) ListContainers(ctx context.Context, device *string) (Container
 			continue
 		}
 
-		containers, err := entry.Backend.ListContainers()
+		containers, err := entry.Backend.ListContainers(ctx)
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("list containers from %s: %w", entry.Name, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("list containers from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on list containers error", "device", entry.Name, "err", err)
+			continue
 		}
 
-		resources, err := entry.Backend.GetContainerResources()
+		resources, err := entry.Backend.GetContainerResources(ctx)
 		if err != nil {
-			return ContainerList{}, fmt.Errorf("get container resources from %s: %w", entry.Name, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return ContainerList{}, fmt.Errorf("get container resources from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on get container resources error", "device", entry.Name, "err", err)
+			continue
 		}
 
 		resourceMap := make(map[string]adapters.DSMContainerResource, len(resources.Resources))
@@ -70,12 +80,12 @@ func (s *Service) GetContainer(ctx context.Context, containerID string) (*Contai
 		return nil, err
 	}
 
-	detail, err := backend.GetContainer(name)
+	detail, err := backend.GetContainer(ctx, name)
 	if err != nil {
 		return nil, fmt.Errorf("get container: %w", err)
 	}
 
-	resources, err := backend.GetContainerResources()
+	resources, err := backend.GetContainerResources(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get container resources: %w", err)
 	}
@@ -102,7 +112,7 @@ func (s *Service) StartContainer(ctx context.Context, containerID string) error 
 	if err != nil {
 		return err
 	}
-	return backend.StartContainer(name)
+	return backend.StartContainer(ctx, name)
 }
 
 // StopContainer stops a container by its composite ID.
@@ -115,7 +125,7 @@ func (s *Service) StopContainer(ctx context.Context, containerID string) error {
 	if err != nil {
 		return err
 	}
-	return backend.StopContainer(name)
+	return backend.StopContainer(ctx, name)
 }
 
 // RestartContainer restarts a container by its composite ID.
@@ -128,7 +138,7 @@ func (s *Service) RestartContainer(ctx context.Context, containerID string) erro
 	if err != nil {
 		return err
 	}
-	return backend.RestartContainer(name)
+	return backend.RestartContainer(ctx, name)
 }
 
 func mapRestartPolicy(name string) ContainerDetailRestartPolicy {
@@ -228,12 +238,12 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 	}
 
 	return ContainerDetail{
-		Id:             fmt.Sprintf("%s.%s", device, d.Profile.Name),
-		Device:         device,
-		Name:           d.Profile.Name,
-		Image:          d.Profile.Image,
-		Status:         mapStatus(d.Details.State),
-		RestartCount:   d.Details.RestartCount,
+		Id:           fmt.Sprintf("%s.%s", device, d.Profile.Name),
+		Device:       device,
+		Name:         d.Profile.Name,
+		Image:        d.Profile.Image,
+		Status:       mapStatus(d.Details.State),
+		RestartCount: d.Details.RestartCount,
 		Resources: ContainerResources{
 			CpuPercent:    res.CPU,
 			MemoryBytes:   res.Memory,
@@ -255,4 +265,3 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 		Labels:         &labels,
 	}
 }
-

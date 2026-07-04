@@ -53,12 +53,8 @@ func toKebab(name string) string {
 }
 
 // parseID splits a composite ID "{controller}.{suffix}" into its parts.
-func parseID(id string) (controller, suffix string, ok bool) {
-	controller, suffix, err := apierrors.ParseCompositeID(id, "ID", "controller.suffix")
-	if err != nil {
-		return "", "", false
-	}
-	return controller, suffix, true
+func parseID(id string) (controller, suffix string, err error) {
+	return apierrors.ParseCompositeID(id, "ID", "controller.suffix")
 }
 
 func normalizeMac(mac string) string {
