@@ -25,28 +25,28 @@ type mockBackend struct {
 	restartErr    error
 }
 
-func (m *mockBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
+func (m *mockBackend) ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error) {
 	return m.listResp, m.listErr
 }
 
-func (m *mockBackend) GetContainer(name string) (*adapters.DSMContainerDetailResponse, error) {
+func (m *mockBackend) GetContainer(ctx context.Context, name string) (*adapters.DSMContainerDetailResponse, error) {
 	return m.detailResp, m.detailErr
 }
 
-func (m *mockBackend) GetContainerResources() (*adapters.DSMContainerResourceResponse, error) {
+func (m *mockBackend) GetContainerResources(ctx context.Context) (*adapters.DSMContainerResourceResponse, error) {
 	return m.resourcesResp, m.resourcesErr
 }
 
-func (m *mockBackend) SupportsContainers() bool          { return true }
-func (m *mockBackend) StartContainer(name string) error   { return m.startErr }
-func (m *mockBackend) StopContainer(name string) error    { return m.stopErr }
-func (m *mockBackend) RestartContainer(name string) error { return m.restartErr }
+func (m *mockBackend) SupportsContainers() bool                                 { return true }
+func (m *mockBackend) StartContainer(ctx context.Context, name string) error    { return m.startErr }
+func (m *mockBackend) StopContainer(ctx context.Context, name string) error     { return m.stopErr }
+func (m *mockBackend) RestartContainer(ctx context.Context, name string) error  { return m.restartErr }
 
-func (m *mockBackend) ListDockerNetworks() (*adapters.DSMDockerNetworkListResponse, error) {
+func (m *mockBackend) ListDockerNetworks(ctx context.Context) (*adapters.DSMDockerNetworkListResponse, error) {
 	return m.networksResp, nil
 }
 
-func (m *mockBackend) ListDockerImages() (*adapters.DSMDockerImageListResponse, error) {
+func (m *mockBackend) ListDockerImages(ctx context.Context) (*adapters.DSMDockerImageListResponse, error) {
 	return m.imagesResp, nil
 }
 

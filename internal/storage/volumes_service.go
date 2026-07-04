@@ -13,7 +13,7 @@ import (
 
 // StorageBackend defines the adapter interface for storage operations.
 type StorageBackend interface {
-	GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error)
+	GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error)
 }
 
 type storageDeviceBackend struct {
@@ -50,7 +50,7 @@ func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (Volum
 			continue
 		}
 
-		resp, err := db.backend.GetStorageVolumes()
+		resp, err := db.backend.GetStorageVolumes(ctx)
 		if err != nil {
 			// If filtering by device, propagate the error; otherwise skip and warn.
 			if device != nil {
@@ -79,7 +79,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		return nil, err
 	}
 
-	resp, err := backend.GetStorageVolumes()
+	resp, err := backend.GetStorageVolumes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get storage volume: %w", err)
 	}

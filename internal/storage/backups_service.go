@@ -15,10 +15,10 @@ import (
 type BackupBackend interface {
 	SupportsBackups() bool
 	Location() *time.Location
-	ListBackupTasks() (*adapters.DSMBackupTaskListResponse, error)
-	GetBackupTaskDetail(taskID int) (*adapters.DSMBackupTaskDetailResponse, error)
-	GetBackupTaskStatus(taskID int) (*adapters.DSMBackupTaskStatusResponse, error)
-	GetBackupTarget(taskID int) (*adapters.DSMBackupTargetResponse, error)
+	ListBackupTasks(ctx context.Context) (*adapters.DSMBackupTaskListResponse, error)
+	GetBackupTaskDetail(ctx context.Context, taskID int) (*adapters.DSMBackupTaskDetailResponse, error)
+	GetBackupTaskStatus(ctx context.Context, taskID int) (*adapters.DSMBackupTaskStatusResponse, error)
+	GetBackupTarget(ctx context.Context, taskID int) (*adapters.DSMBackupTargetResponse, error)
 }
 
 type backupDeviceBackend struct {
@@ -61,7 +61,7 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 			continue
 		}
 
-		tasks, err := db.backend.ListBackupTasks()
+		tasks, err := db.backend.ListBackupTasks(ctx)
 		if err != nil {
 			// If filtering by device, propagate the error; otherwise skip and warn.
 			if device != nil {
@@ -71,7 +71,7 @@ func (s *Service) ListBackupTasks(ctx context.Context, device *string) (BackupTa
 			continue
 		}
 		for _, t := range tasks.TaskList {
-			status, err := db.backend.GetBackupTaskStatus(t.TaskID)
+			status, err := db.backend.GetBackupTaskStatus(ctx, t.TaskID)
 			if err != nil {
 				s.logger.Warn("backup task status lookup failed",
 					"device", db.device, "task_id", t.TaskID, "err", err)
@@ -104,7 +104,7 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		return nil, err
 	}
 
-	tasks, err := backend.ListBackupTasks()
+	tasks, err := backend.ListBackupTasks(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get backup task from %s: %w", device, err)
 	}
@@ -116,17 +116,17 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 		}
 
 		loc := backend.Location()
-		status, err := backend.GetBackupTaskStatus(t.TaskID)
+		status, err := backend.GetBackupTaskStatus(ctx, t.TaskID)
 		if err != nil {
 			s.logger.Warn("backup task status lookup failed",
 				"device", device, "task_id", t.TaskID, "err", err)
 		}
-		detail, err := backend.GetBackupTaskDetail(t.TaskID)
+		detail, err := backend.GetBackupTaskDetail(ctx, t.TaskID)
 		if err != nil {
 			s.logger.Warn("backup task detail lookup failed",
 				"device", device, "task_id", t.TaskID, "err", err)
 		}
-		target, err := backend.GetBackupTarget(t.TaskID)
+		target, err := backend.GetBackupTarget(ctx, t.TaskID)
 		if err != nil {
 			s.logger.Warn("backup target lookup failed",
 				"device", device, "task_id", t.TaskID, "err", err)

@@ -17,7 +17,7 @@ type mockBackend struct {
 	err  error
 }
 
-func (m *mockBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+func (m *mockBackend) GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error) {
 	return m.resp, m.err
 }
 

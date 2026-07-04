@@ -11,10 +11,10 @@ import (
 
 // ClientsBackend is the narrow interface for client operations.
 type ClientsBackend interface {
-	GetClients() ([]adapters.UniFiSta, error)
-	GetActiveClients() ([]adapters.UniFiClientV2, error)
-	GetOfflineClients(historyDays int) ([]adapters.UniFiClientV2, error)
-	GetAllClients(historyDays int) ([]adapters.UniFiClientV2, error)
+	GetClients(ctx context.Context) ([]adapters.UniFiSta, error)
+	GetActiveClients(ctx context.Context) ([]adapters.UniFiClientV2, error)
+	GetOfflineClients(ctx context.Context, historyDays int) ([]adapters.UniFiClientV2, error)
+	GetAllClients(ctx context.Context, historyDays int) ([]adapters.UniFiClientV2, error)
 }
 
 // ListClients retrieves clients from all backends. status filters by "online", "offline", or "" for all.
@@ -28,11 +28,11 @@ func (s *Service) ListClients(ctx context.Context, status string) (NetworkClient
 		var err error
 		switch status {
 		case "online":
-			raw, err = cb.unifi.GetActiveClients()
+			raw, err = cb.unifi.GetActiveClients(ctx)
 		case "offline":
-			raw, err = cb.unifi.GetOfflineClients(s.historyDays)
+			raw, err = cb.unifi.GetOfflineClients(ctx, s.historyDays)
 		default:
-			raw, err = cb.unifi.GetAllClients(s.historyDays)
+			raw, err = cb.unifi.GetAllClients(ctx, s.historyDays)
 		}
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
@@ -99,13 +99,13 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 	}
 
 	// Fetch devices for cross-reference (device refs in connectedTo).
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
 		return NetworkClientDetail{}, fmt.Errorf("get unifi devices: %w", err)
 	}
 	macToDevice := buildMacToDevice(devices)
 
-	raw, err := backend.GetClients()
+	raw, err := backend.GetClients(ctx)
 	if err != nil {
 		return NetworkClientDetail{}, fmt.Errorf("get unifi clients: %w", err)
 	}
@@ -121,7 +121,7 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 	}
 
 	// Not found in active clients — check offline history.
-	offline, err := backend.GetOfflineClients(s.historyDays)
+	offline, err := backend.GetOfflineClients(ctx, s.historyDays)
 	if err != nil {
 		return NetworkClientDetail{}, fmt.Errorf("get unifi offline clients: %w", err)
 	}

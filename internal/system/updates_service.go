@@ -13,7 +13,7 @@ import (
 
 // UpdatesDSMBackend is the narrow interface for updates operations.
 type UpdatesDSMBackend interface {
-	ListContainers() (*adapters.DSMContainerListResponse, error)
+	ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error)
 }
 
 // githubReleasesCache holds cached GitHub release data indexed by "owner/repo".
@@ -90,7 +90,7 @@ type containerCandidate struct {
 // buildUpdateItems scans all Docker-enabled DSM backends live for current container
 // versions and assembles update details using GitHub release data.
 // When forceGitHub is true the GitHub cache is bypassed; otherwise it is used if fresh.
-func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]ContainerSystemUpdateDetail, error) {
+func (s *Service) buildUpdateItems(ctx context.Context, forceGitHub bool) ([]ContainerSystemUpdateDetail, error) {
 	checkedAt := time.Now().UTC()
 
 	// Phase 1: always scan DSM live so CurrentVersion reflects the running container.
@@ -104,7 +104,7 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 		if s.monitor != nil && !s.monitor.Available(de.device) {
 			continue
 		}
-		resp, err := de.dsm.ListContainers()
+		resp, err := de.dsm.ListContainers(ctx)
 		if err != nil {
 			continue
 		}
@@ -115,8 +115,16 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 			}
 
 			repo, apiBase, sourceURL := s.resolveSource(image)
-			if repo == "" && !s.warnedImages[image] {
-				s.warnedImages[image] = true
+			var shouldWarn bool
+			if repo == "" {
+				s.mu.Lock()
+				if !s.warnedImages[image] {
+					s.warnedImages[image] = true
+					shouldWarn = true
+				}
+				s.mu.Unlock()
+			}
+			if shouldWarn {
 				s.logger.Warn("no release source configured for container image; update status will be unknown",
 					"container", c.Name,
 					"image", image,
@@ -136,7 +144,7 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 	}
 
 	// Phase 2: get GitHub releases — cached or fresh depending on TTL and forceGitHub.
-	releases := s.getOrFetchReleases(repos, forceGitHub)
+	releases := s.getOrFetchReleases(ctx, repos, forceGitHub)
 
 	// Phase 3: assemble results.
 	items := make([]ContainerSystemUpdateDetail, 0, len(candidates))
@@ -186,7 +194,7 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 // When forceGitHub is false it serves from the in-memory cache if still within the TTL.
 // Failed fetches preserve the previously cached release for the affected repo so that
 // a rate-limit or network error does not downgrade a known status to unknown.
-func (s *Service) getOrFetchReleases(repos map[string]string, forceGitHub bool) map[string]*GitHubRelease {
+func (s *Service) getOrFetchReleases(ctx context.Context, repos map[string]string, forceGitHub bool) map[string]*GitHubRelease {
 	if !forceGitHub {
 		s.mu.RLock()
 		if s.ghCache != nil && time.Since(s.ghCache.fetchedAt) < s.updateCacheTTL {
@@ -211,7 +219,7 @@ func (s *Service) getOrFetchReleases(repos map[string]string, forceGitHub bool) 
 	}
 
 	// Fetch fresh releases from GitHub.
-	fresh := fetchReleases(repos, s.logger)
+	fresh := fetchReleases(ctx, repos, s.logger)
 
 	// Merge into the previous cache: start with old entries so repos whose fetch
 	// failed (e.g. rate-limited) retain their last known release.

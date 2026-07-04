@@ -12,7 +12,7 @@ import (
 
 // VLANsBackend is the narrow interface for VLAN operations.
 type VLANsBackend interface {
-	GetNetworkConf() ([]adapters.UniFiNetworkConf, error)
+	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
 }
 
 // ListVLANs returns all LAN networks from all backends as a flat list.
@@ -22,7 +22,7 @@ func (s *Service) ListVLANs(ctx context.Context) (VlanList, error) {
 		if s.monitor != nil && !s.monitor.Available(cb.controller) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf()
+		networks, err := cb.unifi.GetNetworkConf(ctx)
 		if err != nil {
 			// Network list methods have no device filter — always skip and warn.
 			s.logger.Warn("skipping backend on get network conf error", "controller", cb.controller, "err", err)
@@ -51,7 +51,7 @@ func (s *Service) GetVLAN(ctx context.Context, id string) (VlanDetail, error) {
 	if err != nil {
 		return VlanDetail{}, err
 	}
-	networks, err := backend.GetNetworkConf()
+	networks, err := backend.GetNetworkConf(ctx)
 	if err != nil {
 		return VlanDetail{}, fmt.Errorf("get network conf: %w", err)
 	}

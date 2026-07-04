@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -39,12 +40,14 @@ func buildClients(cfg *config.Config, logger *slog.Logger) (map[string]*adapters
 // discoverAPIs runs API discovery on all Synology clients in parallel.
 // Each client logs its own outcome and retries automatically via Ping when the backend recovers.
 func discoverAPIs(clients map[string]*adapters.SynologyClient) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var wg sync.WaitGroup
 	for _, client := range clients {
 		wg.Add(1)
 		go func(client *adapters.SynologyClient) {
 			defer wg.Done()
-			_ = client.DiscoverAPIs()
+			_ = client.DiscoverAPIs(ctx)
 		}(client)
 	}
 	wg.Wait()

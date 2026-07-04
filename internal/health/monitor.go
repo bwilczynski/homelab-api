@@ -48,22 +48,24 @@ func (m *Monitor) Available(name string) bool {
 // Start runs the health monitor until ctx is cancelled.
 // It probes all backends immediately, then on every interval tick.
 func (m *Monitor) Start(ctx context.Context) {
-	m.probe()
+	m.probe(ctx)
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			m.probe()
+			m.probe(ctx)
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (m *Monitor) probe() {
+func (m *Monitor) probe(ctx context.Context) {
 	for name, hc := range m.backends {
-		err := hc.Ping()
+		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := hc.Ping(probeCtx)
+		cancel()
 
 		m.mu.Lock()
 		was := m.available[name]
