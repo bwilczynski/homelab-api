@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
@@ -22,42 +21,35 @@ type UniFiBackend interface {
 	WANsBackend
 }
 
-type controllerBackend struct {
-	controller  string
-	unifi       UniFiBackend
-	historyDays int
-}
-
 // Service implements network domain business logic.
 type Service struct {
-	backends []controllerBackend
-	logger   *slog.Logger
-	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
+	backends    adapters.Registry[UniFiBackend]
+	logger      *slog.Logger
+	monitor     adapters.AvailabilityChecker // optional; nil means all backends available
+	historyDays map[string]int               // controller name → days of offline client history
 }
 
 // NewService creates a new network service with one or more UniFi backends.
 // monitor may be nil; when non-nil, unreachable backends are skipped.
 // historyDays maps controller name to days of offline client history (default 30 if missing/zero).
 func NewService(backends map[string]UniFiBackend, historyDays map[string]int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
-	cbs := make([]controllerBackend, 0, len(backends))
-	for controller, unifi := range backends {
-		days := historyDays[controller]
-		if days <= 0 {
-			days = 30
+	days := make(map[string]int, len(backends))
+	for controller := range backends {
+		d := historyDays[controller]
+		if d <= 0 {
+			d = 30
 		}
-		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi, historyDays: days})
+		days[controller] = d
 	}
-	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
-	return &Service{backends: cbs, logger: logger, monitor: monitor}
+	return &Service{backends: adapters.NewRegistry(backends), historyDays: days, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {
-	for _, cb := range s.backends {
-		if cb.controller == controller {
-			return cb.unifi, nil
-		}
+	backend, ok := s.backends.Find(controller)
+	if !ok {
+		return nil, fmt.Errorf("unknown controller %q: %w", controller, apierrors.ErrNotFound)
 	}
-	return nil, fmt.Errorf("unknown controller %q: %w", controller, apierrors.ErrNotFound)
+	return backend, nil
 }
 
 // toKebab converts a display name to kebab-case (lowercase, spaces and special chars → hyphens).
@@ -70,12 +62,8 @@ func toKebab(name string) string {
 }
 
 // parseID splits a composite ID "{controller}.{suffix}" into its parts.
-func parseID(id string) (controller, suffix string, ok bool) {
-	dot := strings.IndexByte(id, '.')
-	if dot <= 0 || dot == len(id)-1 {
-		return "", "", false
-	}
-	return id[:dot], id[dot+1:], true
+func parseID(id string) (controller, suffix string, err error) {
+	return apierrors.ParseCompositeID(id, "ID", "controller.suffix")
 }
 
 func normalizeMac(mac string) string {

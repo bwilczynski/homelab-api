@@ -2,10 +2,12 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 	"github.com/bwilczynski/homelab-api/internal/testhelpers"
 )
 
@@ -15,7 +17,7 @@ type mockBackend struct {
 	err  error
 }
 
-func (m *mockBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+func (m *mockBackend) GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error) {
 	return m.resp, m.err
 }
 
@@ -175,11 +177,14 @@ func TestGetStorageVolumeNotFound(t *testing.T) {
 	svc := NewService(map[string]StorageBackend{"nas-01": &mockBackend{resp: &resp}}, map[string]BackupBackend{}, slog.Default(), nil)
 
 	v, err := svc.GetStorageVolume(context.Background(), "nas-01.nonexistent")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("expected error for missing volume")
 	}
 	if v != nil {
 		t.Errorf("expected nil for missing volume, got %+v", v)
+	}
+	if !errors.Is(err, apierrors.ErrNotFound) {
+		t.Fatalf("expected not found error, got: %v", err)
 	}
 }
 
@@ -249,6 +254,35 @@ func TestMapDiskStatus(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("mapDiskStatus(%q) = %s, want %s", tt.status, got, tt.want)
 		}
+	}
+}
+
+func TestListStorageVolumesPartialBackendFailure(t *testing.T) {
+	// Test that when listing volumes across all backends without a device filter,
+	// a failing backend is skipped with a warning and partial results are returned.
+	resp := testhelpers.LoadFixture[adapters.DSMStorageVolumeResponse](t, "testdata/storage_volumes.json")
+
+	svc := NewService(
+		map[string]StorageBackend{
+			"nas-01": &mockBackend{resp: &resp},
+			"nas-02": &mockBackend{resp: nil, err: errors.New("API error")},
+		},
+		map[string]BackupBackend{},
+		slog.Default(),
+		nil,
+	)
+
+	result, err := svc.ListStorageVolumes(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should return volumes from nas-01 only, skipping nas-02
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 volume from healthy backend, got %d", len(result.Items))
+	}
+	if result.Items[0].Device != "nas-01" {
+		t.Errorf("expected device nas-01, got %s", result.Items[0].Device)
 	}
 }
 

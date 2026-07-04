@@ -12,7 +12,7 @@ import (
 
 // ImagesBackend is the narrow interface for Docker image operations.
 type ImagesBackend interface {
-	ListDockerImages() (*adapters.DSMDockerImageListResponse, error)
+	ListDockerImages(ctx context.Context) (*adapters.DSMDockerImageListResponse, error)
 }
 
 // imageShortID strips the "sha256:" prefix and returns the first 12 hex characters.
@@ -27,22 +27,27 @@ func imageShortID(fullID string) string {
 // ListImages returns all Docker images from all backends.
 func (s *Service) ListImages(ctx context.Context, device *string) (DockerImageList, error) {
 	var items []DockerImage
-	for _, db := range s.backends {
-		if device != nil && *device != db.device {
+	for _, entry := range s.backends {
+		if device != nil && *device != entry.Name {
 			continue
 		}
-		if !db.backend.SupportsContainers() {
+		if !entry.Backend.SupportsContainers() {
 			continue
 		}
-		if s.monitor != nil && !s.monitor.Available(db.device) {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		raw, err := db.backend.ListDockerImages()
+		raw, err := entry.Backend.ListDockerImages(ctx)
 		if err != nil {
-			return DockerImageList{}, fmt.Errorf("list docker images from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return DockerImageList{}, fmt.Errorf("list docker images from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on list docker images error", "device", entry.Name, "err", err)
+			continue
 		}
 		for _, img := range raw.Images {
-			items = append(items, mapDockerImage(db.device, img))
+			items = append(items, mapDockerImage(entry.Name, img))
 		}
 	}
 	if items == nil {
@@ -61,7 +66,7 @@ func (s *Service) GetImage(ctx context.Context, imageID string) (*DockerImageDet
 	if err != nil {
 		return nil, err
 	}
-	raw, err := backend.ListDockerImages()
+	raw, err := backend.ListDockerImages(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("list docker images: %w", err)
 	}

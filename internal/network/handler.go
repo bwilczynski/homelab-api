@@ -85,15 +85,12 @@ func (h *ServerHandler) ListNetworkDevices(ctx context.Context, request ListNetw
 
 // GetNetworkDevice implements StrictServerInterface.
 func (h *ServerHandler) GetNetworkDevice(ctx context.Context, request GetNetworkDeviceRequestObject) (GetNetworkDeviceResponseObject, error) {
-	detail, found, err := h.svc.GetDevice(ctx, request.DeviceId)
+	detail, err := h.svc.GetDevice(ctx, request.DeviceId)
 	if err != nil {
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetNetworkDevice404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
 		return GetNetworkDevice500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if !found {
-		return GetNetworkDevice404ApplicationProblemPlusJSONResponse{notFound("Network device not found: " + request.DeviceId)}, nil
 	}
 	return networkDeviceDetailResponse{detail: detail}, nil
 }
@@ -116,15 +113,12 @@ func (h *ServerHandler) ListNetworkClients(ctx context.Context, request ListNetw
 
 // GetNetworkClient implements StrictServerInterface.
 func (h *ServerHandler) GetNetworkClient(ctx context.Context, request GetNetworkClientRequestObject) (GetNetworkClientResponseObject, error) {
-	detail, found, err := h.svc.GetClient(ctx, request.ClientId)
+	detail, err := h.svc.GetClient(ctx, request.ClientId)
 	if err != nil {
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetNetworkClient404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
 		return GetNetworkClient500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if !found {
-		return GetNetworkClient404ApplicationProblemPlusJSONResponse{notFound("Network client not found: " + request.ClientId)}, nil
 	}
 	return networkClientDetailResponse{detail: detail}, nil
 }
@@ -140,15 +134,12 @@ func (h *ServerHandler) ListSsids(ctx context.Context, _ ListSsidsRequestObject)
 
 // GetSsid implements StrictServerInterface.
 func (h *ServerHandler) GetSsid(ctx context.Context, request GetSsidRequestObject) (GetSsidResponseObject, error) {
-	detail, found, err := h.svc.GetSSID(ctx, request.SsidId)
+	detail, err := h.svc.GetSSID(ctx, request.SsidId)
 	if err != nil {
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetSsid404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
 		return GetSsid500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if !found {
-		return GetSsid404ApplicationProblemPlusJSONResponse{notFound("SSID not found: " + request.SsidId)}, nil
 	}
 	return GetSsid200JSONResponse(detail), nil
 }
@@ -164,15 +155,12 @@ func (h *ServerHandler) ListVlans(ctx context.Context, _ ListVlansRequestObject)
 
 // GetVlan implements StrictServerInterface.
 func (h *ServerHandler) GetVlan(ctx context.Context, request GetVlanRequestObject) (GetVlanResponseObject, error) {
-	detail, found, err := h.svc.GetVLAN(ctx, request.VlanId)
+	detail, err := h.svc.GetVLAN(ctx, request.VlanId)
 	if err != nil {
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetVlan404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
 		return GetVlan500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if !found {
-		return GetVlan404ApplicationProblemPlusJSONResponse{notFound("VLAN not found: " + request.VlanId)}, nil
 	}
 	return GetVlan200JSONResponse(detail), nil
 }
@@ -188,15 +176,12 @@ func (h *ServerHandler) ListWans(ctx context.Context, _ ListWansRequestObject) (
 
 // GetWan implements StrictServerInterface.
 func (h *ServerHandler) GetWan(ctx context.Context, request GetWanRequestObject) (GetWanResponseObject, error) {
-	detail, found, err := h.svc.GetWAN(ctx, request.WanId)
+	detail, err := h.svc.GetWAN(ctx, request.WanId)
 	if err != nil {
 		if errors.Is(err, apierrors.ErrNotFound) {
 			return GetWan404ApplicationProblemPlusJSONResponse{notFound(err.Error())}, nil
 		}
 		return GetWan500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
-	}
-	if !found {
-		return GetWan404ApplicationProblemPlusJSONResponse{notFound("WAN not found: " + request.WanId)}, nil
 	}
 	return GetWan200JSONResponse(detail), nil
 }

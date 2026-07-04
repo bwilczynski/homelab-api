@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -103,7 +104,7 @@ func TestSynologyClient_Call_RetriesAfterSessionExpired(t *testing.T) {
 
 	client := newTestClient(t, d.server)
 
-	data, err := client.Call("SYNO.Test", "do", "1", nil)
+	data, err := client.Call(context.Background(), "SYNO.Test", "do", "1", nil)
 	if err != nil {
 		t.Fatalf("Call: unexpected error: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestSynologyClient_Call_DoesNotRetryOnNonSessionError(t *testing.T) {
 
 	client := newTestClient(t, d.server)
 
-	_, err := client.Call("SYNO.Docker.Container", "get", "1", nil)
+	_, err := client.Call(context.Background(), "SYNO.Docker.Container", "get", "1", nil)
 	if err == nil {
 		t.Fatal("Call: expected error, got nil")
 	}

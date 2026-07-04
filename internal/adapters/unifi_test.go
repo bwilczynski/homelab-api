@@ -1,6 +1,7 @@
 package adapters_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -42,7 +43,7 @@ func TestGetDevices_LegacyMode_RetriesOnce_After401(t *testing.T) {
 	host := strings.TrimPrefix(srv.URL, "https://")
 	client := adapters.NewUniFiClient(host, "admin", "pass", true)
 
-	devices, err := client.GetDevices()
+	devices, err := client.GetDevices(context.Background())
 	if err != nil {
 		t.Fatalf("expected success after retry, got: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestGetDevices_LegacyMode_RepeatedUnauthorized_ReturnsError(t *testing.T) {
 	host := strings.TrimPrefix(srv.URL, "https://")
 	client := adapters.NewUniFiClient(host, "admin", "pass", true)
 
-	_, err := client.GetDevices()
+	_, err := client.GetDevices(context.Background())
 	if err == nil {
 		t.Fatal("expected error for persistent 401, got nil")
 	}
@@ -105,7 +106,7 @@ func TestGetDevices_APIKeyMode_401_ReturnsError_NoRetry(t *testing.T) {
 	host := strings.TrimPrefix(srv.URL, "https://")
 	client := adapters.NewUniFiClientWithAPIKey(host, "wrong-key", true)
 
-	_, err := client.GetDevices()
+	_, err := client.GetDevices(context.Background())
 	if err == nil {
 		t.Fatal("expected error for API key 401, got nil")
 	}
@@ -133,7 +134,7 @@ func TestGetDevices_Non2xx_ReturnsError(t *testing.T) {
 	host := strings.TrimPrefix(srv.URL, "https://")
 	client := adapters.NewUniFiClient(host, "admin", "pass", true)
 
-	_, err := client.GetDevices()
+	_, err := client.GetDevices(context.Background())
 	if err == nil {
 		t.Fatal("expected error for 500 response, got nil")
 	}

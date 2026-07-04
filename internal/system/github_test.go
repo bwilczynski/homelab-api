@@ -1,11 +1,13 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 )
 
@@ -31,7 +33,7 @@ func TestFetchLatestRelease(t *testing.T) {
 	}))
 	overrideGitHubClient(t, srv)
 
-	release, err := fetchLatestRelease("dani-garcia/vaultwarden", githubBaseURL)
+	release, err := fetchLatestRelease(context.Background(), "dani-garcia/vaultwarden", githubBaseURL)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -53,18 +55,19 @@ func TestFetchLatestRelease_NotFound(t *testing.T) {
 	}))
 	overrideGitHubClient(t, srv)
 
-	_, err := fetchLatestRelease("no-such/repo", githubBaseURL)
+	_, err := fetchLatestRelease(context.Background(), "no-such/repo", githubBaseURL)
 	if err == nil {
 		t.Error("expected error for 404 response")
 	}
 }
 
 func TestFetchReleases_Deduplicates(t *testing.T) {
-	callCount := 0
+	var callCount atomic.Int64
 	fixture := loadGitHubReleaseFixture(t)
 
+	// fetchReleases fires requests concurrently, so the handler must count atomically.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
+		callCount.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(fixture)
 	}))
@@ -74,10 +77,10 @@ func TestFetchReleases_Deduplicates(t *testing.T) {
 		"dani-garcia/vaultwarden": githubBaseURL,
 		"grafana/grafana":         githubBaseURL,
 	}
-	results := fetchReleases(repos, slog.Default())
+	results := fetchReleases(context.Background(), repos, slog.Default())
 
-	if callCount != 2 {
-		t.Errorf("expected 2 HTTP calls for 2 unique repos, got %d", callCount)
+	if callCount.Load() != 2 {
+		t.Errorf("expected 2 HTTP calls for 2 unique repos, got %d", callCount.Load())
 	}
 	if len(results) != 2 {
 		t.Errorf("expected 2 results, got %d", len(results))

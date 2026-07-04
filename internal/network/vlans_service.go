@@ -7,29 +7,32 @@ import (
 	"slices"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // VLANsBackend is the narrow interface for VLAN operations.
 type VLANsBackend interface {
-	GetNetworkConf() ([]adapters.UniFiNetworkConf, error)
+	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
 }
 
 // ListVLANs returns all LAN networks from all backends as a flat list.
 func (s *Service) ListVLANs(ctx context.Context) (VlanList, error) {
 	var items []Vlan
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf()
+		networks, err := entry.Backend.GetNetworkConf(ctx)
 		if err != nil {
-			return VlanList{}, fmt.Errorf("get network conf from %s: %w", cb.controller, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on get network conf error", "controller", entry.Name, "err", err)
+			continue
 		}
 		for _, n := range networks {
 			if !isLanNetwork(n) {
 				continue
 			}
-			items = append(items, networkToVlan(cb.controller, n))
+			items = append(items, networkToVlan(entry.Name, n))
 		}
 	}
 	if items == nil {
@@ -39,28 +42,28 @@ func (s *Service) ListVLANs(ctx context.Context) (VlanList, error) {
 }
 
 // GetVLAN looks up a single VLAN by composite ID.
-func (s *Service) GetVLAN(ctx context.Context, id string) (VlanDetail, bool, error) {
-	controller, name, ok := parseID(id)
-	if !ok {
-		return VlanDetail{}, false, nil
+func (s *Service) GetVLAN(ctx context.Context, id string) (VlanDetail, error) {
+	controller, name, err := parseID(id)
+	if err != nil {
+		return VlanDetail{}, err
 	}
 	backend, err := s.findBackend(controller)
 	if err != nil {
-		return VlanDetail{}, false, nil
+		return VlanDetail{}, err
 	}
-	networks, err := backend.GetNetworkConf()
+	networks, err := backend.GetNetworkConf(ctx)
 	if err != nil {
-		return VlanDetail{}, false, fmt.Errorf("get network conf: %w", err)
+		return VlanDetail{}, fmt.Errorf("get network conf: %w", err)
 	}
 	for _, n := range networks {
 		if !isLanNetwork(n) {
 			continue
 		}
 		if toKebab(n.Name) == name {
-			return buildVlanDetail(controller, n), true, nil
+			return buildVlanDetail(controller, n), nil
 		}
 	}
-	return VlanDetail{}, false, nil
+	return VlanDetail{}, fmt.Errorf("VLAN not found: %s: %w", id, apierrors.ErrNotFound)
 }
 
 // isLanNetwork returns true for LAN-type network entries (excludes WAN).

@@ -18,13 +18,13 @@ const (
 
 // Backend describes a single backend target.
 type Backend struct {
-	Name        string      `yaml:"name"`
-	Type        BackendType `yaml:"type"`
-	Host        string      `yaml:"host"`
-	Username    string      `yaml:"username"`
-	Password    string      `yaml:"password"`
-	APIKey      string      `yaml:"api_key"`     // optional; UniFi only — API key auth (alternative to username/password)
-	AuthVersion string      `yaml:"auth_version"` // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
+	Name              string      `yaml:"name"`
+	Type              BackendType `yaml:"type"`
+	Host              string      `yaml:"host"`
+	Username          string      `yaml:"username"`
+	Password          string      `yaml:"password"`
+	APIKey            string      `yaml:"api_key"`             // optional; UniFi only — API key auth (alternative to username/password)
+	AuthVersion       string      `yaml:"auth_version"`        // optional; Synology only — overrides the auto-discovered SYNO.API.Auth version
 	InsecureTLS       bool        `yaml:"insecure_tls"`        // optional; skip TLS certificate verification (defaults to false)
 	ClientHistoryDays int         `yaml:"client_history_days"` // optional; UniFi only — how many days of offline client history to include (default: 30)
 	Timezone          string      `yaml:"timezone"`            // optional; IANA timezone name (e.g. "Europe/Warsaw"); defaults to server local TZ

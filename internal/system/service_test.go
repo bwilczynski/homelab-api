@@ -3,6 +3,7 @@ package system
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -16,29 +17,29 @@ import (
 // --- Mock backends ---
 
 type mockDSMBackend struct {
-	info     *adapters.DSMSystemInfoResponse
-	util     *adapters.DSMSystemUtilizationResponse
-	volumes  *adapters.DSMStorageVolumeResponse
-	conts    *adapters.DSMContainerListResponse
-	err      error
+	info    *adapters.DSMSystemInfoResponse
+	util    *adapters.DSMSystemUtilizationResponse
+	volumes *adapters.DSMStorageVolumeResponse
+	conts   *adapters.DSMContainerListResponse
+	err     error
 }
 
-func (m *mockDSMBackend) GetSystemInfo() (*adapters.DSMSystemInfoResponse, error) {
+func (m *mockDSMBackend) GetSystemInfo(ctx context.Context) (*adapters.DSMSystemInfoResponse, error) {
 	return m.info, m.err
 }
 
-func (m *mockDSMBackend) GetSystemUtilization() (*adapters.DSMSystemUtilizationResponse, error) {
+func (m *mockDSMBackend) GetSystemUtilization(ctx context.Context) (*adapters.DSMSystemUtilizationResponse, error) {
 	return m.util, m.err
 }
 
-func (m *mockDSMBackend) GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error) {
+func (m *mockDSMBackend) GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error) {
 	if m.volumes != nil {
 		return m.volumes, nil
 	}
 	return &adapters.DSMStorageVolumeResponse{}, m.err
 }
 
-func (m *mockDSMBackend) ListContainers() (*adapters.DSMContainerListResponse, error) {
+func (m *mockDSMBackend) ListContainers(ctx context.Context) (*adapters.DSMContainerListResponse, error) {
 	if m.conts != nil {
 		return m.conts, nil
 	}
@@ -50,7 +51,7 @@ type mockUniFiBackend struct {
 	err        error
 }
 
-func (m *mockUniFiBackend) GetHealth() ([]adapters.UniFiSubsystemHealth, error) {
+func (m *mockUniFiBackend) GetHealth(ctx context.Context) ([]adapters.UniFiSubsystemHealth, error) {
 	return m.subsystems, m.err
 }
 
@@ -325,6 +326,82 @@ func TestGetSystemHealth_AllComponentsPresent(t *testing.T) {
 		if !names[required] {
 			t.Errorf("expected component %q in health response", required)
 		}
+	}
+}
+
+func TestGetSystemHealth_DSMBackendHealthCheckFails(t *testing.T) {
+	// Test that when a DSM backend's health check (GetStorageVolumes) fails,
+	// GetSystemHealth returns no error but includes an Unhealthy component
+	// with the error message, and overall status is Unhealthy.
+	svc := newTestService(&mockDSMBackend{
+		volumes: nil,
+		err:     fmt.Errorf("DSM API unavailable"),
+	}, &mockUniFiBackend{})
+
+	health, err := svc.GetSystemHealth(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Overall status should be Unhealthy
+	if health.Status != Unhealthy {
+		t.Errorf("expected overall status Unhealthy, got %s", health.Status)
+	}
+
+	// Should have a storage component marked Unhealthy with error message
+	var storageComp *ComponentHealth
+	for i := range health.Components {
+		if health.Components[i].Name == "storage" {
+			storageComp = &health.Components[i]
+			break
+		}
+	}
+	if storageComp == nil {
+		t.Fatal("expected storage component in health response")
+	}
+	if storageComp.Status != Unhealthy {
+		t.Errorf("expected storage status Unhealthy, got %s", storageComp.Status)
+	}
+	if storageComp.Message == nil || *storageComp.Message != "DSM API unavailable" {
+		t.Errorf("expected error message in storage component, got %v", storageComp.Message)
+	}
+}
+
+func TestGetSystemHealth_UniFiBackendHealthCheckFails(t *testing.T) {
+	// Test that when a UniFi backend's health check fails,
+	// GetSystemHealth returns no error but includes an Unhealthy network component
+	// with the error message, and overall status is Unhealthy.
+	svc := newTestService(&mockDSMBackend{volumes: loadDSMStorageVolumes(t)}, &mockUniFiBackend{
+		subsystems: nil,
+		err:        fmt.Errorf("UniFi controller offline"),
+	})
+
+	health, err := svc.GetSystemHealth(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Overall status should be Unhealthy
+	if health.Status != Unhealthy {
+		t.Errorf("expected overall status Unhealthy, got %s", health.Status)
+	}
+
+	// Should have a network component marked Unhealthy with error message
+	var networkComp *ComponentHealth
+	for i := range health.Components {
+		if health.Components[i].Name == "network" {
+			networkComp = &health.Components[i]
+			break
+		}
+	}
+	if networkComp == nil {
+		t.Fatal("expected network component in health response")
+	}
+	if networkComp.Status != Unhealthy {
+		t.Errorf("expected network status Unhealthy, got %s", networkComp.Status)
+	}
+	if networkComp.Message == nil || *networkComp.Message != "UniFi controller offline" {
+		t.Errorf("expected error message in network component, got %v", networkComp.Message)
 	}
 }
 
@@ -671,8 +748,8 @@ func TestListSystemUpdates_StatusFilter(t *testing.T) {
 	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{
-				{Name: "a", Image: "ghcr.io/owner/repo:1.35.8"},  // matches fixture → upToDate
-				{Name: "b", Image: "ghcr.io/other/lib:1.0.0"},    // doesn't match → updateAvailable
+				{Name: "a", Image: "ghcr.io/owner/repo:1.35.8"}, // matches fixture → upToDate
+				{Name: "b", Image: "ghcr.io/other/lib:1.0.0"},   // doesn't match → updateAvailable
 			},
 		},
 	})

@@ -5,28 +5,33 @@ import (
 	"fmt"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
+	"github.com/bwilczynski/homelab-api/internal/apierrors"
 )
 
 // WANsBackend is the narrow interface for WAN operations.
 type WANsBackend interface {
-	GetNetworkConf() ([]adapters.UniFiNetworkConf, error)
-	GetDevices() ([]adapters.UniFiDevice, error)
+	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
+	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
 }
 
 // ListWANs returns all WAN interfaces from all backends.
 func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 	var items []Wan
-	for _, cb := range s.backends {
-		if s.monitor != nil && !s.monitor.Available(cb.controller) {
+	for _, entry := range s.backends {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
-		networks, err := cb.unifi.GetNetworkConf()
+		networks, err := entry.Backend.GetNetworkConf(ctx)
 		if err != nil {
-			return WanList{}, fmt.Errorf("get network conf from %s: %w", cb.controller, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on get network conf error", "controller", entry.Name, "err", err)
+			continue
 		}
-		devices, err := cb.unifi.GetDevices()
+		devices, err := entry.Backend.GetDevices(ctx)
 		if err != nil {
-			return WanList{}, fmt.Errorf("get devices from %s: %w", cb.controller, err)
+			// Network list methods have no device filter — always skip and warn.
+			s.logger.Warn("skipping backend on get devices error", "controller", entry.Name, "err", err)
+			continue
 		}
 		gateway := findGateway(devices)
 		for _, n := range networks {
@@ -34,7 +39,7 @@ func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 				continue
 			}
 			iface := resolveWanIface(gateway, n.WanNetworkGroup)
-			items = append(items, buildWan(cb.controller, n, iface, gateway))
+			items = append(items, buildWan(entry.Name, n, iface, gateway))
 		}
 	}
 	if items == nil {
@@ -44,22 +49,22 @@ func (s *Service) ListWANs(ctx context.Context) (WanList, error) {
 }
 
 // GetWAN looks up a single WAN interface by composite ID.
-func (s *Service) GetWAN(ctx context.Context, id string) (WanDetail, bool, error) {
-	controller, name, ok := parseID(id)
-	if !ok {
-		return WanDetail{}, false, nil
+func (s *Service) GetWAN(ctx context.Context, id string) (WanDetail, error) {
+	controller, name, err := parseID(id)
+	if err != nil {
+		return WanDetail{}, err
 	}
 	backend, err := s.findBackend(controller)
 	if err != nil {
-		return WanDetail{}, false, nil
+		return WanDetail{}, err
 	}
-	networks, err := backend.GetNetworkConf()
+	networks, err := backend.GetNetworkConf(ctx)
 	if err != nil {
-		return WanDetail{}, false, fmt.Errorf("get network conf: %w", err)
+		return WanDetail{}, fmt.Errorf("get network conf: %w", err)
 	}
-	devices, err := backend.GetDevices()
+	devices, err := backend.GetDevices(ctx)
 	if err != nil {
-		return WanDetail{}, false, fmt.Errorf("get devices: %w", err)
+		return WanDetail{}, fmt.Errorf("get devices: %w", err)
 	}
 	gateway := findGateway(devices)
 	for _, n := range networks {
@@ -68,10 +73,10 @@ func (s *Service) GetWAN(ctx context.Context, id string) (WanDetail, bool, error
 		}
 		if toKebab(n.Name) == name {
 			iface := resolveWanIface(gateway, n.WanNetworkGroup)
-			return buildWanDetail(controller, n, iface, gateway), true, nil
+			return buildWanDetail(controller, n, iface, gateway), nil
 		}
 	}
-	return WanDetail{}, false, nil
+	return WanDetail{}, fmt.Errorf("WAN not found: %s: %w", id, apierrors.ErrNotFound)
 }
 
 // findGateway returns the first gateway-type device from the device list, or nil.

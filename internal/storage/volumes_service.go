@@ -3,9 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
@@ -13,48 +11,38 @@ import (
 
 // StorageBackend defines the adapter interface for storage operations.
 type StorageBackend interface {
-	GetStorageVolumes() (*adapters.DSMStorageVolumeResponse, error)
-}
-
-type storageDeviceBackend struct {
-	device  string
-	backend StorageBackend
-}
-
-func newStorageDeviceBackends(backends map[string]StorageBackend) []storageDeviceBackend {
-	dbs := make([]storageDeviceBackend, 0, len(backends))
-	for device, backend := range backends {
-		dbs = append(dbs, storageDeviceBackend{device: device, backend: backend})
-	}
-	sort.Slice(dbs, func(i, j int) bool { return dbs[i].device < dbs[j].device })
-	return dbs
+	GetStorageVolumes(ctx context.Context) (*adapters.DSMStorageVolumeResponse, error)
 }
 
 func (s *Service) findStorageBackend(device string) (StorageBackend, error) {
-	for _, db := range s.storageBackends {
-		if db.device == device {
-			return db.backend, nil
-		}
+	backend, ok := s.storageBackends.Find(device)
+	if !ok {
+		return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 	}
-	return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
+	return backend, nil
 }
 
 // ListStorageVolumes returns all volumes with their associated disks from all backends.
 func (s *Service) ListStorageVolumes(ctx context.Context, device *string) (VolumeList, error) {
 	var volumes []Volume
-	for _, db := range s.storageBackends {
-		if device != nil && *device != db.device {
+	for _, entry := range s.storageBackends {
+		if device != nil && *device != entry.Name {
 			continue
 		}
-		if s.monitor != nil && !s.monitor.Available(db.device) {
+		if s.monitor != nil && !s.monitor.Available(entry.Name) {
 			continue
 		}
 
-		resp, err := db.backend.GetStorageVolumes()
+		resp, err := entry.Backend.GetStorageVolumes(ctx)
 		if err != nil {
-			return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", db.device, err)
+			// If filtering by device, propagate the error; otherwise skip and warn.
+			if device != nil {
+				return VolumeList{}, fmt.Errorf("list storage volumes from %s: %w", entry.Name, err)
+			}
+			s.logger.Warn("skipping backend on list storage volumes error", "device", entry.Name, "err", err)
+			continue
 		}
-		volumes = append(volumes, s.mapVolumes(db.device, resp)...)
+		volumes = append(volumes, s.mapVolumes(entry.Name, resp)...)
 	}
 	if volumes == nil {
 		volumes = []Volume{}
@@ -74,7 +62,7 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 		return nil, err
 	}
 
-	resp, err := backend.GetStorageVolumes()
+	resp, err := backend.GetStorageVolumes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("get storage volume: %w", err)
 	}
@@ -114,16 +102,12 @@ func (s *Service) GetStorageVolume(ctx context.Context, volumeID string) (*Volum
 			PoolStatus: s.mapVolumeStatus(pool.Status),
 		}, nil
 	}
-	return nil, nil
+	return nil, fmt.Errorf("volume not found: %s: %w", volumeID, apierrors.ErrNotFound)
 }
 
 // parseVolumeID splits a composite ID "device.name" into its parts.
 func parseVolumeID(id string) (device, name string, err error) {
-	parts := strings.SplitN(id, ".", 2)
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", fmt.Errorf("invalid volume ID %q: expected format device.name: %w", id, apierrors.ErrNotFound)
-	}
-	return parts[0], parts[1], nil
+	return apierrors.ParseCompositeID(id, "volume ID", "device.name")
 }
 
 // mapVolumes converts a DSM storage response to API Volume models.
