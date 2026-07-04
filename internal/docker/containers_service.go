@@ -238,12 +238,12 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 	}
 
 	return ContainerDetail{
-		Id:             fmt.Sprintf("%s.%s", device, d.Profile.Name),
-		Device:         device,
-		Name:           d.Profile.Name,
-		Image:          d.Profile.Image,
-		Status:         mapStatus(d.Details.State),
-		RestartCount:   d.Details.RestartCount,
+		Id:           fmt.Sprintf("%s.%s", device, d.Profile.Name),
+		Device:       device,
+		Name:         d.Profile.Name,
+		Image:        d.Profile.Image,
+		Status:       mapStatus(d.Details.State),
+		RestartCount: d.Details.RestartCount,
 		Resources: ContainerResources{
 			CpuPercent:    res.CPU,
 			MemoryBytes:   res.Memory,
@@ -265,4 +265,3 @@ func mapContainerDetail(device string, d adapters.DSMContainerDetailResponse, re
 		Labels:         &labels,
 	}
 }
-

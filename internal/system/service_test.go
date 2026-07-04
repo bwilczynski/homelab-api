@@ -17,11 +17,11 @@ import (
 // --- Mock backends ---
 
 type mockDSMBackend struct {
-	info     *adapters.DSMSystemInfoResponse
-	util     *adapters.DSMSystemUtilizationResponse
-	volumes  *adapters.DSMStorageVolumeResponse
-	conts    *adapters.DSMContainerListResponse
-	err      error
+	info    *adapters.DSMSystemInfoResponse
+	util    *adapters.DSMSystemUtilizationResponse
+	volumes *adapters.DSMStorageVolumeResponse
+	conts   *adapters.DSMContainerListResponse
+	err     error
 }
 
 func (m *mockDSMBackend) GetSystemInfo(ctx context.Context) (*adapters.DSMSystemInfoResponse, error) {
@@ -748,8 +748,8 @@ func TestListSystemUpdates_StatusFilter(t *testing.T) {
 	svc := newTestServiceWithUpdates(t, &mockDSMBackend{
 		conts: &adapters.DSMContainerListResponse{
 			Containers: []adapters.DSMContainer{
-				{Name: "a", Image: "ghcr.io/owner/repo:1.35.8"},  // matches fixture → upToDate
-				{Name: "b", Image: "ghcr.io/other/lib:1.0.0"},    // doesn't match → updateAvailable
+				{Name: "a", Image: "ghcr.io/owner/repo:1.35.8"}, // matches fixture → upToDate
+				{Name: "b", Image: "ghcr.io/other/lib:1.0.0"},   // doesn't match → updateAvailable
 			},
 		},
 	})

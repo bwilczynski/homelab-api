@@ -37,10 +37,10 @@ func (m *mockBackend) GetContainerResources(ctx context.Context) (*adapters.DSMC
 	return m.resourcesResp, m.resourcesErr
 }
 
-func (m *mockBackend) SupportsContainers() bool                                 { return true }
-func (m *mockBackend) StartContainer(ctx context.Context, name string) error    { return m.startErr }
-func (m *mockBackend) StopContainer(ctx context.Context, name string) error     { return m.stopErr }
-func (m *mockBackend) RestartContainer(ctx context.Context, name string) error  { return m.restartErr }
+func (m *mockBackend) SupportsContainers() bool                                { return true }
+func (m *mockBackend) StartContainer(ctx context.Context, name string) error   { return m.startErr }
+func (m *mockBackend) StopContainer(ctx context.Context, name string) error    { return m.stopErr }
+func (m *mockBackend) RestartContainer(ctx context.Context, name string) error { return m.restartErr }
 
 func (m *mockBackend) ListDockerNetworks(ctx context.Context) (*adapters.DSMDockerNetworkListResponse, error) {
 	return m.networksResp, nil

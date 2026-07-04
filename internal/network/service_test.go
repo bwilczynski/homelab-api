@@ -1610,4 +1610,3 @@ func TestListSSIDs_MissingNetworkConf(t *testing.T) {
 		t.Errorf("expected vlanId 1 for missing networkconf, got %d", result.Items[0].VlanId)
 	}
 }
-
