@@ -23,27 +23,32 @@ type UniFiBackend interface {
 }
 
 type controllerBackend struct {
-	controller string
-	unifi      UniFiBackend
+	controller  string
+	unifi       UniFiBackend
+	historyDays int
 }
 
 // Service implements network domain business logic.
 type Service struct {
-	backends    []controllerBackend
-	logger      *slog.Logger
-	monitor     adapters.AvailabilityChecker // optional; nil means all backends available
-	historyDays int
+	backends []controllerBackend
+	logger   *slog.Logger
+	monitor  adapters.AvailabilityChecker // optional; nil means all backends available
 }
 
 // NewService creates a new network service with one or more UniFi backends.
 // monitor may be nil; when non-nil, unreachable backends are skipped.
-func NewService(backends map[string]UniFiBackend, historyDays int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
+// historyDays maps controller name to days of offline client history (default 30 if missing/zero).
+func NewService(backends map[string]UniFiBackend, historyDays map[string]int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
 	cbs := make([]controllerBackend, 0, len(backends))
 	for controller, unifi := range backends {
-		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi})
+		days := historyDays[controller]
+		if days <= 0 {
+			days = 30
+		}
+		cbs = append(cbs, controllerBackend{controller: controller, unifi: unifi, historyDays: days})
 	}
 	sort.Slice(cbs, func(i, j int) bool { return cbs[i].controller < cbs[j].controller })
-	return &Service{backends: cbs, historyDays: historyDays, logger: logger, monitor: monitor}
+	return &Service{backends: cbs, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {

@@ -29,9 +29,9 @@ func (s *Service) ListClients(ctx context.Context, status string) (NetworkClient
 		case "online":
 			raw, err = cb.unifi.GetActiveClients()
 		case "offline":
-			raw, err = cb.unifi.GetOfflineClients(s.historyDays)
+			raw, err = cb.unifi.GetOfflineClients(cb.historyDays)
 		default:
-			raw, err = cb.unifi.GetAllClients(s.historyDays)
+			raw, err = cb.unifi.GetAllClients(cb.historyDays)
 		}
 		if err != nil {
 			return NetworkClientList{}, fmt.Errorf("get unifi clients from %s: %w", cb.controller, err)
@@ -118,7 +118,15 @@ func (s *Service) GetClient(ctx context.Context, id string) (NetworkClientDetail
 	}
 
 	// Not found in active clients — check offline history.
-	offline, err := backend.GetOfflineClients(s.historyDays)
+	// Find the controller backend to get its historyDays
+	var historyDays int
+	for _, cb := range s.backends {
+		if cb.controller == controller {
+			historyDays = cb.historyDays
+			break
+		}
+	}
+	offline, err := backend.GetOfflineClients(historyDays)
 	if err != nil {
 		return NetworkClientDetail{}, false, fmt.Errorf("get unifi offline clients: %w", err)
 	}

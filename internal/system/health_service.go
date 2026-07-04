@@ -78,7 +78,7 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 			continue
 		}
 
-		storageStatus, storageMsg, err := storageHealth(de.dsm)
+		storageStatus, storageMsg, err := s.storageHealth(de.dsm)
 		if err != nil {
 			return Health{}, fmt.Errorf("get storage health from %s: %w", de.device, err)
 		}
@@ -115,7 +115,7 @@ func (s *Service) GetSystemHealth(ctx context.Context) (Health, error) {
 }
 
 // storageHealth derives a single HealthStatus from DSM volume statuses.
-func storageHealth(dsm HealthDSMBackend) (HealthStatus, string, error) {
+func (s *Service) storageHealth(dsm HealthDSMBackend) (HealthStatus, string, error) {
 	resp, err := dsm.GetStorageVolumes()
 	if err != nil {
 		return Unhealthy, err.Error(), nil //nolint:nilerr
@@ -123,7 +123,7 @@ func storageHealth(dsm HealthDSMBackend) (HealthStatus, string, error) {
 	worst := Healthy
 	var degraded, crashed []string
 	for _, v := range resp.Volumes {
-		st := mapVolumeStatus(v.Status)
+		st := s.mapVolumeStatus(v.Status)
 		worst = worstStatus(worst, st)
 		switch st {
 		case Unhealthy:
@@ -183,13 +183,16 @@ func mapUniFiStatus(status string) HealthStatus {
 }
 
 // mapVolumeStatus converts a DSM volume status string to HealthStatus.
-func mapVolumeStatus(status string) HealthStatus {
+func (s *Service) mapVolumeStatus(status string) HealthStatus {
 	switch status {
 	case "normal":
 		return Healthy
 	case "degraded", "repairing":
 		return Degraded
-	default:
+	case "crashed":
 		return Unhealthy
+	default:
+		s.logger.Warn("unknown DSM volume status", "status", status)
+		return Degraded
 	}
 }
