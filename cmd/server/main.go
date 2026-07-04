@@ -24,6 +24,7 @@ import (
 	"github.com/bwilczynski/homelab-api/internal/health"
 	"github.com/bwilczynski/homelab-api/internal/meta"
 	"github.com/bwilczynski/homelab-api/internal/network"
+	"github.com/bwilczynski/homelab-api/internal/routing"
 	"github.com/bwilczynski/homelab-api/internal/storage"
 	"github.com/bwilczynski/homelab-api/internal/system"
 )
@@ -92,6 +93,7 @@ func main() {
 	})
 
 	r := chi.NewRouter()
+	r.Use(routing.EscapedPathRouting)
 	r.Use(httplog.RequestLogger(logger, &httplog.Options{
 		Level:         slog.LevelInfo,
 		Schema:        httplog.SchemaECS,
