@@ -8,7 +8,6 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
-	"github.com/bwilczynski/homelab-api/internal/registry"
 )
 
 // BackupBackend defines the adapter interface for backup operations.
@@ -22,7 +21,7 @@ type BackupBackend interface {
 }
 
 func (s *Service) findBackupBackend(device string) (BackupBackend, error) {
-	backend, ok := registry.Find(s.backupBackends, device)
+	backend, ok := s.backupBackends.Find(device)
 	if !ok {
 		return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 	}

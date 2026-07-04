@@ -8,7 +8,6 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
-	"github.com/bwilczynski/homelab-api/internal/registry"
 )
 
 // UniFiBackend is the combined interface satisfied by the UniFi adapter.
@@ -24,7 +23,7 @@ type UniFiBackend interface {
 
 // Service implements network domain business logic.
 type Service struct {
-	backends    []registry.Entry[UniFiBackend]
+	backends    adapters.Registry[UniFiBackend]
 	logger      *slog.Logger
 	monitor     adapters.AvailabilityChecker // optional; nil means all backends available
 	historyDays int
@@ -33,11 +32,11 @@ type Service struct {
 // NewService creates a new network service with one or more UniFi backends.
 // monitor may be nil; when non-nil, unreachable backends are skipped.
 func NewService(backends map[string]UniFiBackend, historyDays int, logger *slog.Logger, monitor adapters.AvailabilityChecker) *Service {
-	return &Service{backends: registry.New(backends), historyDays: historyDays, logger: logger, monitor: monitor}
+	return &Service{backends: adapters.NewRegistry(backends), historyDays: historyDays, logger: logger, monitor: monitor}
 }
 
 func (s *Service) findBackend(controller string) (UniFiBackend, error) {
-	backend, ok := registry.Find(s.backends, controller)
+	backend, ok := s.backends.Find(controller)
 	if !ok {
 		return nil, fmt.Errorf("unknown controller %q: %w", controller, apierrors.ErrNotFound)
 	}

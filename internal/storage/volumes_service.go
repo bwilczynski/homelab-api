@@ -7,7 +7,6 @@ import (
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
 	"github.com/bwilczynski/homelab-api/internal/apierrors"
-	"github.com/bwilczynski/homelab-api/internal/registry"
 )
 
 // StorageBackend defines the adapter interface for storage operations.
@@ -16,7 +15,7 @@ type StorageBackend interface {
 }
 
 func (s *Service) findStorageBackend(device string) (StorageBackend, error) {
-	backend, ok := registry.Find(s.storageBackends, device)
+	backend, ok := s.storageBackends.Find(device)
 	if !ok {
 		return nil, fmt.Errorf("unknown device %q: %w", device, apierrors.ErrNotFound)
 	}
