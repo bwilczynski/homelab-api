@@ -114,8 +114,16 @@ func (s *Service) buildUpdateItems(_ context.Context, forceGitHub bool) ([]Conta
 			}
 
 			repo, apiBase, sourceURL := s.resolveSource(image)
-			if repo == "" && !s.warnedImages[image] {
-				s.warnedImages[image] = true
+			var shouldWarn bool
+			if repo == "" {
+				s.mu.Lock()
+				if !s.warnedImages[image] {
+					s.warnedImages[image] = true
+					shouldWarn = true
+				}
+				s.mu.Unlock()
+			}
+			if shouldWarn {
 				s.logger.Warn("no release source configured for container image; update status will be unknown",
 					"container", c.Name,
 					"image", image,
