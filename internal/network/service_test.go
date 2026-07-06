@@ -590,8 +590,8 @@ func TestGetDevice_Switch(t *testing.T) {
 	if sw.Model != "US8P60" {
 		t.Errorf("expected model US8P60, got %s", sw.Model)
 	}
-	if len(sw.Ports) != 8 {
-		t.Fatalf("expected 8 ports, got %d", len(sw.Ports))
+	if len(sw.Ports) != 12 {
+		t.Fatalf("expected 12 ports, got %d", len(sw.Ports))
 	}
 	p1 := sw.Ports[0]
 	if p1.Number != 1 {
