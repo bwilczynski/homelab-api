@@ -1849,3 +1849,105 @@ func TestListSSIDs_MissingNetworkConf(t *testing.T) {
 		t.Errorf("expected vlanId 1 for missing networkconf, got %d", result.Items[0].VlanId)
 	}
 }
+
+func TestBuildPortLabel_Default(t *testing.T) {
+	p := adapters.UniFiPortEntry{PortIdx: 3, Name: "Port 3"}
+	if buildPortLabel(p) != nil {
+		t.Errorf("expected nil label for default port name")
+	}
+}
+
+func TestBuildPortLabel_Custom(t *testing.T) {
+	p := adapters.UniFiPortEntry{PortIdx: 11, Name: "LAG Master"}
+	label := buildPortLabel(p)
+	if label == nil || *label != "LAG Master" {
+		t.Errorf("expected label 'LAG Master', got %v", label)
+	}
+}
+
+func TestBuildSfpModulePresent_True(t *testing.T) {
+	v := true
+	p := adapters.UniFiPortEntry{SfpFound: &v}
+	result := buildSfpModulePresent(p)
+	if result == nil || !*result {
+		t.Errorf("expected sfpModulePresent true, got %v", result)
+	}
+}
+
+func TestBuildSfpModulePresent_False(t *testing.T) {
+	v := false
+	p := adapters.UniFiPortEntry{SfpFound: &v}
+	result := buildSfpModulePresent(p)
+	if result == nil || *result {
+		t.Errorf("expected sfpModulePresent false, got %v", result)
+	}
+}
+
+func TestBuildSfpModulePresent_Nil(t *testing.T) {
+	p := adapters.UniFiPortEntry{}
+	if buildSfpModulePresent(p) != nil {
+		t.Errorf("expected nil sfpModulePresent for non-SFP port")
+	}
+}
+
+func TestBuildLinkUptime_Up(t *testing.T) {
+	u := 3600
+	p := adapters.UniFiPortEntry{Up: true, Uptime: &u}
+	result := buildLinkUptime(p)
+	if result == nil || int(*result) != 3600 {
+		t.Errorf("expected linkUptime 3600, got %v", result)
+	}
+}
+
+func TestBuildLinkUptime_UpNoUptimeField(t *testing.T) {
+	p := adapters.UniFiPortEntry{Up: true}
+	if buildLinkUptime(p) != nil {
+		t.Errorf("expected nil when uptime field absent")
+	}
+}
+
+func TestBuildLinkUptime_Down(t *testing.T) {
+	u := 999
+	p := adapters.UniFiPortEntry{Up: false, Uptime: &u}
+	if buildLinkUptime(p) != nil {
+		t.Errorf("expected nil linkUptime for down port")
+	}
+}
+
+func TestBuildLagMembership_Master(t *testing.T) {
+	masterSet := map[int]bool{11: true}
+	p := adapters.UniFiPortEntry{PortIdx: 11, AggregatedBy: false}
+	result := buildLagMembership(p, masterSet)
+	if result == nil {
+		t.Fatal("expected lagMembership for master port")
+	}
+	if result.Role != Master {
+		t.Errorf("expected role master, got %s", result.Role)
+	}
+	if result.Id != 11 {
+		t.Errorf("expected id 11, got %d", result.Id)
+	}
+}
+
+func TestBuildLagMembership_Member(t *testing.T) {
+	masterSet := map[int]bool{11: true}
+	p := adapters.UniFiPortEntry{PortIdx: 12, AggregatedBy: float64(11)}
+	result := buildLagMembership(p, masterSet)
+	if result == nil {
+		t.Fatal("expected lagMembership for member port")
+	}
+	if result.Role != Member {
+		t.Errorf("expected role member, got %s", result.Role)
+	}
+	if result.Id != 11 {
+		t.Errorf("expected id 11, got %d", result.Id)
+	}
+}
+
+func TestBuildLagMembership_NotInLag(t *testing.T) {
+	masterSet := map[int]bool{11: true}
+	p := adapters.UniFiPortEntry{PortIdx: 1, AggregatedBy: false}
+	if buildLagMembership(p, masterSet) != nil {
+		t.Errorf("expected nil lagMembership for non-LAG port")
+	}
+}

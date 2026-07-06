@@ -333,6 +333,40 @@ func resolveNativeConf(
 	return conf, ok
 }
 
+func buildPortLabel(p adapters.UniFiPortEntry) *string {
+	if p.Name == "Port "+strconv.Itoa(p.PortIdx) {
+		return nil
+	}
+	return &p.Name
+}
+
+func buildSfpModulePresent(p adapters.UniFiPortEntry) *bool {
+	return p.SfpFound
+}
+
+func buildLinkUptime(p adapters.UniFiPortEntry) *Seconds {
+	if !p.Up || p.Uptime == nil {
+		return nil
+	}
+	s := Seconds(*p.Uptime)
+	return &s
+}
+
+// buildLagMembership derives LAG role from AggregatedBy and a pre-computed masterSet.
+// masterSet is keyed by port_idx of every port that has members pointing to it.
+func buildLagMembership(p adapters.UniFiPortEntry, masterSet map[int]bool) *SwitchPortLagMembership {
+	switch v := p.AggregatedBy.(type) {
+	case float64:
+		masterIdx := int(v)
+		return &SwitchPortLagMembership{Id: masterIdx, Role: Member}
+	case bool:
+		if !v && masterSet[p.PortIdx] {
+			return &SwitchPortLagMembership{Id: p.PortIdx, Role: Master}
+		}
+	}
+	return nil
+}
+
 // findDefaultNetID returns the _id of the default (untagged, corporate) network conf.
 // Returns empty string when none is found.
 func findDefaultNetID(confs []adapters.UniFiNetworkConf) string {
