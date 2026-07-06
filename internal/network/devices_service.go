@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
@@ -196,6 +197,12 @@ func buildSwitchPorts(
 	swPortToClient map[string]adapters.UniFiSta,
 	confs []adapters.UniFiNetworkConf,
 ) []SwitchPort {
+	confByID := make(map[string]adapters.UniFiNetworkConf, len(confs))
+	for _, c := range confs {
+		confByID[c.ID] = c
+	}
+	defaultNetID := findDefaultNetID(confs)
+
 	ports := make([]SwitchPort, 0, len(d.PortTable))
 	switchMAC := normalizeMac(d.MAC)
 	for _, p := range d.PortTable {
@@ -224,6 +231,7 @@ func buildSwitchPorts(
 			}
 		}
 		port.ConnectedTo = resolvePortConnectedTo(controller, switchMAC, p.PortIdx, swPortToDevice, swPortToClient)
+		port.VlanConfig = buildVlanConfig(p, confByID, defaultNetID, controller)
 		ports = append(ports, port)
 	}
 	return ports
@@ -239,6 +247,90 @@ func confToVlanRef(conf adapters.UniFiNetworkConf, controller string) NetworkVla
 		Name:   conf.Name,
 		VlanId: extractVlanID(conf.Vlan),
 	}
+}
+
+// buildVlanConfig maps UniFi port VLAN fields to the API SwitchPortVlanConfig.
+// Returns nil when the port is disabled or the native VLAN cannot be resolved.
+func buildVlanConfig(
+	p adapters.UniFiPortEntry,
+	confByID map[string]adapters.UniFiNetworkConf,
+	defaultNetID string,
+	controller string,
+) *SwitchPortVlanConfig {
+	switch p.Forward {
+	case "disable":
+		return nil
+	case "native":
+		// access mode: single untagged VLAN, no tagged traffic
+		nativeConf, ok := resolveNativeConf(p.NativeNetworkConfID, defaultNetID, confByID)
+		if !ok {
+			return nil
+		}
+		return &SwitchPortVlanConfig{
+			Mode:       Access,
+			NativeVlan: confToVlanRef(nativeConf, controller),
+		}
+	case "all", "customize":
+		nativeConf, ok := resolveNativeConf(p.NativeNetworkConfID, defaultNetID, confByID)
+		if !ok {
+			return nil
+		}
+		cfg := &SwitchPortVlanConfig{
+			Mode:       Trunk,
+			NativeVlan: confToVlanRef(nativeConf, controller),
+		}
+		if p.Forward == "customize" && len(p.ExcludedNetworkConfIDs) > 0 {
+			// trunk-custom: all corporate VLANs minus excluded and minus native
+			excludedSet := make(map[string]bool, len(p.ExcludedNetworkConfIDs))
+			for _, id := range p.ExcludedNetworkConfIDs {
+				excludedSet[id] = true
+			}
+			var items []NetworkVlanRef
+			for _, conf := range confByID {
+				if conf.Purpose != "corporate" {
+					continue
+				}
+				if excludedSet[conf.ID] || conf.ID == nativeConf.ID {
+					continue
+				}
+				items = append(items, confToVlanRef(conf, controller))
+			}
+			slices.SortFunc(items, func(a, b NetworkVlanRef) int {
+				return a.VlanId - b.VlanId
+			})
+			cfg.TaggedVlans = &struct {
+				Items *[]NetworkVlanRef                    `json:"items,omitempty"`
+				Scope SwitchPortVlanConfigTaggedVlansScope `json:"scope"`
+			}{Scope: Custom, Items: &items}
+		} else {
+			// trunk-all
+			cfg.TaggedVlans = &struct {
+				Items *[]NetworkVlanRef                    `json:"items,omitempty"`
+				Scope SwitchPortVlanConfigTaggedVlansScope `json:"scope"`
+			}{Scope: All}
+		}
+		return cfg
+	default:
+		return nil
+	}
+}
+
+// resolveNativeConf returns the network conf for the port's native VLAN.
+// Falls back to defaultNetID when NativeNetworkConfID is nil or empty.
+func resolveNativeConf(
+	nativeID *string,
+	defaultNetID string,
+	confByID map[string]adapters.UniFiNetworkConf,
+) (adapters.UniFiNetworkConf, bool) {
+	id := defaultNetID
+	if nativeID != nil && *nativeID != "" {
+		id = *nativeID
+	}
+	if id == "" {
+		return adapters.UniFiNetworkConf{}, false
+	}
+	conf, ok := confByID[id]
+	return conf, ok
 }
 
 // findDefaultNetID returns the _id of the default (untagged, corporate) network conf.

@@ -1668,6 +1668,167 @@ func TestGetSSIDDisabled(t *testing.T) {
 	}
 }
 
+func makeTestConfs() ([]adapters.UniFiNetworkConf, map[string]adapters.UniFiNetworkConf) {
+	confs := []adapters.UniFiNetworkConf{
+		{ID: "id-mgmt", Name: "LAN-MGMT", Purpose: "corporate", VlanEnabled: false, Vlan: ""},
+		{ID: "id-iot", Name: "LAN-IOT", Purpose: "corporate", VlanEnabled: true, Vlan: float64(20)},
+		{ID: "id-int", Name: "LAN-INT", Purpose: "corporate", VlanEnabled: true, Vlan: float64(10)},
+		{ID: "id-srv", Name: "LAN-SRV", Purpose: "corporate", VlanEnabled: true, Vlan: float64(100)},
+		{ID: "id-wan", Name: "WAN", Purpose: "wan"},
+	}
+	byID := make(map[string]adapters.UniFiNetworkConf, len(confs))
+	for _, c := range confs {
+		byID[c.ID] = c
+	}
+	return confs, byID
+}
+
+func TestBuildVlanConfig_Access(t *testing.T) {
+	_, byID := makeTestConfs()
+	nativeID := "id-int"
+	p := adapters.UniFiPortEntry{
+		PortIdx:             2,
+		Forward:             "native",
+		TaggedVlanMgmt:      "block_all",
+		NativeNetworkConfID: &nativeID,
+	}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg == nil {
+		t.Fatal("expected vlanConfig, got nil")
+	}
+	if cfg.Mode != Access {
+		t.Errorf("expected mode access, got %s", cfg.Mode)
+	}
+	if cfg.NativeVlan.Id != "unifi.lan-int" {
+		t.Errorf("expected nativeVlan id unifi.lan-int, got %s", cfg.NativeVlan.Id)
+	}
+	if cfg.NativeVlan.VlanId != 10 {
+		t.Errorf("expected nativeVlan vlanId 10, got %d", cfg.NativeVlan.VlanId)
+	}
+	if cfg.TaggedVlans != nil {
+		t.Errorf("expected nil taggedVlans for access mode, got %+v", cfg.TaggedVlans)
+	}
+}
+
+func TestBuildVlanConfig_TrunkAllForwardAll(t *testing.T) {
+	_, byID := makeTestConfs()
+	p := adapters.UniFiPortEntry{
+		PortIdx: 1,
+		Forward: "all",
+	}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg == nil {
+		t.Fatal("expected vlanConfig, got nil")
+	}
+	if cfg.Mode != Trunk {
+		t.Errorf("expected mode trunk, got %s", cfg.Mode)
+	}
+	if cfg.NativeVlan.Id != "unifi.lan-mgmt" {
+		t.Errorf("expected fallback nativeVlan unifi.lan-mgmt, got %s", cfg.NativeVlan.Id)
+	}
+	if cfg.TaggedVlans == nil || cfg.TaggedVlans.Scope != All {
+		t.Errorf("expected taggedVlans scope all, got %+v", cfg.TaggedVlans)
+	}
+	if cfg.TaggedVlans.Items != nil {
+		t.Errorf("expected nil items for scope all, got %v", cfg.TaggedVlans.Items)
+	}
+}
+
+func TestBuildVlanConfig_TrunkAllForwardAllExplicitNative(t *testing.T) {
+	_, byID := makeTestConfs()
+	nativeID := "id-mgmt"
+	p := adapters.UniFiPortEntry{
+		PortIdx:             7,
+		Forward:             "all",
+		NativeNetworkConfID: &nativeID,
+		TaggedVlanMgmt:      "auto",
+	}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg == nil {
+		t.Fatal("expected vlanConfig, got nil")
+	}
+	if cfg.NativeVlan.Id != "unifi.lan-mgmt" {
+		t.Errorf("expected nativeVlan unifi.lan-mgmt, got %s", cfg.NativeVlan.Id)
+	}
+	if cfg.TaggedVlans == nil || cfg.TaggedVlans.Scope != All {
+		t.Errorf("expected scope all, got %+v", cfg.TaggedVlans)
+	}
+}
+
+func TestBuildVlanConfig_TrunkCustom(t *testing.T) {
+	_, byID := makeTestConfs()
+	nativeID := "id-mgmt"
+	p := adapters.UniFiPortEntry{
+		PortIdx:                6,
+		Forward:                "customize",
+		NativeNetworkConfID:    &nativeID,
+		TaggedVlanMgmt:         "custom",
+		ExcludedNetworkConfIDs: []string{"id-iot", "id-srv"},
+	}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg == nil {
+		t.Fatal("expected vlanConfig, got nil")
+	}
+	if cfg.Mode != Trunk {
+		t.Errorf("expected mode trunk, got %s", cfg.Mode)
+	}
+	if cfg.NativeVlan.Id != "unifi.lan-mgmt" {
+		t.Errorf("expected nativeVlan unifi.lan-mgmt, got %s", cfg.NativeVlan.Id)
+	}
+	if cfg.TaggedVlans == nil || cfg.TaggedVlans.Scope != Custom {
+		t.Errorf("expected scope custom, got %+v", cfg.TaggedVlans)
+	}
+	items := *cfg.TaggedVlans.Items
+	if len(items) != 1 {
+		t.Fatalf("expected 1 tagged VLAN item, got %d: %+v", len(items), items)
+	}
+	if items[0].Id != "unifi.lan-int" {
+		t.Errorf("expected item unifi.lan-int, got %s", items[0].Id)
+	}
+}
+
+func TestBuildVlanConfig_TrunkCustomizeEmptyExcluded(t *testing.T) {
+	_, byID := makeTestConfs()
+	nativeID := "id-mgmt"
+	p := adapters.UniFiPortEntry{
+		PortIdx:                7,
+		Forward:                "customize",
+		NativeNetworkConfID:    &nativeID,
+		ExcludedNetworkConfIDs: []string{},
+	}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg == nil {
+		t.Fatal("expected vlanConfig, got nil")
+	}
+	if cfg.TaggedVlans == nil || cfg.TaggedVlans.Scope != All {
+		t.Errorf("expected scope all for empty excluded, got %+v", cfg.TaggedVlans)
+	}
+}
+
+func TestBuildVlanConfig_DisableOmits(t *testing.T) {
+	_, byID := makeTestConfs()
+	p := adapters.UniFiPortEntry{PortIdx: 1, Forward: "disable"}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg != nil {
+		t.Errorf("expected nil for forward=disable, got %+v", cfg)
+	}
+}
+
+func TestBuildVlanConfig_UnresolvableNativeOmits(t *testing.T) {
+	_, byID := makeTestConfs()
+	badID := "nonexistent"
+	p := adapters.UniFiPortEntry{
+		PortIdx:             1,
+		Forward:             "native",
+		TaggedVlanMgmt:      "block_all",
+		NativeNetworkConfID: &badID,
+	}
+	cfg := buildVlanConfig(p, byID, "id-mgmt", "unifi")
+	if cfg != nil {
+		t.Errorf("expected nil when native conf unresolvable, got %+v", cfg)
+	}
+}
+
 func TestListSSIDs_MissingNetworkConf(t *testing.T) {
 	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{
 		wlanConf: []adapters.UniFiWlanConf{
