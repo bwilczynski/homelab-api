@@ -197,19 +197,33 @@ func buildSwitchPorts(
 	swPortToClient map[string]adapters.UniFiSta,
 	confs []adapters.UniFiNetworkConf,
 ) []SwitchPort {
+	// Build per-ID conf lookup and find the default (untagged) network ID.
 	confByID := make(map[string]adapters.UniFiNetworkConf, len(confs))
 	for _, c := range confs {
 		confByID[c.ID] = c
 	}
 	defaultNetID := findDefaultNetID(confs)
 
-	ports := make([]SwitchPort, 0, len(d.PortTable))
+	// Pass 1: find which port indices are LAG masters (have members pointing to them).
+	masterSet := make(map[int]bool)
+	for _, p := range d.PortTable {
+		if v, ok := p.AggregatedBy.(float64); ok {
+			masterSet[int(v)] = true
+		}
+	}
+
 	switchMAC := normalizeMac(d.MAC)
+	ports := make([]SwitchPort, 0, len(d.PortTable))
 	for _, p := range d.PortTable {
 		port := SwitchPort{
-			Number:  p.PortIdx,
-			State:   mapPortState(p.Up),
-			PoeMode: mapPoeMode(p.PoeMode),
+			Number:           p.PortIdx,
+			State:            mapPortState(p.Up),
+			PoeMode:          mapPoeMode(p.PoeMode),
+			Label:            buildPortLabel(p),
+			SfpModulePresent: buildSfpModulePresent(p),
+			LinkUptime:       buildLinkUptime(p),
+			LagMembership:    buildLagMembership(p, masterSet),
+			VlanConfig:       buildVlanConfig(p, confByID, defaultNetID, controller),
 			Traffic: NetworkTraffic{
 				RxBytesTotal:  p.RxBytes,
 				TxBytesTotal:  p.TxBytes,
@@ -231,7 +245,6 @@ func buildSwitchPorts(
 			}
 		}
 		port.ConnectedTo = resolvePortConnectedTo(controller, switchMAC, p.PortIdx, swPortToDevice, swPortToClient)
-		port.VlanConfig = buildVlanConfig(p, confByID, defaultNetID, controller)
 		ports = append(ports, port)
 	}
 	return ports

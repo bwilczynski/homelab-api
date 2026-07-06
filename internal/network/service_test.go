@@ -630,7 +630,8 @@ func TestFindDefaultNetID_Empty(t *testing.T) {
 func TestGetDevice_Switch(t *testing.T) {
 	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
-	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, map[string]int{"unifi": 30}, slog.Default(), nil)
+	confs := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients, networkConf: confs}}, map[string]int{"unifi": 30}, slog.Default(), nil)
 
 	detail, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
 	if err != nil {
@@ -1949,5 +1950,234 @@ func TestBuildLagMembership_NotInLag(t *testing.T) {
 	p := adapters.UniFiPortEntry{PortIdx: 1, AggregatedBy: false}
 	if buildLagMembership(p, masterSet) != nil {
 		t.Errorf("expected nil lagMembership for non-LAG port")
+	}
+}
+
+// --- integration tests for buildSwitchPorts helpers ---
+
+func switchSvcWithConfs(t *testing.T) *Service {
+	t.Helper()
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	confs := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	return NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients, networkConf: confs}}, map[string]int{"unifi": 30}, slog.Default(), nil)
+}
+
+func switchPorts(t *testing.T, svc *Service) []SwitchPort {
+	t.Helper()
+	detail, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sw, err := detail.AsSwitchDetail()
+	if err != nil {
+		t.Fatalf("expected switch detail: %v", err)
+	}
+	return sw.Ports
+}
+
+func findPort(ports []SwitchPort, number int) *SwitchPort {
+	for i := range ports {
+		if ports[i].Number == number {
+			return &ports[i]
+		}
+	}
+	return nil
+}
+
+func TestGetDevice_Switch_VlanAccess(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p2 := findPort(ports, 2)
+	if p2 == nil {
+		t.Fatal("port 2 not found")
+	}
+	if p2.VlanConfig == nil {
+		t.Fatal("expected vlanConfig on port 2")
+	}
+	if p2.VlanConfig.Mode != Access {
+		t.Errorf("expected mode access, got %s", p2.VlanConfig.Mode)
+	}
+	if p2.VlanConfig.NativeVlan.Id != "unifi.lan-int" {
+		t.Errorf("expected nativeVlan unifi.lan-int, got %s", p2.VlanConfig.NativeVlan.Id)
+	}
+	if p2.VlanConfig.TaggedVlans != nil {
+		t.Errorf("expected nil taggedVlans for access, got %+v", p2.VlanConfig.TaggedVlans)
+	}
+}
+
+func TestGetDevice_Switch_VlanTrunkAll(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p1 := findPort(ports, 1)
+	if p1 == nil {
+		t.Fatal("port 1 not found")
+	}
+	if p1.VlanConfig == nil {
+		t.Fatal("expected vlanConfig on port 1")
+	}
+	if p1.VlanConfig.Mode != Trunk {
+		t.Errorf("expected mode trunk, got %s", p1.VlanConfig.Mode)
+	}
+	// port 1 has forward:"all" with no native_networkconf_id; falls back to default (LAN-MGMT)
+	if p1.VlanConfig.NativeVlan.Id != "unifi.lan-mgmt" {
+		t.Errorf("expected fallback nativeVlan unifi.lan-mgmt, got %s", p1.VlanConfig.NativeVlan.Id)
+	}
+	if p1.VlanConfig.TaggedVlans == nil || p1.VlanConfig.TaggedVlans.Scope != All {
+		t.Errorf("expected taggedVlans scope all, got %+v", p1.VlanConfig.TaggedVlans)
+	}
+}
+
+func TestGetDevice_Switch_VlanTrunkAllExplicitNative(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p7 := findPort(ports, 7)
+	if p7 == nil {
+		t.Fatal("port 7 not found")
+	}
+	if p7.VlanConfig == nil {
+		t.Fatal("expected vlanConfig on port 7")
+	}
+	// port 7 has forward:"all" AND native_networkconf_id:"5e136551af427c0011f23b55" (LAN-MGMT)
+	if p7.VlanConfig.NativeVlan.Id != "unifi.lan-mgmt" {
+		t.Errorf("expected nativeVlan unifi.lan-mgmt, got %s", p7.VlanConfig.NativeVlan.Id)
+	}
+	if p7.VlanConfig.TaggedVlans == nil || p7.VlanConfig.TaggedVlans.Scope != All {
+		t.Errorf("expected scope all, got %+v", p7.VlanConfig.TaggedVlans)
+	}
+}
+
+func TestGetDevice_Switch_VlanTrunkCustom(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p6 := findPort(ports, 6)
+	if p6 == nil {
+		t.Fatal("port 6 not found")
+	}
+	if p6.VlanConfig == nil {
+		t.Fatal("expected vlanConfig on port 6")
+	}
+	if p6.VlanConfig.Mode != Trunk {
+		t.Errorf("expected mode trunk, got %s", p6.VlanConfig.Mode)
+	}
+	if p6.VlanConfig.TaggedVlans == nil || p6.VlanConfig.TaggedVlans.Scope != Custom {
+		t.Errorf("expected scope custom, got %+v", p6.VlanConfig.TaggedVlans)
+	}
+	// excluded: LAN-IOT (5e1cccb3af427c0011f58cb6), LAN-SRV (5e2f36271b5df62f2be2cb85)
+	// native: LAN-MGMT (excluded from tagged items)
+	// remaining corporate: LAN-INT only → vlanId 10
+	items := *p6.VlanConfig.TaggedVlans.Items
+	if len(items) != 1 {
+		t.Fatalf("expected 1 tagged VLAN, got %d: %+v", len(items), items)
+	}
+	if items[0].Id != "unifi.lan-int" {
+		t.Errorf("expected item unifi.lan-int, got %s", items[0].Id)
+	}
+}
+
+func TestGetDevice_Switch_Label(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p11 := findPort(ports, 11)
+	if p11 == nil {
+		t.Fatal("port 11 not found")
+	}
+	if p11.Label == nil || *p11.Label != "LAG Master" {
+		t.Errorf("expected label 'LAG Master', got %v", p11.Label)
+	}
+}
+
+func TestGetDevice_Switch_NoLabelDefault(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p1 := findPort(ports, 1)
+	if p1 == nil {
+		t.Fatal("port 1 not found")
+	}
+	if p1.Label != nil {
+		t.Errorf("expected nil label for default port name, got %v", p1.Label)
+	}
+}
+
+func TestGetDevice_Switch_SfpPresent(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p9 := findPort(ports, 9)
+	if p9 == nil {
+		t.Fatal("port 9 not found")
+	}
+	if p9.SfpModulePresent == nil || !*p9.SfpModulePresent {
+		t.Errorf("expected sfpModulePresent true, got %v", p9.SfpModulePresent)
+	}
+}
+
+func TestGetDevice_Switch_SfpAbsent(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p10 := findPort(ports, 10)
+	if p10 == nil {
+		t.Fatal("port 10 not found")
+	}
+	if p10.SfpModulePresent == nil || *p10.SfpModulePresent {
+		t.Errorf("expected sfpModulePresent false, got %v", p10.SfpModulePresent)
+	}
+}
+
+func TestGetDevice_Switch_SfpNoCage(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p1 := findPort(ports, 1)
+	if p1 == nil {
+		t.Fatal("port 1 not found")
+	}
+	if p1.SfpModulePresent != nil {
+		t.Errorf("expected nil sfpModulePresent for GE port, got %v", p1.SfpModulePresent)
+	}
+}
+
+func TestGetDevice_Switch_LinkUptime(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p1 := findPort(ports, 1)
+	if p1 == nil {
+		t.Fatal("port 1 not found")
+	}
+	if p1.LinkUptime == nil || int(*p1.LinkUptime) != 3600 {
+		t.Errorf("expected linkUptime 3600, got %v", p1.LinkUptime)
+	}
+}
+
+func TestGetDevice_Switch_LagMaster(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p11 := findPort(ports, 11)
+	if p11 == nil {
+		t.Fatal("port 11 not found")
+	}
+	if p11.LagMembership == nil {
+		t.Fatal("expected lagMembership on master port")
+	}
+	if p11.LagMembership.Role != Master {
+		t.Errorf("expected role master, got %s", p11.LagMembership.Role)
+	}
+	if p11.LagMembership.Id != 11 {
+		t.Errorf("expected id 11, got %d", p11.LagMembership.Id)
+	}
+}
+
+func TestGetDevice_Switch_LagMember(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p12 := findPort(ports, 12)
+	if p12 == nil {
+		t.Fatal("port 12 not found")
+	}
+	if p12.LagMembership == nil {
+		t.Fatal("expected lagMembership on member port")
+	}
+	if p12.LagMembership.Role != Member {
+		t.Errorf("expected role member, got %s", p12.LagMembership.Role)
+	}
+	if p12.LagMembership.Id != 11 {
+		t.Errorf("expected id 11, got %d", p12.LagMembership.Id)
+	}
+}
+
+func TestGetDevice_Switch_NoLag(t *testing.T) {
+	ports := switchPorts(t, switchSvcWithConfs(t))
+	p1 := findPort(ports, 1)
+	if p1 == nil {
+		t.Fatal("port 1 not found")
+	}
+	if p1.LagMembership != nil {
+		t.Errorf("expected nil lagMembership for non-LAG port, got %+v", p1.LagMembership)
 	}
 }
