@@ -13,8 +13,6 @@ import (
 // DevicesBackend is the narrow interface for device operations.
 type DevicesBackend interface {
 	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
-	GetClients(ctx context.Context) ([]adapters.UniFiSta, error)
-	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
 }
 
 // ListDevices retrieves all managed network devices from all backends.
