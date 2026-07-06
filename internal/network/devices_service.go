@@ -12,6 +12,8 @@ import (
 // DevicesBackend is the narrow interface for device operations.
 type DevicesBackend interface {
 	GetDevices(ctx context.Context) ([]adapters.UniFiDevice, error)
+	GetClients(ctx context.Context) ([]adapters.UniFiSta, error)
+	GetNetworkConf(ctx context.Context) ([]adapters.UniFiNetworkConf, error)
 }
 
 // ListDevices retrieves all managed network devices from all backends.
@@ -59,6 +61,11 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 		return NetworkDeviceDetail{}, fmt.Errorf("get unifi clients: %w", err)
 	}
 
+	confs, err := backend.GetNetworkConf(ctx)
+	if err != nil {
+		return NetworkDeviceDetail{}, fmt.Errorf("get unifi network conf: %w", err)
+	}
+
 	macToDevice := buildMacToDevice(devices)
 	swPortToDevice := buildSwPortToDevice(devices)
 	swPortToClient := buildSwPortToClient(clients)
@@ -66,7 +73,7 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 
 	for _, d := range devices {
 		if toKebab(d.Name) == suffix {
-			detail, err := buildDeviceDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, apMacToClients)
+			detail, err := buildDeviceDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, apMacToClients, confs)
 			if err != nil {
 				return NetworkDeviceDetail{}, err
 			}
@@ -97,10 +104,11 @@ func buildDeviceDetail(
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
 	apMacToClients map[string][]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
 ) (NetworkDeviceDetail, error) {
 	switch d.Type {
 	case "usw":
-		return buildSwitchDetail(controller, d, macToDevice, swPortToDevice, swPortToClient)
+		return buildSwitchDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, confs)
 	case "uap":
 		return buildAPDetail(controller, d, macToDevice, apMacToClients)
 	case "ugw", "udm", "udm-pro":
@@ -156,10 +164,11 @@ func buildSwitchDetail(
 	macToDevice map[string]adapters.UniFiDevice,
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
 ) (NetworkDeviceDetail, error) {
 	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
 	uplink := deviceUplink(controller, d, macToDevice)
-	ports := buildSwitchPorts(controller, d, swPortToDevice, swPortToClient)
+	ports := buildSwitchPorts(controller, d, swPortToDevice, swPortToClient, confs)
 
 	var det NetworkDeviceDetail
 	err := det.FromSwitchDetail(SwitchDetail{
@@ -185,6 +194,7 @@ func buildSwitchPorts(
 	d adapters.UniFiDevice,
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
 ) []SwitchPort {
 	ports := make([]SwitchPort, 0, len(d.PortTable))
 	switchMAC := normalizeMac(d.MAC)

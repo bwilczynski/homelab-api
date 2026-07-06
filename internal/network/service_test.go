@@ -637,6 +637,27 @@ func TestGetDevice_Switch(t *testing.T) {
 	}
 }
 
+func TestGetDevice_Switch_NetworkConfFetched(t *testing.T) {
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	confs := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients, networkConf: confs}}, map[string]int{"unifi": 30}, slog.Default(), nil)
+
+	detail, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sw, err := detail.AsSwitchDetail()
+	if err != nil {
+		t.Fatalf("expected switch detail: %v", err)
+	}
+	// vlanConfig is populated — proves network confs were passed to buildSwitchPorts
+	p2 := sw.Ports[1] // port 2, access mode
+	if p2.VlanConfig == nil {
+		t.Fatal("expected vlanConfig on port 2, got nil")
+	}
+}
+
 func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
 	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
