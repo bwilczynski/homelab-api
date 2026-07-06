@@ -229,6 +229,29 @@ func buildSwitchPorts(
 	return ports
 }
 
+// confToVlanRef converts a UniFiNetworkConf to a NetworkVlanRef using
+// the same composite-ID convention as the VLANs service.
+func confToVlanRef(conf adapters.UniFiNetworkConf, controller string) NetworkVlanRef {
+	id := fmt.Sprintf("%s.%s", controller, toKebab(conf.Name))
+	return NetworkVlanRef{
+		Id:     id,
+		Uri:    fmt.Sprintf("/network/vlans/%s", id),
+		Name:   conf.Name,
+		VlanId: extractVlanID(conf.Vlan),
+	}
+}
+
+// findDefaultNetID returns the _id of the default (untagged, corporate) network conf.
+// Returns empty string when none is found.
+func findDefaultNetID(confs []adapters.UniFiNetworkConf) string {
+	for _, c := range confs {
+		if c.Purpose == "corporate" && !c.VlanEnabled {
+			return c.ID
+		}
+	}
+	return ""
+}
+
 func resolvePortConnectedTo(
 	controller string,
 	switchMAC string,

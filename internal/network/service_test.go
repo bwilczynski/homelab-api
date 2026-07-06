@@ -570,6 +570,63 @@ func TestToKebab(t *testing.T) {
 	}
 }
 
+func TestConfToVlanRef_Tagged(t *testing.T) {
+	conf := adapters.UniFiNetworkConf{
+		ID:          "5e1cccb3af427c0011f58cb6",
+		Name:        "LAN-IOT",
+		Purpose:     "corporate",
+		Vlan:        float64(20),
+		VlanEnabled: true,
+	}
+	ref := confToVlanRef(conf, "unifi")
+	if ref.Id != "unifi.lan-iot" {
+		t.Errorf("expected id unifi.lan-iot, got %s", ref.Id)
+	}
+	if ref.Uri != "/network/vlans/unifi.lan-iot" {
+		t.Errorf("expected uri /network/vlans/unifi.lan-iot, got %s", ref.Uri)
+	}
+	if ref.Name != "LAN-IOT" {
+		t.Errorf("expected name LAN-IOT, got %s", ref.Name)
+	}
+	if ref.VlanId != 20 {
+		t.Errorf("expected vlanId 20, got %d", ref.VlanId)
+	}
+}
+
+func TestConfToVlanRef_Default(t *testing.T) {
+	conf := adapters.UniFiNetworkConf{
+		ID:          "5e136551af427c0011f23b55",
+		Name:        "LAN-MGMT",
+		Purpose:     "corporate",
+		Vlan:        "",
+		VlanEnabled: false,
+	}
+	ref := confToVlanRef(conf, "unifi")
+	if ref.Id != "unifi.lan-mgmt" {
+		t.Errorf("expected id unifi.lan-mgmt, got %s", ref.Id)
+	}
+	if ref.VlanId != 1 {
+		t.Errorf("expected vlanId 1 for default network, got %d", ref.VlanId)
+	}
+}
+
+func TestFindDefaultNetID(t *testing.T) {
+	confs := []adapters.UniFiNetworkConf{
+		{ID: "wan1", Purpose: "wan"},
+		{ID: "tagged", Purpose: "corporate", VlanEnabled: true},
+		{ID: "default", Purpose: "corporate", VlanEnabled: false},
+	}
+	if got := findDefaultNetID(confs); got != "default" {
+		t.Errorf("expected default, got %s", got)
+	}
+}
+
+func TestFindDefaultNetID_Empty(t *testing.T) {
+	if got := findDefaultNetID(nil); got != "" {
+		t.Errorf("expected empty string, got %s", got)
+	}
+}
+
 func TestGetDevice_Switch(t *testing.T) {
 	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
