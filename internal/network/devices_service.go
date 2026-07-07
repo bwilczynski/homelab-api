@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 
 	"github.com/bwilczynski/homelab-api/internal/adapters"
@@ -59,6 +60,11 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 		return NetworkDeviceDetail{}, fmt.Errorf("get unifi clients: %w", err)
 	}
 
+	confs, err := backend.GetNetworkConf(ctx)
+	if err != nil {
+		return NetworkDeviceDetail{}, fmt.Errorf("get unifi network conf: %w", err)
+	}
+
 	macToDevice := buildMacToDevice(devices)
 	swPortToDevice := buildSwPortToDevice(devices)
 	swPortToClient := buildSwPortToClient(clients)
@@ -66,7 +72,7 @@ func (s *Service) GetDevice(ctx context.Context, id string) (NetworkDeviceDetail
 
 	for _, d := range devices {
 		if toKebab(d.Name) == suffix {
-			detail, err := buildDeviceDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, apMacToClients)
+			detail, err := buildDeviceDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, apMacToClients, confs)
 			if err != nil {
 				return NetworkDeviceDetail{}, err
 			}
@@ -97,10 +103,11 @@ func buildDeviceDetail(
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
 	apMacToClients map[string][]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
 ) (NetworkDeviceDetail, error) {
 	switch d.Type {
 	case "usw":
-		return buildSwitchDetail(controller, d, macToDevice, swPortToDevice, swPortToClient)
+		return buildSwitchDetail(controller, d, macToDevice, swPortToDevice, swPortToClient, confs)
 	case "uap":
 		return buildAPDetail(controller, d, macToDevice, apMacToClients)
 	case "ugw", "udm", "udm-pro":
@@ -156,10 +163,11 @@ func buildSwitchDetail(
 	macToDevice map[string]adapters.UniFiDevice,
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
 ) (NetworkDeviceDetail, error) {
 	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
 	uplink := deviceUplink(controller, d, macToDevice)
-	ports := buildSwitchPorts(controller, d, swPortToDevice, swPortToClient)
+	ports := buildSwitchPorts(controller, d, swPortToDevice, swPortToClient, confs)
 
 	var det NetworkDeviceDetail
 	err := det.FromSwitchDetail(SwitchDetail{
@@ -185,14 +193,35 @@ func buildSwitchPorts(
 	d adapters.UniFiDevice,
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
 ) []SwitchPort {
-	ports := make([]SwitchPort, 0, len(d.PortTable))
+	// Build per-ID conf lookup and find the default (untagged) network ID.
+	confByID := make(map[string]adapters.UniFiNetworkConf, len(confs))
+	for _, c := range confs {
+		confByID[c.ID] = c
+	}
+	defaultNetID := findDefaultNetID(confs)
+
+	// Pass 1: find which port indices are LAG masters (have members pointing to them).
+	masterSet := make(map[int]bool)
+	for _, p := range d.PortTable {
+		if v, ok := p.AggregatedBy.(float64); ok {
+			masterSet[int(v)] = true
+		}
+	}
+
 	switchMAC := normalizeMac(d.MAC)
+	ports := make([]SwitchPort, 0, len(d.PortTable))
 	for _, p := range d.PortTable {
 		port := SwitchPort{
-			Number:  p.PortIdx,
-			State:   mapPortState(p.Up),
-			PoeMode: mapPoeMode(p.PoeMode),
+			Number:           p.PortIdx,
+			State:            mapPortState(p.Up),
+			PoeMode:          mapPoeMode(p.PoeMode),
+			Label:            buildPortLabel(p),
+			SfpModulePresent: buildSfpModulePresent(p),
+			LinkUptime:       buildLinkUptime(p),
+			LagMembership:    buildLagMembership(p, masterSet),
+			VlanConfig:       buildVlanConfig(p, confByID, defaultNetID, controller),
 			Traffic: NetworkTraffic{
 				RxBytesTotal:  p.RxBytes,
 				TxBytesTotal:  p.TxBytes,
@@ -217,6 +246,147 @@ func buildSwitchPorts(
 		ports = append(ports, port)
 	}
 	return ports
+}
+
+// confToVlanRef converts a UniFiNetworkConf to a NetworkVlanRef using
+// the same composite-ID convention as the VLANs service.
+func confToVlanRef(conf adapters.UniFiNetworkConf, controller string) NetworkVlanRef {
+	id := fmt.Sprintf("%s.%s", controller, toKebab(conf.Name))
+	return NetworkVlanRef{
+		Id:     id,
+		Uri:    fmt.Sprintf("/network/vlans/%s", id),
+		Name:   conf.Name,
+		VlanId: extractVlanID(conf.Vlan),
+	}
+}
+
+// buildVlanConfig maps UniFi port VLAN fields to the API SwitchPortVlanConfig.
+// Returns nil when the port is disabled or the native VLAN cannot be resolved.
+func buildVlanConfig(
+	p adapters.UniFiPortEntry,
+	confByID map[string]adapters.UniFiNetworkConf,
+	defaultNetID string,
+	controller string,
+) *SwitchPortVlanConfig {
+	switch p.Forward {
+	case "disable":
+		return nil
+	case "native":
+		// access mode: single untagged VLAN, no tagged traffic
+		nativeConf, ok := resolveNativeConf(p.NativeNetworkConfID, defaultNetID, confByID)
+		if !ok {
+			return nil
+		}
+		return &SwitchPortVlanConfig{
+			Mode:       Access,
+			NativeVlan: confToVlanRef(nativeConf, controller),
+		}
+	case "all", "customize":
+		nativeConf, ok := resolveNativeConf(p.NativeNetworkConfID, defaultNetID, confByID)
+		if !ok {
+			return nil
+		}
+		cfg := &SwitchPortVlanConfig{
+			Mode:       Trunk,
+			NativeVlan: confToVlanRef(nativeConf, controller),
+		}
+		if p.Forward == "customize" && len(p.ExcludedNetworkConfIDs) > 0 {
+			// trunk-custom: all corporate VLANs minus excluded and minus native
+			excludedSet := make(map[string]bool, len(p.ExcludedNetworkConfIDs))
+			for _, id := range p.ExcludedNetworkConfIDs {
+				excludedSet[id] = true
+			}
+			var items []NetworkVlanRef
+			for _, conf := range confByID {
+				if conf.Purpose != "corporate" {
+					continue
+				}
+				if excludedSet[conf.ID] || conf.ID == nativeConf.ID {
+					continue
+				}
+				items = append(items, confToVlanRef(conf, controller))
+			}
+			slices.SortFunc(items, func(a, b NetworkVlanRef) int {
+				return a.VlanId - b.VlanId
+			})
+			cfg.TaggedVlans = &struct {
+				Items *[]NetworkVlanRef                    `json:"items,omitempty"`
+				Scope SwitchPortVlanConfigTaggedVlansScope `json:"scope"`
+			}{Scope: Custom, Items: &items}
+		} else {
+			// trunk-all
+			cfg.TaggedVlans = &struct {
+				Items *[]NetworkVlanRef                    `json:"items,omitempty"`
+				Scope SwitchPortVlanConfigTaggedVlansScope `json:"scope"`
+			}{Scope: All}
+		}
+		return cfg
+	default:
+		return nil
+	}
+}
+
+// resolveNativeConf returns the network conf for the port's native VLAN.
+// Falls back to defaultNetID when NativeNetworkConfID is nil or empty.
+func resolveNativeConf(
+	nativeID *string,
+	defaultNetID string,
+	confByID map[string]adapters.UniFiNetworkConf,
+) (adapters.UniFiNetworkConf, bool) {
+	id := defaultNetID
+	if nativeID != nil && *nativeID != "" {
+		id = *nativeID
+	}
+	if id == "" {
+		return adapters.UniFiNetworkConf{}, false
+	}
+	conf, ok := confByID[id]
+	return conf, ok
+}
+
+func buildPortLabel(p adapters.UniFiPortEntry) *string {
+	if p.Name == "Port "+strconv.Itoa(p.PortIdx) {
+		return nil
+	}
+	return &p.Name
+}
+
+func buildSfpModulePresent(p adapters.UniFiPortEntry) *bool {
+	return p.SfpFound
+}
+
+func buildLinkUptime(p adapters.UniFiPortEntry) *Seconds {
+	if !p.Up || p.Uptime == nil {
+		return nil
+	}
+	s := Seconds(*p.Uptime)
+	return &s
+}
+
+// buildLagMembership derives LAG role from AggregatedBy and a pre-computed masterSet.
+// masterSet is keyed by port_idx of every port that has members pointing to it.
+func buildLagMembership(p adapters.UniFiPortEntry, masterSet map[int]bool) *SwitchPortLagMembership {
+	switch v := p.AggregatedBy.(type) {
+	case float64:
+		masterIdx := int(v)
+		return &SwitchPortLagMembership{Id: masterIdx, Role: Member}
+	case bool:
+		if !v && masterSet[p.PortIdx] {
+			return &SwitchPortLagMembership{Id: p.PortIdx, Role: Master}
+		}
+	}
+	return nil
+}
+
+// findDefaultNetID returns the _id of the default (untagged, corporate) network conf.
+// Returns empty string when none is found.
+func findDefaultNetID(confs []adapters.UniFiNetworkConf) string {
+	for _, c := range confs {
+		if c.Purpose == "corporate" && !c.VlanEnabled {
+			return c.ID
+		}
+	}
+	return ""
 }
 
 func resolvePortConnectedTo(

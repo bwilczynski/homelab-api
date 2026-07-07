@@ -241,16 +241,24 @@ type UniFiVap struct {
 }
 
 type UniFiPortEntry struct {
-	PortIdx  int     `json:"port_idx"`
-	Up       bool    `json:"up"`
-	Speed    int     `json:"speed"`
-	PortPoe  bool    `json:"port_poe"`
-	PoeMode  string  `json:"poe_mode"`
-	PoePower string  `json:"poe_power"`
-	TxBytes  int64   `json:"tx_bytes"`
-	RxBytes  int64   `json:"rx_bytes"`
-	TxBytesR float64 `json:"tx_bytes-r"`
-	RxBytesR float64 `json:"rx_bytes-r"`
+	PortIdx               int      `json:"port_idx"`
+	Up                    bool     `json:"up"`
+	Speed                 int      `json:"speed"`
+	PortPoe               bool     `json:"port_poe"`
+	PoeMode               string   `json:"poe_mode"`
+	PoePower              string   `json:"poe_power"`
+	TxBytes               int64    `json:"tx_bytes"`
+	RxBytes               int64    `json:"rx_bytes"`
+	TxBytesR              float64  `json:"tx_bytes-r"`
+	RxBytesR              float64  `json:"rx_bytes-r"`
+	Name                  string   `json:"name"`
+	Forward               string   `json:"forward"`
+	NativeNetworkConfID   *string  `json:"native_networkconf_id"`
+	TaggedVlanMgmt        string   `json:"tagged_vlan_mgmt"`
+	ExcludedNetworkConfIDs []string `json:"excluded_networkconf_ids"`
+	SfpFound              *bool    `json:"sfp_found"`
+	Uptime                *int     `json:"uptime"`
+	AggregatedBy          any      `json:"aggregated_by"`
 }
 
 type UniFiUplink struct {
