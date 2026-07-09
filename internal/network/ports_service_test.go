@@ -246,6 +246,42 @@ func TestListNetworkPorts_VlanIdFilter_TaggedCustomMatch(t *testing.T) {
 	}
 }
 
+// --- uplink connectedTo ---
+
+// The uplink port surfaces in ListPorts with connectedTo pointing at the
+// upstream device. Fixture: unifi.us-8 port 1 uplinks to unifi.us-8-60w.
+func TestListNetworkPorts_UplinkPort_ConnectedToDevice(t *testing.T) {
+	params := ListNetworkPortsParams{SwitchId: strPtr("unifi.us-8")}
+	result, err := portsSvc(t).ListPorts(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var port1 *NetworkPort
+	for i := range result.Items {
+		if result.Items[i].Number == 1 {
+			port1 = &result.Items[i]
+			break
+		}
+	}
+	if port1 == nil {
+		t.Fatal("port 1 not found on unifi.us-8")
+	}
+	if port1.ConnectedTo == nil {
+		t.Fatal("expected uplink port 1 connectedTo to be set")
+	}
+	ref, err := port1.ConnectedTo.AsNetworkDeviceRef()
+	if err != nil {
+		t.Fatalf("expected device ref on uplink port 1: %v", err)
+	}
+	if ref.Kind != NetworkDeviceRefKindDevice {
+		t.Errorf("expected kind=device, got %s", ref.Kind)
+	}
+	if ref.Id != "unifi.us-8-60w" {
+		t.Errorf("expected device id unifi.us-8-60w, got %s", ref.Id)
+	}
+}
+
 // --- backend availability ---
 
 func TestListNetworkPorts_BackendError(t *testing.T) {
