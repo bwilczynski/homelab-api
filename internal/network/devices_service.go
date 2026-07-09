@@ -463,14 +463,36 @@ func buildMacToDevice(devices []adapters.UniFiDevice) map[string]adapters.UniFiD
 	return m
 }
 
+// buildSwPortToDevice maps (switch MAC, switch port) → the device on that port.
+// It covers both directions of every uplink relationship:
+//   - downstream: (upstream MAC, upstream remote port) → this device
+//   - uplink: (this device MAC, this device's local uplink port) → upstream device
+//
+// Without the uplink direction, a switch's own port facing the gateway/parent
+// switch would resolve to nil ConnectedTo (see issue #38).
 func buildSwPortToDevice(devices []adapters.UniFiDevice) map[string]adapters.UniFiDevice {
+	byMAC := make(map[string]adapters.UniFiDevice, len(devices))
+	for _, d := range devices {
+		byMAC[normalizeMac(d.MAC)] = d
+	}
 	m := make(map[string]adapters.UniFiDevice)
 	for _, d := range devices {
-		if d.Uplink == nil || d.Uplink.UplinkMAC == "" || d.Uplink.UplinkRemotePort == nil {
+		if d.Uplink == nil || d.Uplink.UplinkMAC == "" {
 			continue
 		}
-		key := fmt.Sprintf("%s:%d", normalizeMac(d.Uplink.UplinkMAC), *d.Uplink.UplinkRemotePort)
-		m[key] = d
+		upstreamMAC := normalizeMac(d.Uplink.UplinkMAC)
+		if d.Uplink.UplinkRemotePort != nil {
+			key := fmt.Sprintf("%s:%d", upstreamMAC, *d.Uplink.UplinkRemotePort)
+			m[key] = d
+		}
+		if d.Uplink.PortIdx != nil {
+			upstream, ok := byMAC[upstreamMAC]
+			if !ok {
+				continue
+			}
+			key := fmt.Sprintf("%s:%d", normalizeMac(d.MAC), *d.Uplink.PortIdx)
+			m[key] = upstream
+		}
 	}
 	return m
 }

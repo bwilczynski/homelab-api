@@ -794,6 +794,54 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 	}
 }
 
+// A switch's uplink port (the local port that faces the upstream device) must
+// appear in SwitchDetail.Ports with ConnectedTo pointing at that upstream device.
+// Fixture: US 8 (mac 01:01) uplinks to US 8 60W via US 8's local port 1.
+func TestGetDevice_SwitchPort_UplinkConnectedToDevice(t *testing.T) {
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	svc := NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients}}, map[string]int{"unifi": 30}, slog.Default(), nil)
+
+	detail, err := svc.GetDevice(context.Background(), "unifi.us-8")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	sw, err := detail.AsSwitchDetail()
+	if err != nil {
+		t.Fatalf("expected switch detail: %v", err)
+	}
+
+	var port1 *SwitchPort
+	for i := range sw.Ports {
+		if sw.Ports[i].Number == 1 {
+			port1 = &sw.Ports[i]
+			break
+		}
+	}
+	if port1 == nil {
+		t.Fatal("port 1 not found on unifi.us-8")
+	}
+	if port1.ConnectedTo == nil {
+		t.Fatal("expected uplink port 1 connectedTo to be set")
+	}
+	ref, err := port1.ConnectedTo.AsNetworkDeviceRef()
+	if err != nil {
+		t.Fatalf("expected device ref on uplink port 1: %v", err)
+	}
+	if ref.Kind != NetworkDeviceRefKindDevice {
+		t.Errorf("expected kind=device, got %s", ref.Kind)
+	}
+	if ref.Id != "unifi.us-8-60w" {
+		t.Errorf("expected device id unifi.us-8-60w, got %s", ref.Id)
+	}
+	if ref.Uri != "/network/devices/unifi.us-8-60w" {
+		t.Errorf("expected device uri /network/devices/unifi.us-8-60w, got %s", ref.Uri)
+	}
+	if ref.Name != "US 8 60W" {
+		t.Errorf("expected device name US 8 60W, got %s", ref.Name)
+	}
+}
+
 func TestGetDevice_AccessPoint(t *testing.T) {
 	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
 	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")

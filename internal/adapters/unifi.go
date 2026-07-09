@@ -265,6 +265,7 @@ type UniFiUplink struct {
 	UplinkMAC        string  `json:"uplink_mac"`
 	UplinkDeviceName string  `json:"uplink_device_name"`
 	UplinkRemotePort *int    `json:"uplink_remote_port"`
+	PortIdx          *int    `json:"port_idx"`
 	Speed            int     `json:"speed"`
 	TxBytesR         float64 `json:"tx_bytes-r"`
 	RxBytesR         float64 `json:"rx_bytes-r"`
