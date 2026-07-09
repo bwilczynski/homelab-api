@@ -195,3 +195,12 @@ func (h *ServerHandler) GetNetworkTopology(ctx context.Context, request GetNetwo
 	}
 	return GetNetworkTopology200JSONResponse(result), nil
 }
+
+// ListNetworkPorts implements StrictServerInterface.
+func (h *ServerHandler) ListNetworkPorts(ctx context.Context, request ListNetworkPortsRequestObject) (ListNetworkPortsResponseObject, error) {
+	result, err := h.svc.ListPorts(ctx, request.Params)
+	if err != nil {
+		return ListNetworkPorts500ApplicationProblemPlusJSONResponse{internalServerError(err.Error())}, nil
+	}
+	return ListNetworkPorts200JSONResponse(result), nil
+}

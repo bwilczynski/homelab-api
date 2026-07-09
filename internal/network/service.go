@@ -19,6 +19,7 @@ type UniFiBackend interface {
 	SSIDsBackend
 	VLANsBackend
 	WANsBackend
+	PortsBackend
 }
 
 // Service implements network domain business logic.
