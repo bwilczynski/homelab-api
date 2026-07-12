@@ -49,7 +49,7 @@ func (s *Service) ListPorts(ctx context.Context, params ListNetworkPortsParams) 
 				Uri:  fmt.Sprintf("/network/devices/%s", switchID),
 				Name: d.Name,
 			}
-			ports := buildSwitchPorts(entry.Name, d, swPortToDevice, swPortToClient, confs)
+			ports := buildDevicePorts(entry.Name, d, swPortToDevice, swPortToClient, confs)
 			for _, p := range ports {
 				np := toNetworkPort(p, sw)
 				if matchesFilter(np, params) {
@@ -64,7 +64,7 @@ func (s *Service) ListPorts(ctx context.Context, params ListNetworkPortsParams) 
 	return NetworkPortList{Items: items}, nil
 }
 
-func toNetworkPort(port SwitchPort, sw NetworkDeviceRef) NetworkPort {
+func toNetworkPort(port DevicePort, sw NetworkDeviceRef) NetworkPort {
 	return NetworkPort{
 		Number:           port.Number,
 		Label:            port.Label,
@@ -78,12 +78,12 @@ func toNetworkPort(port SwitchPort, sw NetworkDeviceRef) NetworkPort {
 		VlanConfig:       port.VlanConfig,
 		Traffic:          port.Traffic,
 		ConnectedTo:      port.ConnectedTo,
-		Switch:           sw,
+		Device:           sw,
 	}
 }
 
 func matchesFilter(port NetworkPort, params ListNetworkPortsParams) bool {
-	if params.SwitchId != nil && port.Switch.Id != *params.SwitchId {
+	if params.DeviceId != nil && port.Device.Id != *params.DeviceId {
 		return false
 	}
 	if params.State != nil && port.State != *params.State {
@@ -105,7 +105,7 @@ func matchesFilter(port NetworkPort, params ListNetworkPortsParams) bool {
 // matchesVlanID reports whether the given VLAN ID is carried by the port.
 // Implements the three-way spec rule: native match OR tagged-custom item match OR trunk-all (scope=all).
 // Returns false when cfg is nil (disabled / unresolvable ports).
-func matchesVlanID(cfg *SwitchPortVlanConfig, vlanID int) bool {
+func matchesVlanID(cfg *DevicePortVlanConfig, vlanID int) bool {
 	if cfg == nil {
 		return false
 	}
