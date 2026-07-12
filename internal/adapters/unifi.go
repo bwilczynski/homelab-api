@@ -241,6 +241,7 @@ type UniFiVap struct {
 }
 
 type UniFiPortEntry struct {
+	Ifname                string   `json:"ifname"`
 	PortIdx               int      `json:"port_idx"`
 	Up                    bool     `json:"up"`
 	Speed                 int      `json:"speed"`
