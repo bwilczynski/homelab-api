@@ -158,6 +158,99 @@ func TestGetDevice_Gateway(t *testing.T) {
 	}
 }
 
+func TestGetDevice_Gateway_PortsAndWans(t *testing.T) {
+	devices := testhelpers.LoadFixture[[]adapters.UniFiDevice](t, "testdata/unifi-devices.json")
+	clients := testhelpers.LoadFixture[[]adapters.UniFiSta](t, "testdata/unifi-clients.json")
+	confs := testhelpers.LoadFixture[[]adapters.UniFiNetworkConf](t, "testdata/unifi-networkconf.json")
+	svc := NewService(
+		map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients, networkConf: confs}},
+		map[string]int{"unifi": 30},
+		slog.Default(),
+		nil,
+	)
+
+	detail, err := svc.GetDevice(context.Background(), "unifi.cgf-01")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	gw, err := detail.AsGatewayDetail()
+	if err != nil {
+		t.Fatalf("expected gateway detail: %v", err)
+	}
+
+	// 7 ports in port_table, 2 are WAN (eth4, eth6) → 5 LAN ports
+	if len(gw.Ports) != 5 {
+		t.Fatalf("expected 5 LAN ports, got %d", len(gw.Ports))
+	}
+
+	// Port 4 (eth3) has port_poe=true → poeMode present
+	var port4 *DevicePort
+	for i := range gw.Ports {
+		if gw.Ports[i].Number == 4 {
+			port4 = &gw.Ports[i]
+			break
+		}
+	}
+	if port4 == nil {
+		t.Fatal("expected port 4 in gateway LAN ports")
+	}
+	if port4.PoeMode == nil {
+		t.Error("expected poeMode set on port 4 (has PoE hardware)")
+	}
+
+	// Port 1 (eth0) has port_poe=false → poeMode absent
+	var port1 *DevicePort
+	for i := range gw.Ports {
+		if gw.Ports[i].Number == 1 {
+			port1 = &gw.Ports[i]
+			break
+		}
+	}
+	if port1 == nil {
+		t.Fatal("expected port 1 in gateway LAN ports")
+	}
+	if port1.PoeMode != nil {
+		t.Errorf("expected nil poeMode on port 1 (no PoE hardware), got %v", port1.PoeMode)
+	}
+
+	// WAN ports (idx 5=eth4, idx 7=eth6) must NOT appear in gw.Ports
+	for _, p := range gw.Ports {
+		if p.Number == 5 || p.Number == 7 {
+			t.Errorf("WAN port %d should not appear in gateway LAN ports", p.Number)
+		}
+	}
+
+	// 2 WAN network confs → 2 WanRefs
+	if len(gw.Wans) != 2 {
+		t.Fatalf("expected 2 WAN refs, got %d", len(gw.Wans))
+	}
+
+	// WanRef ids follow "controller.kebab-name" convention
+	wanByID := make(map[string]WanRef)
+	for _, w := range gw.Wans {
+		wanByID[w.Id] = w
+	}
+	wan1, ok := wanByID["unifi.internet-1"]
+	if !ok {
+		t.Fatalf("expected WanRef unifi.internet-1, got ids: %v", func() []string {
+			ids := make([]string, 0, len(wanByID))
+			for id := range wanByID {
+				ids = append(ids, id)
+			}
+			return ids
+		}())
+	}
+	if wan1.Uri != "/network/wans/unifi.internet-1" {
+		t.Errorf("expected uri /network/wans/unifi.internet-1, got %s", wan1.Uri)
+	}
+	if wan1.Name != "Internet 1" {
+		t.Errorf("expected name Internet 1, got %s", wan1.Name)
+	}
+	if _, ok := wanByID["unifi.internet-2"]; !ok {
+		t.Error("expected WanRef unifi.internet-2")
+	}
+}
+
 func TestGetDevice_Unknown(t *testing.T) {
 	devices := []adapters.UniFiDevice{{
 		ID: "x", MAC: "bb:bb:bb:bb:bb:01", Name: "Weird Box", Model: "WB1",
@@ -661,8 +754,8 @@ func TestGetDevice_Switch(t *testing.T) {
 	if p1.LinkSpeed == nil || *p1.LinkSpeed != "gbe1" {
 		t.Errorf("expected link speed gbe1, got %v", p1.LinkSpeed)
 	}
-	if p1.PoeMode != "off" {
-		t.Errorf("expected poe mode off, got %s", p1.PoeMode)
+	if p1.PoeMode != nil {
+		t.Errorf("expected nil poeMode for non-PoE port, got %v", p1.PoeMode)
 	}
 	if p1.PoePowerWatts != nil {
 		t.Errorf("expected nil poe power for non-poe port, got %v", p1.PoePowerWatts)
@@ -675,8 +768,8 @@ func TestGetDevice_Switch(t *testing.T) {
 		t.Errorf("expected nil link speed for down port, got %v", p4.LinkSpeed)
 	}
 	p5 := sw.Ports[4]
-	if p5.PoeMode != "auto" {
-		t.Errorf("expected poe auto, got %s", p5.PoeMode)
+	if p5.PoeMode == nil || *p5.PoeMode != Auto {
+		t.Errorf("expected poeMode=auto, got %v", p5.PoeMode)
 	}
 	if p5.PoePowerWatts == nil || *p5.PoePowerWatts != 2.88 {
 		t.Errorf("expected poe power 2.88, got %v", p5.PoePowerWatts)
@@ -727,7 +820,7 @@ func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
 		t.Fatalf("expected switch detail: %v", err)
 	}
 
-	var port5 *SwitchPort
+	var port5 *DevicePort
 	for i := range sw.Ports {
 		if sw.Ports[i].Number == 5 {
 			port5 = &sw.Ports[i]
@@ -769,7 +862,7 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 		t.Fatalf("expected switch detail: %v", err)
 	}
 
-	var port3 *SwitchPort
+	var port3 *DevicePort
 	for i := range sw.Ports {
 		if sw.Ports[i].Number == 3 {
 			port3 = &sw.Ports[i]
@@ -811,7 +904,7 @@ func TestGetDevice_SwitchPort_UplinkConnectedToDevice(t *testing.T) {
 		t.Fatalf("expected switch detail: %v", err)
 	}
 
-	var port1 *SwitchPort
+	var port1 *DevicePort
 	for i := range sw.Ports {
 		if sw.Ports[i].Number == 1 {
 			port1 = &sw.Ports[i]
@@ -2011,7 +2104,7 @@ func switchSvcWithConfs(t *testing.T) *Service {
 	return NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients, networkConf: confs}}, map[string]int{"unifi": 30}, slog.Default(), nil)
 }
 
-func switchPorts(t *testing.T, svc *Service) []SwitchPort {
+func switchPorts(t *testing.T, svc *Service) []DevicePort {
 	t.Helper()
 	detail, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
 	if err != nil {
@@ -2024,7 +2117,7 @@ func switchPorts(t *testing.T, svc *Service) []SwitchPort {
 	return sw.Ports
 }
 
-func findPort(ports []SwitchPort, number int) *SwitchPort {
+func findPort(ports []DevicePort, number int) *DevicePort {
 	for i := range ports {
 		if ports[i].Number == number {
 			return &ports[i]

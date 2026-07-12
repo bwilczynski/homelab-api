@@ -111,13 +111,19 @@ func buildDeviceDetail(
 	case "uap":
 		return buildAPDetail(controller, d, macToDevice, apMacToClients)
 	case "ugw", "udm", "udm-pro":
-		return buildGatewayDetail(controller, d)
+		return buildGatewayDetail(controller, d, swPortToDevice, swPortToClient, confs)
 	default:
 		return buildUnknownDetail(controller, d, macToDevice)
 	}
 }
 
-func buildGatewayDetail(controller string, d adapters.UniFiDevice) (NetworkDeviceDetail, error) {
+func buildGatewayDetail(
+	controller string,
+	d adapters.UniFiDevice,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
+) (NetworkDeviceDetail, error) {
 	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
 	var det NetworkDeviceDetail
 	err := det.FromGatewayDetail(GatewayDetail{
@@ -132,8 +138,64 @@ func buildGatewayDetail(controller string, d adapters.UniFiDevice) (NetworkDevic
 		FirmwareVersion: d.Version,
 		Uptime:          d.Uptime,
 		Traffic:         deviceTraffic(d),
+		Ports:           buildGatewayPorts(controller, d, swPortToDevice, swPortToClient, confs),
+		Wans:            buildGatewayWanRefs(controller, confs),
 	})
 	return det, err
+}
+
+// wanIfnames returns the set of ifnames that carry WAN traffic on this device.
+// These ports must be excluded from the LAN port listing.
+func wanIfnames(d adapters.UniFiDevice) map[string]bool {
+	s := make(map[string]bool)
+	if d.Wan1 != nil && d.Wan1.Name != "" {
+		s[d.Wan1.Name] = true
+	}
+	if d.Wan2 != nil && d.Wan2.Name != "" {
+		s[d.Wan2.Name] = true
+	}
+	return s
+}
+
+// buildGatewayPorts returns the LAN switch-fabric ports on a gateway device,
+// excluding any ports whose ifname matches a WAN interface (wan1/wan2).
+func buildGatewayPorts(
+	controller string,
+	d adapters.UniFiDevice,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
+) []DevicePort {
+	wan := wanIfnames(d)
+	var lan adapters.UniFiDevice = d
+	lan.PortTable = nil
+	for _, p := range d.PortTable {
+		if !wan[p.Ifname] {
+			lan.PortTable = append(lan.PortTable, p)
+		}
+	}
+	return buildDevicePorts(controller, lan, swPortToDevice, swPortToClient, confs)
+}
+
+// buildGatewayWanRefs builds lightweight WAN references from network configs.
+// The id/uri/name follow the same convention as buildWan in wans_service.go.
+func buildGatewayWanRefs(controller string, confs []adapters.UniFiNetworkConf) []WanRef {
+	var refs []WanRef
+	for _, n := range confs {
+		if n.Purpose != "wan" {
+			continue
+		}
+		id := fmt.Sprintf("%s.%s", controller, toKebab(n.Name))
+		refs = append(refs, WanRef{
+			Id:   id,
+			Uri:  fmt.Sprintf("/network/wans/%s", id),
+			Name: n.Name,
+		})
+	}
+	if refs == nil {
+		refs = []WanRef{}
+	}
+	return refs
 }
 
 func buildUnknownDetail(controller string, d adapters.UniFiDevice, macToDevice map[string]adapters.UniFiDevice) (NetworkDeviceDetail, error) {
@@ -167,7 +229,7 @@ func buildSwitchDetail(
 ) (NetworkDeviceDetail, error) {
 	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
 	uplink := deviceUplink(controller, d, macToDevice)
-	ports := buildSwitchPorts(controller, d, swPortToDevice, swPortToClient, confs)
+	ports := buildDevicePorts(controller, d, swPortToDevice, swPortToClient, confs)
 
 	var det NetworkDeviceDetail
 	err := det.FromSwitchDetail(SwitchDetail{
@@ -188,13 +250,13 @@ func buildSwitchDetail(
 	return det, err
 }
 
-func buildSwitchPorts(
+func buildDevicePorts(
 	controller string,
 	d adapters.UniFiDevice,
 	swPortToDevice map[string]adapters.UniFiDevice,
 	swPortToClient map[string]adapters.UniFiSta,
 	confs []adapters.UniFiNetworkConf,
-) []SwitchPort {
+) []DevicePort {
 	// Build per-ID conf lookup and find the default (untagged) network ID.
 	confByID := make(map[string]adapters.UniFiNetworkConf, len(confs))
 	for _, c := range confs {
@@ -211,12 +273,11 @@ func buildSwitchPorts(
 	}
 
 	switchMAC := normalizeMac(d.MAC)
-	ports := make([]SwitchPort, 0, len(d.PortTable))
+	ports := make([]DevicePort, 0, len(d.PortTable))
 	for _, p := range d.PortTable {
-		port := SwitchPort{
+		port := DevicePort{
 			Number:           p.PortIdx,
 			State:            mapPortState(p.Up),
-			PoeMode:          mapPoeMode(p.PoeMode),
 			Label:            buildPortLabel(p),
 			SfpModulePresent: buildSfpModulePresent(p),
 			LinkUptime:       buildLinkUptime(p),
@@ -228,6 +289,10 @@ func buildSwitchPorts(
 				RxBytesPerSec: int64(p.RxBytesR),
 				TxBytesPerSec: int64(p.TxBytesR),
 			},
+		}
+		if p.PortPoe {
+			pm := mapPoeMode(p.PoeMode)
+			port.PoeMode = &pm
 		}
 		if p.Up && p.Speed > 0 {
 			ls := mapLinkSpeed(p.Speed)
@@ -260,14 +325,14 @@ func confToVlanRef(conf adapters.UniFiNetworkConf, controller string) NetworkVla
 	}
 }
 
-// buildVlanConfig maps UniFi port VLAN fields to the API SwitchPortVlanConfig.
+// buildVlanConfig maps UniFi port VLAN fields to the API DevicePortVlanConfig.
 // Returns nil when the port is disabled or the native VLAN cannot be resolved.
 func buildVlanConfig(
 	p adapters.UniFiPortEntry,
 	confByID map[string]adapters.UniFiNetworkConf,
 	defaultNetID string,
 	controller string,
-) *SwitchPortVlanConfig {
+) *DevicePortVlanConfig {
 	switch p.Forward {
 	case "disable":
 		return nil
@@ -277,7 +342,7 @@ func buildVlanConfig(
 		if !ok {
 			return nil
 		}
-		return &SwitchPortVlanConfig{
+		return &DevicePortVlanConfig{
 			Mode:       Access,
 			NativeVlan: confToVlanRef(nativeConf, controller),
 		}
@@ -286,7 +351,7 @@ func buildVlanConfig(
 		if !ok {
 			return nil
 		}
-		cfg := &SwitchPortVlanConfig{
+		cfg := &DevicePortVlanConfig{
 			Mode:       Trunk,
 			NativeVlan: confToVlanRef(nativeConf, controller),
 		}
@@ -310,14 +375,14 @@ func buildVlanConfig(
 				return a.VlanId - b.VlanId
 			})
 			cfg.TaggedVlans = &struct {
-				Items *[]NetworkVlanRef                    `json:"items,omitempty"`
-				Scope SwitchPortVlanConfigTaggedVlansScope `json:"scope"`
+				Items *[]NetworkVlanRef                          `json:"items,omitempty"`
+				Scope DevicePortVlanConfigTaggedVlansScope `json:"scope"`
 			}{Scope: Custom, Items: &items}
 		} else {
 			// trunk-all
 			cfg.TaggedVlans = &struct {
-				Items *[]NetworkVlanRef                    `json:"items,omitempty"`
-				Scope SwitchPortVlanConfigTaggedVlansScope `json:"scope"`
+				Items *[]NetworkVlanRef                          `json:"items,omitempty"`
+				Scope DevicePortVlanConfigTaggedVlansScope `json:"scope"`
 			}{Scope: All}
 		}
 		return cfg
@@ -365,14 +430,14 @@ func buildLinkUptime(p adapters.UniFiPortEntry) *Seconds {
 
 // buildLagMembership derives LAG role from AggregatedBy and a pre-computed masterSet.
 // masterSet is keyed by port_idx of every port that has members pointing to it.
-func buildLagMembership(p adapters.UniFiPortEntry, masterSet map[int]bool) *SwitchPortLagMembership {
+func buildLagMembership(p adapters.UniFiPortEntry, masterSet map[int]bool) *DevicePortLagMembership {
 	switch v := p.AggregatedBy.(type) {
 	case float64:
 		masterIdx := int(v)
-		return &SwitchPortLagMembership{Id: masterIdx, Role: Member}
+		return &DevicePortLagMembership{Id: masterIdx, Role: Member}
 	case bool:
 		if !v && masterSet[p.PortIdx] {
-			return &SwitchPortLagMembership{Id: p.PortIdx, Role: Master}
+			return &DevicePortLagMembership{Id: p.PortIdx, Role: Master}
 		}
 	}
 	return nil
@@ -623,7 +688,7 @@ func mapPortState(up bool) NetworkPortState {
 	return "down"
 }
 
-func mapPoeMode(mode string) SwitchPortPoeMode {
+func mapPoeMode(mode string) DevicePortPoeMode {
 	switch mode {
 	case "auto":
 		return Auto
