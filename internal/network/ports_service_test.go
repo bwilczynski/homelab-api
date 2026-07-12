@@ -45,8 +45,8 @@ func TestListNetworkPorts_NoFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(result.Items) != 35 {
-		t.Fatalf("expected 35 ports, got %d", len(result.Items))
+	if len(result.Items) != 40 {
+		t.Fatalf("expected 40 ports (35 switch + 5 gateway LAN), got %d", len(result.Items))
 	}
 	// each port must carry a device ref
 	for _, p := range result.Items {
@@ -279,6 +279,69 @@ func TestListNetworkPorts_UplinkPort_ConnectedToDevice(t *testing.T) {
 	}
 	if ref.Id != "unifi.us-8-60w" {
 		t.Errorf("expected device id unifi.us-8-60w, got %s", ref.Id)
+	}
+}
+
+// --- gateway ports ---
+
+func TestListNetworkPorts_GatewayPorts(t *testing.T) {
+	result, err := portsSvc(t).ListPorts(context.Background(), ListNetworkPortsParams{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Collect all gateway ports
+	var gwPorts []NetworkPort
+	for _, p := range result.Items {
+		if p.Device.Id == "unifi.cgf-01" {
+			gwPorts = append(gwPorts, p)
+		}
+	}
+
+	// 5 LAN ports (WAN ports eth4=idx5, eth6=idx7 excluded)
+	if len(gwPorts) != 5 {
+		t.Fatalf("expected 5 gateway LAN ports, got %d", len(gwPorts))
+	}
+
+	// device ref points at the gateway
+	for _, p := range gwPorts {
+		if p.Device.Id != "unifi.cgf-01" {
+			t.Errorf("port %d: expected device.id=unifi.cgf-01, got %s", p.Number, p.Device.Id)
+		}
+		if p.Device.Kind != NetworkDeviceRefKindDevice {
+			t.Errorf("port %d: expected device.kind=device, got %s", p.Number, p.Device.Kind)
+		}
+		if p.Device.Uri != "/network/devices/unifi.cgf-01" {
+			t.Errorf("port %d: expected device.uri=/network/devices/unifi.cgf-01, got %s", p.Number, p.Device.Uri)
+		}
+	}
+
+	// WAN ports (idx 5 and 7) must not appear
+	gwPortNums := make(map[int]bool)
+	for _, p := range gwPorts {
+		gwPortNums[p.Number] = true
+	}
+	if gwPortNums[5] {
+		t.Error("WAN port 5 (eth4) must not appear in gateway LAN port listing")
+	}
+	if gwPortNums[7] {
+		t.Error("WAN port 7 (eth6) must not appear in gateway LAN port listing")
+	}
+}
+
+func TestListNetworkPorts_DeviceIdFilter_Gateway(t *testing.T) {
+	params := ListNetworkPortsParams{DeviceId: strPtr("unifi.cgf-01")}
+	result, err := portsSvc(t).ListPorts(context.Background(), params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 5 {
+		t.Fatalf("expected 5 ports for unifi.cgf-01, got %d", len(result.Items))
+	}
+	for _, p := range result.Items {
+		if p.Device.Id != "unifi.cgf-01" {
+			t.Errorf("expected device unifi.cgf-01, got %s", p.Device.Id)
+		}
 	}
 }
 
