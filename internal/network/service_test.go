@@ -661,8 +661,8 @@ func TestGetDevice_Switch(t *testing.T) {
 	if p1.LinkSpeed == nil || *p1.LinkSpeed != "gbe1" {
 		t.Errorf("expected link speed gbe1, got %v", p1.LinkSpeed)
 	}
-	if p1.PoeMode != "off" {
-		t.Errorf("expected poe mode off, got %s", p1.PoeMode)
+	if p1.PoeMode != nil {
+		t.Errorf("expected nil poeMode for non-PoE port, got %v", p1.PoeMode)
 	}
 	if p1.PoePowerWatts != nil {
 		t.Errorf("expected nil poe power for non-poe port, got %v", p1.PoePowerWatts)
@@ -675,8 +675,8 @@ func TestGetDevice_Switch(t *testing.T) {
 		t.Errorf("expected nil link speed for down port, got %v", p4.LinkSpeed)
 	}
 	p5 := sw.Ports[4]
-	if p5.PoeMode != "auto" {
-		t.Errorf("expected poe auto, got %s", p5.PoeMode)
+	if p5.PoeMode == nil || *p5.PoeMode != Auto {
+		t.Errorf("expected poeMode=auto, got %v", p5.PoeMode)
 	}
 	if p5.PoePowerWatts == nil || *p5.PoePowerWatts != 2.88 {
 		t.Errorf("expected poe power 2.88, got %v", p5.PoePowerWatts)
@@ -727,7 +727,7 @@ func TestGetDevice_SwitchPort_ConnectedToDevice(t *testing.T) {
 		t.Fatalf("expected switch detail: %v", err)
 	}
 
-	var port5 *SwitchPort
+	var port5 *DevicePort
 	for i := range sw.Ports {
 		if sw.Ports[i].Number == 5 {
 			port5 = &sw.Ports[i]
@@ -769,7 +769,7 @@ func TestGetDevice_SwitchPort_ConnectedToClient(t *testing.T) {
 		t.Fatalf("expected switch detail: %v", err)
 	}
 
-	var port3 *SwitchPort
+	var port3 *DevicePort
 	for i := range sw.Ports {
 		if sw.Ports[i].Number == 3 {
 			port3 = &sw.Ports[i]
@@ -811,7 +811,7 @@ func TestGetDevice_SwitchPort_UplinkConnectedToDevice(t *testing.T) {
 		t.Fatalf("expected switch detail: %v", err)
 	}
 
-	var port1 *SwitchPort
+	var port1 *DevicePort
 	for i := range sw.Ports {
 		if sw.Ports[i].Number == 1 {
 			port1 = &sw.Ports[i]
@@ -2011,7 +2011,7 @@ func switchSvcWithConfs(t *testing.T) *Service {
 	return NewService(map[string]UniFiBackend{"unifi": &mockUniFi{devices: devices, clients: clients, networkConf: confs}}, map[string]int{"unifi": 30}, slog.Default(), nil)
 }
 
-func switchPorts(t *testing.T, svc *Service) []SwitchPort {
+func switchPorts(t *testing.T, svc *Service) []DevicePort {
 	t.Helper()
 	detail, err := svc.GetDevice(context.Background(), "unifi.us-8-60w")
 	if err != nil {
@@ -2024,7 +2024,7 @@ func switchPorts(t *testing.T, svc *Service) []SwitchPort {
 	return sw.Ports
 }
 
-func findPort(ports []SwitchPort, number int) *SwitchPort {
+func findPort(ports []DevicePort, number int) *DevicePort {
 	for i := range ports {
 		if ports[i].Number == number {
 			return &ports[i]

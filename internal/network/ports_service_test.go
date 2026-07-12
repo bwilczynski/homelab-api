@@ -35,7 +35,7 @@ func portsSvc(t *testing.T) *Service {
 func strPtr(s string) *string { return &s }
 func intPtr(i int) *int        { return &i }
 
-func modePtr(m SwitchPortVlanMode) *SwitchPortVlanMode { return &m }
+func modePtr(m DevicePortVlanMode) *DevicePortVlanMode { return &m }
 func statePtr(s NetworkPortState) *NetworkPortState     { return &s }
 
 // --- no-filter ---
@@ -48,26 +48,26 @@ func TestListNetworkPorts_NoFilter(t *testing.T) {
 	if len(result.Items) != 35 {
 		t.Fatalf("expected 35 ports, got %d", len(result.Items))
 	}
-	// each port must carry a switch ref
+	// each port must carry a device ref
 	for _, p := range result.Items {
-		if p.Switch.Id == "" {
-			t.Errorf("port %d: empty switch.id", p.Number)
+		if p.Device.Id == "" {
+			t.Errorf("port %d: empty device.id", p.Number)
 		}
-		if p.Switch.Kind != NetworkDeviceRefKindDevice {
-			t.Errorf("port %d: expected switch.kind=device, got %s", p.Number, p.Switch.Kind)
+		if p.Device.Kind != NetworkDeviceRefKindDevice {
+			t.Errorf("port %d: expected device.kind=device, got %s", p.Number, p.Device.Kind)
 		}
 	}
 }
 
-func TestListNetworkPorts_SwitchRef(t *testing.T) {
+func TestListNetworkPorts_DeviceRef(t *testing.T) {
 	result, err := portsSvc(t).ListPorts(context.Background(), ListNetworkPortsParams{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// count ports where switch.id == unifi.us-8-60w — fixture has 12
+	// count ports where device.id == unifi.us-8-60w — fixture has 12
 	var count int
 	for _, p := range result.Items {
-		if p.Switch.Id == "unifi.us-8-60w" {
+		if p.Device.Id == "unifi.us-8-60w" {
 			count++
 		}
 	}
@@ -76,10 +76,10 @@ func TestListNetworkPorts_SwitchRef(t *testing.T) {
 	}
 }
 
-// --- switchId filter ---
+// --- deviceId filter ---
 
-func TestListNetworkPorts_SwitchIdFilter(t *testing.T) {
-	params := ListNetworkPortsParams{SwitchId: strPtr("unifi.us-8-60w")}
+func TestListNetworkPorts_DeviceIdFilter(t *testing.T) {
+	params := ListNetworkPortsParams{DeviceId: strPtr("unifi.us-8-60w")}
 	result, err := portsSvc(t).ListPorts(context.Background(), params)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -88,8 +88,8 @@ func TestListNetworkPorts_SwitchIdFilter(t *testing.T) {
 		t.Fatalf("expected 12 ports for us-8-60w, got %d", len(result.Items))
 	}
 	for _, p := range result.Items {
-		if p.Switch.Id != "unifi.us-8-60w" {
-			t.Errorf("expected switch unifi.us-8-60w, got %s", p.Switch.Id)
+		if p.Device.Id != "unifi.us-8-60w" {
+			t.Errorf("expected device unifi.us-8-60w, got %s", p.Device.Id)
 		}
 	}
 }
@@ -98,7 +98,7 @@ func TestListNetworkPorts_SwitchIdFilter(t *testing.T) {
 
 func TestListNetworkPorts_StateFilter_Up(t *testing.T) {
 	params := ListNetworkPortsParams{
-		SwitchId: strPtr("unifi.us-8-60w"),
+		DeviceId: strPtr("unifi.us-8-60w"),
 		State:    statePtr(NetworkPortStateUp),
 	}
 	result, err := portsSvc(t).ListPorts(context.Background(), params)
@@ -120,7 +120,7 @@ func TestListNetworkPorts_StateFilter_Up(t *testing.T) {
 
 func TestListNetworkPorts_ModeFilter_Access(t *testing.T) {
 	params := ListNetworkPortsParams{
-		SwitchId: strPtr("unifi.us-8-60w"),
+		DeviceId: strPtr("unifi.us-8-60w"),
 		Mode:     modePtr(Access),
 	}
 	result, err := portsSvc(t).ListPorts(context.Background(), params)
@@ -140,7 +140,7 @@ func TestListNetworkPorts_ModeFilter_Access(t *testing.T) {
 
 func TestListNetworkPorts_ModeFilter_Trunk(t *testing.T) {
 	params := ListNetworkPortsParams{
-		SwitchId: strPtr("unifi.us-8-60w"),
+		DeviceId: strPtr("unifi.us-8-60w"),
 		Mode:     modePtr(Trunk),
 	}
 	result, err := portsSvc(t).ListPorts(context.Background(), params)
@@ -169,7 +169,7 @@ func TestListNetworkPorts_ModeFilter_NilVlanConfigExcluded(t *testing.T) {
 	}
 	for _, p := range result.Items {
 		if p.VlanConfig == nil {
-			t.Errorf("port %d on %s: mode filter returned port with nil vlanConfig", p.Number, p.Switch.Id)
+			t.Errorf("port %d on %s: mode filter returned port with nil vlanConfig", p.Number, p.Device.Id)
 		}
 	}
 }
@@ -180,7 +180,7 @@ func TestListNetworkPorts_VlanIdFilter_NativeMatch(t *testing.T) {
 	// us-8-60w ports 2,3,4 are access ports with native VLAN = LAN-INT (vlanId=10).
 	// Filtering mode=access + vlanId=10 on us-8-60w should return exactly those 3 ports.
 	params := ListNetworkPortsParams{
-		SwitchId: strPtr("unifi.us-8-60w"),
+		DeviceId: strPtr("unifi.us-8-60w"),
 		Mode:     modePtr(Access),
 		VlanId:   intPtr(10),
 	}
@@ -203,7 +203,7 @@ func TestListNetworkPorts_VlanIdFilter_TrunkAllMatchesAnyVlan(t *testing.T) {
 	// us-8-60w has 8 trunk-all ports; filtering vlanId=100 + mode=trunk should include them
 	// but exclude port 6 (trunk-custom whose tagged list does not contain vlan 100).
 	params := ListNetworkPortsParams{
-		SwitchId: strPtr("unifi.us-8-60w"),
+		DeviceId: strPtr("unifi.us-8-60w"),
 		Mode:     modePtr(Trunk),
 		VlanId:   intPtr(100),
 	}
@@ -222,7 +222,7 @@ func TestListNetworkPorts_VlanIdFilter_TaggedCustomMatch(t *testing.T) {
 	// vlanId=10 + mode=trunk + state=up + switchId=us-8-60w should include port 6 along
 	// with the 6 trunk-all up ports (1,5,7,8,11,12) = 7 total.
 	params := ListNetworkPortsParams{
-		SwitchId: strPtr("unifi.us-8-60w"),
+		DeviceId: strPtr("unifi.us-8-60w"),
 		Mode:     modePtr(Trunk),
 		State:    statePtr(NetworkPortStateUp),
 		VlanId:   intPtr(10),
@@ -251,7 +251,7 @@ func TestListNetworkPorts_VlanIdFilter_TaggedCustomMatch(t *testing.T) {
 // The uplink port surfaces in ListPorts with connectedTo pointing at the
 // upstream device. Fixture: unifi.us-8 port 1 uplinks to unifi.us-8-60w.
 func TestListNetworkPorts_UplinkPort_ConnectedToDevice(t *testing.T) {
-	params := ListNetworkPortsParams{SwitchId: strPtr("unifi.us-8")}
+	params := ListNetworkPortsParams{DeviceId: strPtr("unifi.us-8")}
 	result, err := portsSvc(t).ListPorts(context.Background(), params)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
