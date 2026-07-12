@@ -39,19 +39,25 @@ func (s *Service) ListPorts(ctx context.Context, params ListNetworkPortsParams) 
 		swPortToDevice := buildSwPortToDevice(devices)
 		swPortToClient := buildSwPortToClient(clients)
 		for _, d := range devices {
-			if d.Type != "usw" {
+			if !isSwitchOrGateway(d.Type) {
 				continue
 			}
-			switchID := fmt.Sprintf("%s.%s", entry.Name, toKebab(d.Name))
-			sw := NetworkDeviceRef{
+			deviceID := fmt.Sprintf("%s.%s", entry.Name, toKebab(d.Name))
+			devRef := NetworkDeviceRef{
 				Kind: NetworkDeviceRefKindDevice,
-				Id:   switchID,
-				Uri:  fmt.Sprintf("/network/devices/%s", switchID),
+				Id:   deviceID,
+				Uri:  fmt.Sprintf("/network/devices/%s", deviceID),
 				Name: d.Name,
 			}
-			ports := buildDevicePorts(entry.Name, d, swPortToDevice, swPortToClient, confs)
+			var ports []DevicePort
+			switch d.Type {
+			case "ugw", "udm", "udm-pro":
+				ports = buildGatewayPorts(entry.Name, d, swPortToDevice, swPortToClient, confs)
+			default:
+				ports = buildDevicePorts(entry.Name, d, swPortToDevice, swPortToClient, confs)
+			}
 			for _, p := range ports {
-				np := toNetworkPort(p, sw)
+				np := toNetworkPort(p, devRef)
 				if matchesFilter(np, params) {
 					items = append(items, np)
 				}
@@ -100,6 +106,15 @@ func matchesFilter(port NetworkPort, params ListNetworkPortsParams) bool {
 		}
 	}
 	return true
+}
+
+// isSwitchOrGateway reports whether the device type contributes LAN ports to the /network/ports listing.
+func isSwitchOrGateway(deviceType string) bool {
+	switch deviceType {
+	case "usw", "ugw", "udm", "udm-pro":
+		return true
+	}
+	return false
 }
 
 // matchesVlanID reports whether the given VLAN ID is carried by the port.
