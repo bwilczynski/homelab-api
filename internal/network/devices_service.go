@@ -111,13 +111,19 @@ func buildDeviceDetail(
 	case "uap":
 		return buildAPDetail(controller, d, macToDevice, apMacToClients)
 	case "ugw", "udm", "udm-pro":
-		return buildGatewayDetail(controller, d)
+		return buildGatewayDetail(controller, d, swPortToDevice, swPortToClient, confs)
 	default:
 		return buildUnknownDetail(controller, d, macToDevice)
 	}
 }
 
-func buildGatewayDetail(controller string, d adapters.UniFiDevice) (NetworkDeviceDetail, error) {
+func buildGatewayDetail(
+	controller string,
+	d adapters.UniFiDevice,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
+) (NetworkDeviceDetail, error) {
 	id := fmt.Sprintf("%s.%s", controller, toKebab(d.Name))
 	var det NetworkDeviceDetail
 	err := det.FromGatewayDetail(GatewayDetail{
@@ -132,8 +138,64 @@ func buildGatewayDetail(controller string, d adapters.UniFiDevice) (NetworkDevic
 		FirmwareVersion: d.Version,
 		Uptime:          d.Uptime,
 		Traffic:         deviceTraffic(d),
+		Ports:           buildGatewayPorts(controller, d, swPortToDevice, swPortToClient, confs),
+		Wans:            buildGatewayWanRefs(controller, confs),
 	})
 	return det, err
+}
+
+// wanIfnames returns the set of ifnames that carry WAN traffic on this device.
+// These ports must be excluded from the LAN port listing.
+func wanIfnames(d adapters.UniFiDevice) map[string]bool {
+	s := make(map[string]bool)
+	if d.Wan1 != nil && d.Wan1.Name != "" {
+		s[d.Wan1.Name] = true
+	}
+	if d.Wan2 != nil && d.Wan2.Name != "" {
+		s[d.Wan2.Name] = true
+	}
+	return s
+}
+
+// buildGatewayPorts returns the LAN switch-fabric ports on a gateway device,
+// excluding any ports whose ifname matches a WAN interface (wan1/wan2).
+func buildGatewayPorts(
+	controller string,
+	d adapters.UniFiDevice,
+	swPortToDevice map[string]adapters.UniFiDevice,
+	swPortToClient map[string]adapters.UniFiSta,
+	confs []adapters.UniFiNetworkConf,
+) []DevicePort {
+	wan := wanIfnames(d)
+	var lan adapters.UniFiDevice = d
+	lan.PortTable = nil
+	for _, p := range d.PortTable {
+		if !wan[p.Ifname] {
+			lan.PortTable = append(lan.PortTable, p)
+		}
+	}
+	return buildDevicePorts(controller, lan, swPortToDevice, swPortToClient, confs)
+}
+
+// buildGatewayWanRefs builds lightweight WAN references from network configs.
+// The id/uri/name follow the same convention as buildWan in wans_service.go.
+func buildGatewayWanRefs(controller string, confs []adapters.UniFiNetworkConf) []WanRef {
+	var refs []WanRef
+	for _, n := range confs {
+		if n.Purpose != "wan" {
+			continue
+		}
+		id := fmt.Sprintf("%s.%s", controller, toKebab(n.Name))
+		refs = append(refs, WanRef{
+			Id:   id,
+			Uri:  fmt.Sprintf("/network/wans/%s", id),
+			Name: n.Name,
+		})
+	}
+	if refs == nil {
+		refs = []WanRef{}
+	}
+	return refs
 }
 
 func buildUnknownDetail(controller string, d adapters.UniFiDevice, macToDevice map[string]adapters.UniFiDevice) (NetworkDeviceDetail, error) {
