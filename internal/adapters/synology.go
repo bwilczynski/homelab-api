@@ -934,6 +934,7 @@ type DSMBackupTaskStatusResponse struct {
 // DSMBackupTargetResponse is the data payload from SYNO.Backup.Target get
 // with additional=["is_online","used_size","check_task_key","check_auth","account_meta"].
 type DSMBackupTargetResponse struct {
+	// UsedSize is the repository size in kilobytes (DSM reports KB, not bytes).
 	UsedSize int64 `json:"used_size"`
 	IsOnline bool  `json:"is_online"`
 }

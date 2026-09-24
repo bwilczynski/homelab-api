@@ -183,8 +183,9 @@ func TestGetBackupTask(t *testing.T) {
 	if detail.Size == nil {
 		t.Error("expected size to be set")
 	}
-	if detail.Size != nil && *detail.Size != 3206674163 {
-		t.Errorf("expected size 3206674163, got %d", *detail.Size)
+	wantSize := int64(3206674163) * 1024 // fixture used_size is KB; API exposes bytes
+	if detail.Size != nil && *detail.Size != wantSize {
+		t.Errorf("expected size %d, got %d", wantSize, *detail.Size)
 	}
 	if detail.Folders == nil || len(*detail.Folders) == 0 {
 		t.Error("expected folders to be non-empty")
