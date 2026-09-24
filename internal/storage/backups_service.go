@@ -126,7 +126,8 @@ func (s *Service) GetBackupTask(ctx context.Context, taskID string) (*BackupTask
 
 		var size *int64
 		if target != nil {
-			v := target.UsedSize
+			// DSM reports used_size in KB; the API contract declares bytes.
+			v := target.UsedSize * 1024
 			size = &v
 		}
 
