@@ -1,0 +1,9 @@
+# Toolchain for local development and CI (jdx/mise-action). Go libraries and
+# Go-installable tools such as oapi-codegen are pinned in go.mod instead.
+[tools]
+go = "1.26.2"
+# Contract tests (make contract-test): the pipx backend installs schemathesis
+# with uv into the pinned Python.
+python = "3.14.7"
+uv = "0.12.19"
+"pipx:schemathesis" = "4.28.0"

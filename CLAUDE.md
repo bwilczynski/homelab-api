@@ -9,13 +9,17 @@ Go implementation of the Homelab API — a unified surface over heterogeneous ho
 ## Commands
 
 ```sh
+mise install    # Install the pinned toolchain from mise.toml (first time / after version bumps)
 make generate   # Bundle spec + regenerate server stubs (all domains)
 make build      # Build the server binary to bin/server
 make run        # Run the server locally on :8080 (loads .env if present)
 make test       # Run tests (go test ./...)
 make lint       # go vet ./...
 make tidy       # go mod tidy
+make contract-test  # Schemathesis vs fixture-backed test server (same as CI)
 ```
+
+After changing a version in `mise.toml`, run `mise lock` and commit `mise.lock` plus `.mise/locks/`.
 
 Run a single test:
 

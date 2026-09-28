@@ -6,9 +6,12 @@ The API contract is defined in [homelab-api-spec](https://github.com/bwilczynski
 
 ## Getting started
 
+Requires [mise](https://mise.jdx.dev), which installs the pinned Go toolchain and the contract-test tools from `mise.toml`.
+
 ```sh
 git clone --recurse-submodules https://github.com/bwilczynski/homelab-api.git
 cd homelab-api
+mise install
 cp config.sample.yaml config.yaml  # fill in backend credentials
 make generate
 make run

@@ -5,7 +5,8 @@ COPY spec/openapi spec/openapi
 COPY spec/redocly.yaml spec/
 RUN npx --yes @redocly/cli@1.25.15 bundle spec/openapi/openapi.yaml -o spec/dist/openapi.bundled.yaml
 
-FROM golang:1.26-alpine AS builder
+# Keep in sync with go in mise.toml.
+FROM golang:1.26.2-alpine AS builder
 WORKDIR /build
 ARG SERVER_VERSION=dev
 RUN apk add --no-cache make
